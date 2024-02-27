@@ -6,7 +6,7 @@
 # Folders
 _vendor/
 bin/
-pkg/
+
 
 # Go executables
 *.exe
