@@ -10,9 +10,14 @@ import (
 func OpenUI(dataSource KafkaDataSource) {
 	// Create the application
 	app := tview.NewApplication()
+	pages := tview.NewPages()
 	table := tview.NewTable().SetBorders(false)
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 1)
+
+	modal := tview.NewModal().
+		SetText("Resource Not Found").
+		AddButtons([]string{"OK"})
 
 	searchInput := tview.NewInputField().
 		SetLabel("Search: ").
@@ -22,22 +27,29 @@ func OpenUI(dataSource KafkaDataSource) {
 	searchInput.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			searchText = searchInput.GetText()
-
+			match := false
 			if searchText == "context" {
 				table.Clear()
 				// Fetch context data from KafkaDataSource
 				contexts := fetchContexts(dataSource)
 				showContextsInTable(table, contexts)
+				match = true
 			}
 
 			if searchText == "topics" {
 				table.Clear()
 				topics := fetchTopics(dataSource)
 				showTopicsInTable(table, topics)
+				match = true
+			}
+			if match == false {
+				// show dialog that the requested resource could not be found
+				pages.ShowPage("modal")
+				app.SetFocus(modal)
+			} else {
+				app.SetFocus(table)
 			}
 			searchInput.SetText("")
-
-			app.SetFocus(table)
 
 		}
 	})
@@ -69,6 +81,16 @@ func OpenUI(dataSource KafkaDataSource) {
 	flex := tview.NewFlex().
 		AddItem(centralFlex, 0, 2, true)
 
+	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+		pages.HidePage("modal")
+		app.SetFocus(table)
+	})
+
+	modal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Hide the modal when any key is pressed
+		pages.HidePage("modal")
+		return event // Return the event to continue processing other key events
+	})
 	// input
 
 	// Set the input capture to capture key events
@@ -79,11 +101,16 @@ func OpenUI(dataSource KafkaDataSource) {
 			app.SetFocus(searchInput)
 			return nil // Return nil to indicate that the event has been handled
 		}
+
 		// Return the event to continue processing other key events
 		return event
 	})
 
-	if err := app.SetRoot(flex, true).EnableMouse(true).Run(); err != nil {
+	pages.
+		AddPage("main", flex, true, true).
+		AddPage("modal", modal, true, false)
+
+	if err := app.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
 }
