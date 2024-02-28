@@ -8,8 +8,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-const wordList = "context,ctx,topics,ts"
-
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
 	for {
 		msg := <-msgChannel
@@ -67,7 +65,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource Kafka
 		if key == tcell.KeyEnter {
 			searchText = searchInput.GetText()
 			match := false
-			if searchText == "context" {
+			if Contains(Context, searchText) {
 				table.Clear()
 				searchInput.SetLabel(defaultLabel)
 				contexts := fetchContexts(dataSource)
@@ -75,7 +73,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource Kafka
 				match = true
 			}
 
-			if searchText == "topics" {
+			if Contains(Topic, searchText) {
 				table.Clear()
 				topics := fetchTopics(dataSource)
 				showTopicsInTable(table, topics)
@@ -97,7 +95,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource Kafka
 		if len(currentText) == 0 {
 			return
 		}
-		words := strings.Split(wordList, ",")
+		words := append(Context, Topic...)
 		for _, word := range words {
 			if strings.HasPrefix(strings.ToLower(word), strings.ToLower(currentText)) {
 				entries = append(entries, word)
