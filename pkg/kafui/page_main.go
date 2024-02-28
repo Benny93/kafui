@@ -58,7 +58,8 @@ func CreateMainPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.A
 func createSearchInput(defaultLabel string, table *tview.Table, dataSource KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal) *tview.InputField {
 	searchInput := tview.NewInputField().
 		SetLabel(defaultLabel).
-		SetFieldWidth(20)
+		SetFieldWidth(0)
+
 	searchText := ""
 
 	searchInput.SetDoneFunc(func(key tcell.Key) {
@@ -79,6 +80,13 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource Kafka
 				showTopicsInTable(table, topics)
 				match = true
 			}
+
+			if Contains(ConsumerGroup, searchText) {
+				table.Clear()
+				cgs := fetchConsumerGroups(dataSource)
+				showConsumerGroups(table, cgs)
+				match = true
+			}
 			if !match {
 				pages.ShowPage("modal")
 				app.SetFocus(modal)
@@ -95,7 +103,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource Kafka
 		if len(currentText) == 0 {
 			return
 		}
-		words := append(Context, Topic...)
+		words := append(append(Context, Topic...), ConsumerGroup...)
 		for _, word := range words {
 			if strings.HasPrefix(strings.ToLower(word), strings.ToLower(currentText)) {
 				entries = append(entries, word)
@@ -108,6 +116,23 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource Kafka
 	})
 
 	return searchInput
+}
+
+func showConsumerGroups(table *tview.Table, cgs []string) {
+	table.SetCell(0, 0, tview.NewTableCell("Context").SetTextColor(tview.Styles.SecondaryTextColor))
+	for i, consumer := range cgs {
+		cell := tview.NewTableCell(consumer)
+		cell.SetExpansion(1)
+		table.SetCell(i+1, 0, cell)
+	}
+}
+
+func fetchConsumerGroups(dataSource KafkaDataSource) []string {
+	cgs, err := dataSource.GetConsumerGroups()
+	if err != nil {
+		fmt.Println("Error fetching GetConsumerGroups:", err)
+	}
+	return cgs
 }
 
 func showContextsInTable(table *tview.Table, contexts []string) {

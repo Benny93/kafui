@@ -28,3 +28,9 @@ func (kp KafkaDataSourceMock) GetContexts() ([]string, error) {
 	contexts := []string{"kafka-dev", "kafka-test", "kafka-prod"} // Example contexts
 	return contexts, nil
 }
+
+func (kp KafkaDataSourceMock) GetConsumerGroups() ([]string, error) {
+	// Logic to fetch the list of contexts from Kafka
+	cgs := []string{"consumer1", "consumer2", "consumer3"} // Example
+	return cgs, nil
+}
