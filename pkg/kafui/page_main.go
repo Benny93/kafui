@@ -7,20 +7,20 @@ import (
 	"github.com/rivo/tview"
 )
 
-func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan string) {
+func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
 	for {
 		msg := <-msgChannel
-		if msg == "ModalClose" {
+		if msg == OnModalClose {
 			app.SetFocus(table)
 		}
-		if msg == "FocusSearch" {
+		if msg == OnFocusSearch {
 			searchInput.SetLabel("🧐>")
 			app.SetFocus(searchInput)
 		}
 	}
 }
 
-func CreateMainPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, msgChannel chan string) (*tview.Table, *tview.InputField, *tview.Flex) {
+func CreateMainPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, msgChannel chan UIEvent) *tview.Flex {
 
 	table := tview.NewTable().SetBorders(false)
 	table.SetSelectable(true, false)
@@ -84,7 +84,7 @@ func CreateMainPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.A
 
 	go receivingMessage(app, table, searchInput, msgChannel)
 
-	return table, searchInput, flex
+	return flex
 }
 
 func showContextsInTable(table *tview.Table, contexts []string) {

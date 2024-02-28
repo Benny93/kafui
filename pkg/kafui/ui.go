@@ -14,15 +14,15 @@ func OpenUI(dataSource KafkaDataSource) {
 		AddButtons([]string{"OK"})
 
 	// channel to publish messages to
-	msgChannel := make(chan string)
+	msgChannel := make(chan UIEvent)
 
 	// Fetch context data from KafkaDataSource
 	// show dialog that the requested resource could not be found
-	_, _, flex := CreateMainPage(dataSource, pages, app, modal, msgChannel)
+	flex := CreateMainPage(dataSource, pages, app, modal, msgChannel)
 
 	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		pages.HidePage("modal")
-		msgChannel <- "ModalClose"
+		msgChannel <- OnModalClose
 	})
 
 	modal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -37,7 +37,7 @@ func OpenUI(dataSource KafkaDataSource) {
 		// Check if the pressed key is Shift + :
 		if event.Key() == tcell.KeyRune && event.Modifiers() == tcell.ModShift && event.Rune() == ':' {
 			// Handle the Shift + : key combination
-			msgChannel <- "FocusSearch"
+			msgChannel <- OnFocusSearch
 			return nil // Return nil to indicate that the event has been handled
 		}
 
