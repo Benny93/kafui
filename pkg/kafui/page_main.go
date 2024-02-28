@@ -2,10 +2,13 @@ package kafui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
+
+const wordList = "context,ctx,topics,ts"
 
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
 	for {
@@ -26,6 +29,35 @@ func CreateMainPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.A
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 1)
 	defaultLabel := "😎|"
+	searchInput := createSearchInput(defaultLabel, table, dataSource, pages, app, modal)
+
+	topics := fetchTopics(dataSource)
+
+	showTopicsInTable(table, topics)
+
+	topFlex := tview.NewFlex().
+		AddItem(searchInput, 0, 1, true)
+
+	topFlex.SetBorder(true).SetTitle("Top")
+
+	midFlex := tview.NewFlex().
+		AddItem(table, 0, 3, true)
+	midFlex.SetBorder(true).SetTitle("Middle (3 x height of Top)")
+
+	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(topFlex, 0, 1, false).
+		AddItem(midFlex, 0, 3, true).
+		AddItem(tview.NewFlex().SetBorder(true).SetTitle("Bottom (5 rows)"), 5, 1, false)
+
+	flex := tview.NewFlex().
+		AddItem(centralFlex, 0, 2, true)
+
+	go receivingMessage(app, table, searchInput, msgChannel)
+
+	return flex
+}
+
+func createSearchInput(defaultLabel string, table *tview.Table, dataSource KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal) *tview.InputField {
 	searchInput := tview.NewInputField().
 		SetLabel(defaultLabel).
 		SetFieldWidth(20)
@@ -61,30 +93,23 @@ func CreateMainPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.A
 		}
 	})
 
-	topics := fetchTopics(dataSource)
+	searchInput.SetAutocompleteFunc(func(currentText string) (entries []string) {
+		if len(currentText) == 0 {
+			return
+		}
+		words := strings.Split(wordList, ",")
+		for _, word := range words {
+			if strings.HasPrefix(strings.ToLower(word), strings.ToLower(currentText)) {
+				entries = append(entries, word)
+			}
+		}
+		if len(entries) <= 1 {
+			entries = nil
+		}
+		return
+	})
 
-	showTopicsInTable(table, topics)
-
-	topFlex := tview.NewFlex().
-		AddItem(searchInput, 0, 1, true)
-
-	topFlex.SetBorder(true).SetTitle("Top")
-
-	midFlex := tview.NewFlex().
-		AddItem(table, 0, 3, true)
-	midFlex.SetBorder(true).SetTitle("Middle (3 x height of Top)")
-
-	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(topFlex, 0, 1, false).
-		AddItem(midFlex, 0, 3, true).
-		AddItem(tview.NewFlex().SetBorder(true).SetTitle("Bottom (5 rows)"), 5, 1, false)
-
-	flex := tview.NewFlex().
-		AddItem(centralFlex, 0, 2, true)
-
-	go receivingMessage(app, table, searchInput, msgChannel)
-
-	return flex
+	return searchInput
 }
 
 func showContextsInTable(table *tview.Table, contexts []string) {
