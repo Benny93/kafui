@@ -5,6 +5,8 @@ import (
 	"github.com/rivo/tview"
 )
 
+var currentTopic string = ""
+
 func OpenUI(dataSource KafkaDataSource) {
 	// Create the application
 	app := tview.NewApplication()
@@ -41,13 +43,24 @@ func OpenUI(dataSource KafkaDataSource) {
 			return nil // Return nil to indicate that the event has been handled
 		}
 
+		if event.Key() == tcell.KeyEsc {
+			pages.SwitchToPage("main")
+		}
+
 		// Return the event to continue processing other key events
 		return event
 	})
 
+	topicPage := CreateTopicPage(dataSource, pages, app, msgChannel)
+
 	pages.
 		AddPage("main", flex, true, true).
-		AddPage("modal", modal, true, false)
+		AddPage("modal", modal, true, false).
+		AddPage("topicPage", topicPage, true, false)
+
+	pages.SetChangedFunc(func() {
+		msgChannel <- OnPageChange
+	})
 
 	if err := app.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
 		panic(err)

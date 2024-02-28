@@ -26,6 +26,21 @@ func CreateMainPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.A
 	table := tview.NewTable().SetBorders(false)
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 1)
+
+	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			// Check if the table has focus
+			if app.GetFocus() == table {
+				row, _ := table.GetSelection()
+				text := table.GetCell(row, 0).Text
+				currentTopic = text
+				msgChannel <- OnPageChange
+				pages.SwitchToPage("topicPage")
+			}
+		}
+		return event
+	})
+
 	defaultLabel := "😎|"
 	searchInput := createSearchInput(defaultLabel, table, dataSource, pages, app, modal)
 

@@ -4,4 +4,5 @@ type KafkaDataSource interface {
 	GetTopics() ([]string, error)
 	GetContexts() ([]string, error)
 	GetConsumerGroups() ([]string, error)
+	ConsumeTopic(topicName string) ([]string, error)
 }
