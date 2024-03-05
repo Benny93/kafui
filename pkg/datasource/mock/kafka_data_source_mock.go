@@ -1,4 +1,4 @@
-package kafui
+package mock
 
 type KafkaDataSourceMock struct {
 	// Additional fields can be added here if needed

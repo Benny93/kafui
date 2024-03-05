@@ -1,10 +1,13 @@
 package kafui
 
-import "fmt"
+import (
+	"com/emptystate/kafui/pkg/datasource/mock"
+	"fmt"
+)
 
 func Init() {
 
 	fmt.Printf("Init...")
-	kafMock := KafkaDataSourceMock{}
+	kafMock := mock.KafkaDataSourceMock{}
 	OpenUI(kafMock)
 }
