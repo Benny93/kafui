@@ -6,9 +6,12 @@ require (
 	github.com/IBM/sarama v1.43.0
 	github.com/birdayz/kaf v0.2.7
 	github.com/gdamore/tcell/v2 v2.6.1-0.20231203215052-2917c3801e73
+	github.com/golang/protobuf v1.5.3
+	github.com/hokaccha/go-prettyjson v0.0.0-20190818114111-108c894c2c0e
 	github.com/mattn/go-colorable v0.1.13
 	github.com/rivo/tview v0.0.0-20240204151237-861aa94d61c8
 	github.com/spf13/cobra v1.8.0
+	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/xdg/scram v1.0.5
 	golang.org/x/oauth2 v0.14.0
 )
@@ -20,8 +23,8 @@ require (
 	github.com/eapache/go-resiliency v1.6.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
+	github.com/fatih/color v1.13.0 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -44,6 +47,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/rivo/uniseg v0.4.7-0.20240127222946-601bbb3750c2 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/xdg/stringprep v1.0.3 // indirect
 	golang.org/x/crypto v0.19.0 // indirect
 	golang.org/x/net v0.21.0 // indirect

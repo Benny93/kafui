@@ -1,21 +1,19 @@
 package kafds
 
 import (
-	"fmt"
-	"io"
-
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
 
 	"github.com/IBM/sarama"
-	"github.com/mattn/go-colorable"
-	"github.com/spf13/cobra"
-
 	"github.com/birdayz/kaf/pkg/avro"
 	"github.com/birdayz/kaf/pkg/config"
+	"github.com/mattn/go-colorable"
+	"github.com/spf13/cobra"
 	//"github.com/birdayz/kaf/pkg/proto"
 )
 
@@ -26,20 +24,16 @@ var cfgFile string
 
 // GetTopics retrieves a list of Kafka topics
 func (kp KafkaDataSourceKaf) GetTopics() ([]string, error) {
-	// Logic to fetch the list of topics from Kafka
-	topics := []string{
-		"fake",
-		"topic2",
-		"topic3",
-		"topic4",
-		"topic5",
-		"topic6",
-		"topic7",
-		"topic8",
-		"topic9",
-		"topic10",
-	} // Additional topics
-	return topics, nil
+	onInit()
+	admin := getClusterAdmin()
+	topicDetails, err := admin.ListTopics()
+
+	keys := make([]string, 0, len(topicDetails))
+	for key := range topicDetails {
+		keys = append(keys, key)
+	}
+
+	return keys, err
 }
 
 // GetContexts retrieves a list of Kafka contexts
@@ -55,8 +49,17 @@ func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]string, error) {
 }
 
 func (kp KafkaDataSourceKaf) ConsumeTopic(topicName string) ([]string, error) {
-	cgs := []string{"message1", "message2", "message3"} // Example
-	return cgs, nil
+
+	admin := getClusterAdmin()
+	topicDetails, _ := admin.ListTopics()
+
+	keys := make([]string, 0, len(topicDetails))
+	for key := range topicDetails {
+		keys = append(keys, key)
+	}
+
+	//cgs := []string{"message1", "message2", "message3"} // Example
+	return keys, nil
 }
 
 func getConfig() (saramaConfig *sarama.Config) {
