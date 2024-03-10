@@ -10,7 +10,7 @@ import (
 func Init() {
 
 	fmt.Printf("Init...")
-	useMock := true
+	useMock := false
 	var dataSource api.KafkaDataSource
 
 	dataSource = mock.KafkaDataSourceMock{}

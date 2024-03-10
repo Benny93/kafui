@@ -74,6 +74,7 @@ func DoConsume(ctx context.Context, topic string, context string, handleMessage 
 	if outputFormat == OutputFormatDefault && raw {
 		outputFormat = OutputFormatRaw
 	}
+	offsetFlag = "oldest" // TODO as parameter
 
 	switch offsetFlag {
 	case "oldest":
@@ -255,7 +256,7 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 	//fmt.Fprintln(outWriter)
 	newMessage := api.Message{
 		Key:   "bar",
-		Value: "foo",
+		Value: string(dataToDisplay),
 	}
 	handler(newMessage)
 	mu.Unlock()
