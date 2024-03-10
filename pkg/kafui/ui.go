@@ -1,13 +1,15 @@
 package kafui
 
 import (
+	"com/emptystate/kafui/pkg/api"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 var currentTopic string = ""
 
-func OpenUI(dataSource KafkaDataSource) {
+func OpenUI(dataSource api.KafkaDataSource) {
 	// Create the application
 	app := tview.NewApplication()
 	pages := tview.NewPages()
@@ -18,7 +20,7 @@ func OpenUI(dataSource KafkaDataSource) {
 	// channel to publish messages to
 	msgChannel := make(chan UIEvent)
 
-	// Fetch context data from KafkaDataSource
+	// Fetch context data from api.KafkaDataSource
 	// show dialog that the requested resource could not be found
 	flex := CreateMainPage(dataSource, pages, app, modal, msgChannel)
 

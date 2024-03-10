@@ -1,6 +1,7 @@
 package kafui
 
 import (
+	"com/emptystate/kafui/pkg/api"
 	"fmt"
 	"strings"
 
@@ -21,7 +22,7 @@ func receivingMessage(app *tview.Application, table *tview.Table, searchInput *t
 	}
 }
 
-func CreateMainPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, msgChannel chan UIEvent) *tview.Flex {
+func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, msgChannel chan UIEvent) *tview.Flex {
 
 	table := tview.NewTable().SetBorders(false)
 	table.SetSelectable(true, false)
@@ -70,7 +71,7 @@ func CreateMainPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.A
 	return flex
 }
 
-func createSearchInput(defaultLabel string, table *tview.Table, dataSource KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal) *tview.InputField {
+func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal) *tview.InputField {
 	searchInput := tview.NewInputField().
 		SetLabel(defaultLabel).
 		SetFieldWidth(0)
@@ -142,7 +143,7 @@ func showConsumerGroups(table *tview.Table, cgs []string) {
 	}
 }
 
-func fetchConsumerGroups(dataSource KafkaDataSource) []string {
+func fetchConsumerGroups(dataSource api.KafkaDataSource) []string {
 	cgs, err := dataSource.GetConsumerGroups()
 	if err != nil {
 		fmt.Println("Error fetching GetConsumerGroups:", err)
@@ -159,7 +160,7 @@ func showContextsInTable(table *tview.Table, contexts []string) {
 	}
 }
 
-func fetchContexts(dataSource KafkaDataSource) []string {
+func fetchContexts(dataSource api.KafkaDataSource) []string {
 	contexts, err := dataSource.GetContexts()
 	if err != nil {
 		fmt.Println("Error fetching contexts:", err)
@@ -167,7 +168,7 @@ func fetchContexts(dataSource KafkaDataSource) []string {
 	return contexts
 }
 
-func fetchTopics(dataSource KafkaDataSource) []string {
+func fetchTopics(dataSource api.KafkaDataSource) []string {
 	topics, err := dataSource.GetTopics()
 	if err != nil {
 		fmt.Println("Error reading topics")

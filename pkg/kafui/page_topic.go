@@ -1,35 +1,40 @@
 package kafui
 
-import "github.com/rivo/tview"
+import (
+	"com/emptystate/kafui/pkg/api"
 
-func receivingMessageTopicPage(app *tview.Application, topFlex *tview.Flex, textView *tview.TextView, dataSource KafkaDataSource, msgChannel chan UIEvent) {
+	"github.com/rivo/tview"
+)
+
+func getHandler(app *tview.Application, textView *tview.TextView) api.MessageHandlerFunc {
+	return func(msg api.Message) {
+		app.QueueUpdateDraw(func() {
+			text := textView.GetText(false)
+			text += msg.Value + "\n"
+			textView.SetText(text)
+		})
+	}
+}
+
+func receivingMessageTopicPage(app *tview.Application, topFlex *tview.Flex, textView *tview.TextView, dataSource api.KafkaDataSource, msgChannel chan UIEvent) {
 	for {
 		msg := <-msgChannel
 		if msg == OnPageChange {
-
 			app.QueueUpdateDraw(func() {
 				topFlex.SetBorder(true).SetTitle("Topic " + currentTopic)
-				msgs := consumeTopic(dataSource, currentTopic)
-				text := ""
-				for _, str := range msgs {
-					text += str + "\n"
-				}
-				textView.SetText(text)
-
+				textView.SetText("")
 			})
+			handlerFunc := getHandler(app, textView)
+			err := dataSource.ConsumeTopic(currentTopic, handlerFunc)
+			if err != nil {
+				panic("Error consume messages!")
+			}
+
 		}
 	}
 }
 
-func consumeTopic(dataSource KafkaDataSource, topicName string) []string {
-	msgs, err := dataSource.ConsumeTopic(topicName)
-	if err != nil {
-		panic("Error consuming messages")
-	}
-	return msgs
-}
-
-func CreateTopicPage(dataSource KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *tview.Flex {
+func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *tview.Flex {
 
 	textView := tview.NewTextView().
 		SetDynamicColors(true).

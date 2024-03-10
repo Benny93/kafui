@@ -1,6 +1,8 @@
 package kafds
 
 import (
+	"com/emptystate/kafui/pkg/api"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -48,7 +50,7 @@ func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]string, error) {
 	return cgs, nil
 }
 
-func (kp KafkaDataSourceKaf) ConsumeTopic(topicName string) ([]string, error) {
+func (kp KafkaDataSourceKaf) ConsumeTopic(topicName string, handleMessage api.MessageHandlerFunc) error {
 
 	admin := getClusterAdmin()
 	topicDetails, _ := admin.ListTopics()
@@ -58,8 +60,11 @@ func (kp KafkaDataSourceKaf) ConsumeTopic(topicName string) ([]string, error) {
 		keys = append(keys, key)
 	}
 
+	ctx := context.TODO()
+	DoConsume(ctx, topicName, "Todo", handleMessage)
+
 	//cgs := []string{"message1", "message2", "message3"} // Example
-	return keys, nil
+	return nil
 }
 
 func getConfig() (saramaConfig *sarama.Config) {

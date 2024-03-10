@@ -1,6 +1,7 @@
 package kafui
 
 import (
+	"com/emptystate/kafui/pkg/api"
 	"com/emptystate/kafui/pkg/datasource/kafds"
 	"com/emptystate/kafui/pkg/datasource/mock"
 	"fmt"
@@ -9,8 +10,8 @@ import (
 func Init() {
 
 	fmt.Printf("Init...")
-	useMock := false
-	var dataSource KafkaDataSource
+	useMock := true
+	var dataSource api.KafkaDataSource
 
 	dataSource = mock.KafkaDataSourceMock{}
 	if !useMock {

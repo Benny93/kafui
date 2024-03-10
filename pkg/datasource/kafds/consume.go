@@ -2,6 +2,7 @@ package kafds
 
 import (
 	"bytes"
+	"com/emptystate/kafui/pkg/api"
 	"context"
 	_ "encoding/binary"
 	"encoding/json"
@@ -62,16 +63,9 @@ func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, 
 	}, nil
 }
 
-type Message struct {
-	Key   string
-	Value string
-}
+var handler api.MessageHandlerFunc // todo remove global var
 
-type MessageHandlerFunc func(msg Message)
-
-var handler MessageHandlerFunc // todo remove global var
-
-func DoConsume(ctx context.Context, topic string, context string, handleMessage MessageHandlerFunc) {
+func DoConsume(ctx context.Context, topic string, context string, handleMessage api.MessageHandlerFunc) {
 	var offset int64
 	cfg := getConfig()
 	client := getClientFromConfig(cfg)
@@ -259,7 +253,7 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 	//stderr.WriteTo(errWriter)
 	//_, _ = colorableOut.Write(dataToDisplay)
 	//fmt.Fprintln(outWriter)
-	newMessage := Message{
+	newMessage := api.Message{
 		Key:   "bar",
 		Value: "foo",
 	}
