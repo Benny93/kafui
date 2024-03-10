@@ -48,19 +48,20 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 
 	defaultLabel := "😎|"
 	searchInput := createSearchInput(defaultLabel, table, dataSource, pages, app, modal)
-
+	contextInfo := createContextInfo()
 	topics := fetchTopics(dataSource)
 
 	showTopicsInTable(table, topics)
 
 	topFlex := tview.NewFlex().
-		AddItem(searchInput, 0, 1, true)
+		AddItem(contextInfo, 0, 1, false).
+		AddItem(searchInput, 0, 1, true).SetDirection(tview.FlexRow)
 
-	topFlex.SetBorder(true).SetTitle("Top")
+	//topFlex.SetBorder(false).SetTitle("Top")
 
 	midFlex := tview.NewFlex().
 		AddItem(table, 0, 3, true)
-	midFlex.SetBorder(true).SetTitle("Middle (3 x height of Top)")
+	midFlex.SetBorder(true).SetTitle(currentResouce)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(topFlex, 0, 1, false).
@@ -75,11 +76,25 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 	return flex
 }
 
+func createContextInfo() *tview.InputField {
+	inputField := tview.NewInputField().
+		SetLabel("Current Context: ").
+		SetFieldWidth(10).
+		SetText("n/a")
+
+	inputField.SetDisabled(true)
+	return inputField
+}
+
 func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal) *tview.InputField {
 	searchInput := tview.NewInputField().
 		SetLabel(defaultLabel).
 		SetFieldWidth(0)
-
+	searchInput.SetBorder(true).SetBackgroundColor(tcell.ColorBlack).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
+	searchInput.SetFieldBackgroundColor(tcell.ColorBlack)
+	selectedStyle := tcell.Style{}
+	selectedStyle.Background(tcell.ColorWhite)
+	searchInput.SetAutocompleteStyles(tcell.ColorBlue, tcell.Style{}, selectedStyle)
 	searchText := ""
 
 	searchInput.SetDoneFunc(func(key tcell.Key) {
@@ -148,6 +163,7 @@ func showConsumerGroups(table *tview.Table, cgs []string) {
 		cell.SetExpansion(1)
 		table.SetCell(i+1, 0, cell)
 	}
+	table.SetTitle(currentResouce)
 }
 
 func fetchConsumerGroups(dataSource api.KafkaDataSource) []string {
@@ -165,6 +181,7 @@ func showContextsInTable(table *tview.Table, contexts []string) {
 		cell.SetExpansion(1)
 		table.SetCell(i+1, 0, cell)
 	}
+	table.SetTitle(currentResouce)
 }
 
 func fetchContexts(dataSource api.KafkaDataSource) []string {
@@ -191,4 +208,5 @@ func showTopicsInTable(table *tview.Table, topics []string) {
 		cell.SetExpansion(1)
 		table.SetCell(i+1, 0, cell)
 	}
+	table.SetTitle(currentResouce)
 }
