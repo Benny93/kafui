@@ -82,19 +82,19 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 
 	go receivingMessage(app, table, searchInput, msgChannel)
 
-	ShowNotification("Fetched topics...", app)
+	ShowNotification("Fetched topics...")
 	return flex
 }
 
-func ShowNotification(message string, app *tview.Application) {
+func ShowNotification(message string) {
 	go func() {
-		app.QueueUpdateDraw(func() {
+		tviewApp.QueueUpdateDraw(func() {
 			notificationTextView.SetText(message)
 		})
 		// Schedule hiding TextView after 2 seconds
 
 		time.Sleep(2 * time.Second)
-		app.QueueUpdateDraw(func() {
+		tviewApp.QueueUpdateDraw(func() {
 			notificationTextView.SetText("")
 		})
 	}()
@@ -138,7 +138,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				showContextsInTable(table, contexts)
 				match = true
 				currentResouce = Context[0]
-				ShowNotification("Fetched Contexts ...", app)
+				ShowNotification("Fetched Contexts ...")
 			}
 
 			if Contains(Topic, searchText) {
@@ -147,7 +147,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				showTopicsInTable(table, topics)
 				match = true
 				currentResouce = Topic[0]
-				ShowNotification("Fetched Topics ...", app)
+				ShowNotification("Fetched Topics ...")
 			}
 
 			if Contains(ConsumerGroup, searchText) {
@@ -156,7 +156,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				showConsumerGroups(table, cgs)
 				match = true
 				currentResouce = ConsumerGroup[0]
-				ShowNotification("Fetched Consumer Groups ...", app)
+				ShowNotification("Fetched Consumer Groups ...")
 			}
 			if !match {
 				pages.ShowPage("modal")

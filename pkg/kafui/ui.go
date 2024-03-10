@@ -8,10 +8,11 @@ import (
 )
 
 var currentTopic string = ""
+var tviewApp *tview.Application
 
 func OpenUI(dataSource api.KafkaDataSource) {
 	// Create the application
-	app := tview.NewApplication()
+	tviewApp = tview.NewApplication()
 	pages := tview.NewPages()
 	modal := tview.NewModal().
 		SetText("Resource Not Found").
@@ -22,7 +23,7 @@ func OpenUI(dataSource api.KafkaDataSource) {
 
 	// Fetch context data from api.KafkaDataSource
 	// show dialog that the requested resource could not be found
-	flex := CreateMainPage(dataSource, pages, app, modal, msgChannel)
+	flex := CreateMainPage(dataSource, pages, tviewApp, modal, msgChannel)
 
 	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		pages.HidePage("modal")
@@ -37,7 +38,7 @@ func OpenUI(dataSource api.KafkaDataSource) {
 	// input
 
 	// Set the input capture to capture key events
-	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	tviewApp.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		// Check if the pressed key is Shift + :
 		if event.Key() == tcell.KeyRune && event.Modifiers() == tcell.ModShift && event.Rune() == ':' {
 			// Handle the Shift + : key combination
@@ -53,7 +54,7 @@ func OpenUI(dataSource api.KafkaDataSource) {
 		return event
 	})
 
-	topicPage := CreateTopicPage(dataSource, pages, app, msgChannel)
+	topicPage := CreateTopicPage(dataSource, pages, tviewApp, msgChannel)
 
 	pages.
 		AddPage("main", flex, true, true).
@@ -64,7 +65,7 @@ func OpenUI(dataSource api.KafkaDataSource) {
 		msgChannel <- OnPageChange
 	})
 
-	if err := app.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
+	if err := tviewApp.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
 }
