@@ -208,7 +208,8 @@ func showConsumerGroups(table *tview.Table, cgs []api.ConsumerGroup) {
 func fetchConsumerGroups(dataSource api.KafkaDataSource) []api.ConsumerGroup {
 	cgs, err := dataSource.GetConsumerGroups()
 	if err != nil {
-		fmt.Println("Error fetching GetConsumerGroups:", err)
+		ShowNotification(fmt.Sprintf("Error fetching GetConsumerGroups:", err))
+		return []api.ConsumerGroup{}
 	}
 	return cgs
 }
@@ -226,7 +227,8 @@ func showContextsInTable(table *tview.Table, contexts []string) {
 func fetchContexts(dataSource api.KafkaDataSource) []string {
 	contexts, err := dataSource.GetContexts()
 	if err != nil {
-		fmt.Println("Error fetching contexts:", err)
+		ShowNotification(fmt.Sprintf("Error fetching contexts:", err))
+		return []string{}
 	}
 	return contexts
 }
@@ -234,7 +236,8 @@ func fetchContexts(dataSource api.KafkaDataSource) []string {
 func fetchTopics(dataSource api.KafkaDataSource) []string {
 	topics, err := dataSource.GetTopics()
 	if err != nil {
-		fmt.Println("Error reading topics")
+		ShowNotification(fmt.Sprintf("Error reading topics:", err))
+		return []string{}
 	}
 	return topics
 }
