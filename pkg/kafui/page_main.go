@@ -3,6 +3,7 @@ package kafui
 import (
 	"com/emptystate/kafui/pkg/api"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -188,17 +189,29 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 	return searchInput
 }
 
-func showConsumerGroups(table *tview.Table, cgs []string) {
-	table.SetCell(0, 0, tview.NewTableCell("Context").SetTextColor(tview.Styles.SecondaryTextColor))
-	for i, consumer := range cgs {
-		cell := tview.NewTableCell(consumer)
-		cell.SetExpansion(1)
+func showConsumerGroups(table *tview.Table, cgs []api.ConsumerGroup) {
+	// Define table headers
+	//table.SetCell(0, 0, &tview.TableCell{Text: "Name", Align: tview.AlignLeft, Color: tview.Styles.SecondaryTextColor})
+	table.SetCell(0, 0, tview.NewTableCell("Name").SetTextColor(tview.Styles.SecondaryTextColor))
+	table.SetCell(0, 1, tview.NewTableCell("State").SetTextColor(tview.Styles.SecondaryTextColor))
+	table.SetCell(0, 2, tview.NewTableCell("Consumers").SetTextColor(tview.Styles.SecondaryTextColor))
+	//table.SetCell(0, 1, &tview.TableCell{Text: "State", Align: tview.AlignLeft, Color: tview.Styles.SecondaryTextColor})
+	//table.SetCell(0, 2, &tview.TableCell{Text: "Consumers", Align: tview.AlignLeft, Color: tview.Styles.SecondaryTextColor})
+
+	// Add data for each consumer group
+	for i, cg := range cgs {
+		// Add data to the table
+		//row := i + 1
+		//table.SetCell(row, 0, &tview.TableCell{Text: cg.Name, Align: tview.AlignLeft})
+		cell := tview.NewTableCell(cg.Name)
+		//cell.SetExpansion(1)
 		table.SetCell(i+1, 0, cell)
+		table.SetCell(i+1, 1, tview.NewTableCell(cg.State))
+		table.SetCell(i+1, 2, tview.NewTableCell(strconv.Itoa(cg.Consumers)).SetExpansion(1))
 	}
-	table.SetTitle(currentResouce)
 }
 
-func fetchConsumerGroups(dataSource api.KafkaDataSource) []string {
+func fetchConsumerGroups(dataSource api.KafkaDataSource) []api.ConsumerGroup {
 	cgs, err := dataSource.GetConsumerGroups()
 	if err != nil {
 		fmt.Println("Error fetching GetConsumerGroups:", err)

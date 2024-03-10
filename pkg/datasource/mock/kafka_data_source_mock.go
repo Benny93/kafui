@@ -35,9 +35,16 @@ func (kp KafkaDataSourceMock) GetContexts() ([]string, error) {
 	return contexts, nil
 }
 
-func (kp KafkaDataSourceMock) GetConsumerGroups() ([]string, error) {
-	cgs := []string{"consumer1", "consumer2", "consumer3"} // Example
-	return cgs, nil
+func (kp KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) {
+	// Mocked data
+	groups := []api.ConsumerGroup{
+		{Name: "Group1", State: "Active", Consumers: 3},
+		{Name: "Group2", State: "Idle", Consumers: 2},
+		// Add more mock ConsumerGroup structs as needed
+	}
+
+	// Return mocked data
+	return groups, nil
 }
 
 func (kp KafkaDataSourceMock) ConsumeTopic(topicName string, handleMessage api.MessageHandlerFunc) error {

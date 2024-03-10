@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sort"
 
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/avro"
@@ -49,9 +50,42 @@ func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) {
 	return contexts, nil
 }
 
-func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]string, error) {
-	cgs := []string{"consumer1", "consumer2", "consumer3"} // Example
-	return cgs, nil
+func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) {
+	admin := getClusterAdmin()
+
+	groups, err := admin.ListConsumerGroups()
+	if err != nil {
+		errorExit("Unable to list consumer groups: %v\n", err)
+	}
+
+	groupList := make([]string, 0, len(groups))
+	for grp := range groups {
+		groupList = append(groupList, grp)
+	}
+
+	sort.Slice(groupList, func(i int, j int) bool {
+		return groupList[i] < groupList[j]
+	})
+
+	groupDescs, err := admin.DescribeConsumerGroups(groupList)
+	if err != nil {
+		errorExit("Unable to describe consumer groups: %v\n", err)
+	}
+
+	finalGroups := make([]api.ConsumerGroup, 0, len(groupDescs))
+	for _, detail := range groupDescs {
+		state := detail.State
+		consumers := len(detail.Members)
+		tmpGroup := api.ConsumerGroup{
+			Name:      detail.GroupId,
+			State:     state,
+			Consumers: consumers,
+		}
+		finalGroups = append(finalGroups, tmpGroup)
+
+	}
+
+	return finalGroups, nil
 }
 
 func (kp KafkaDataSourceKaf) ConsumeTopic(topicName string, handleMessage api.MessageHandlerFunc) error {
