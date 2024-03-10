@@ -41,7 +41,11 @@ func (kp KafkaDataSourceKaf) GetTopics() ([]string, error) {
 // GetContexts retrieves a list of Kafka contexts
 func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) {
 	// Logic to fetch the list of contexts from Kafka
-	contexts := []string{"kafka-dev", "kafka-test", "kafka-prod"} // Example contexts
+	var contexts []string
+	for _, cluster := range cfg.Clusters {
+
+		contexts = append(contexts, cluster.Name)
+	}
 	return contexts, nil
 }
 

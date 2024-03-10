@@ -9,6 +9,8 @@ import (
 	"github.com/rivo/tview"
 )
 
+var currentResouce string = Topic[0] // Topic is the default
+
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
 	for {
 		msg := <-msgChannel
@@ -32,11 +34,13 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 		if event.Key() == tcell.KeyEnter {
 			// Check if the table has focus
 			if app.GetFocus() == table {
-				row, _ := table.GetSelection()
-				text := table.GetCell(row, 0).Text
-				currentTopic = text
-				msgChannel <- OnPageChange
-				pages.SwitchToPage("topicPage")
+				if currentResouce == Topic[0] {
+					row, _ := table.GetSelection()
+					text := table.GetCell(row, 0).Text
+					currentTopic = text
+					msgChannel <- OnPageChange
+					pages.SwitchToPage("topicPage")
+				}
 			}
 		}
 		return event
@@ -88,6 +92,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				contexts := fetchContexts(dataSource)
 				showContextsInTable(table, contexts)
 				match = true
+				currentResouce = Context[0]
 			}
 
 			if Contains(Topic, searchText) {
@@ -95,6 +100,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				topics := fetchTopics(dataSource)
 				showTopicsInTable(table, topics)
 				match = true
+				currentResouce = Topic[0]
 			}
 
 			if Contains(ConsumerGroup, searchText) {
@@ -102,6 +108,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				cgs := fetchConsumerGroups(dataSource)
 				showConsumerGroups(table, cgs)
 				match = true
+				currentResouce = ConsumerGroup[0]
 			}
 			if !match {
 				pages.ShowPage("modal")
