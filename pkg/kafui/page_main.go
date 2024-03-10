@@ -4,12 +4,15 @@ import (
 	"com/emptystate/kafui/pkg/api"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 var currentResouce string = Topic[0] // Topic is the default
+
+var notificationTextView *tview.TextView
 
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
 	for {
@@ -63,17 +66,43 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 		AddItem(table, 0, 3, true)
 	midFlex.SetBorder(true).SetTitle(currentResouce)
 
+	notificationTextView = createNotificationTextView()
+
+	bottomFlex := tview.NewFlex().
+		AddItem(notificationTextView, 0, 3, false)
+
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(topFlex, 0, 1, false).
 		AddItem(midFlex, 0, 3, true).
-		AddItem(tview.NewFlex().SetBorder(true).SetTitle("Bottom (5 rows)"), 5, 1, false)
+		AddItem(bottomFlex, 5, 1, false)
 
 	flex := tview.NewFlex().
 		AddItem(centralFlex, 0, 2, true)
 
 	go receivingMessage(app, table, searchInput, msgChannel)
 
+	ShowNotification("Fetched topics...", app)
 	return flex
+}
+
+func ShowNotification(message string, app *tview.Application) {
+	go func() {
+		app.QueueUpdateDraw(func() {
+			notificationTextView.SetText(message)
+		})
+		// Schedule hiding TextView after 2 seconds
+
+		time.Sleep(2 * time.Second)
+		app.QueueUpdateDraw(func() {
+			notificationTextView.SetText("")
+		})
+	}()
+}
+
+func createNotificationTextView() *tview.TextView {
+	textView := tview.NewTextView().SetText("Notification...")
+	textView.SetBorder(false)
+	return textView
 }
 
 func createContextInfo() *tview.InputField {
@@ -108,6 +137,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				showContextsInTable(table, contexts)
 				match = true
 				currentResouce = Context[0]
+				ShowNotification("Fetched Contexts ...", app)
 			}
 
 			if Contains(Topic, searchText) {
@@ -116,6 +146,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				showTopicsInTable(table, topics)
 				match = true
 				currentResouce = Topic[0]
+				ShowNotification("Fetched Topics ...", app)
 			}
 
 			if Contains(ConsumerGroup, searchText) {
@@ -124,6 +155,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				showConsumerGroups(table, cgs)
 				match = true
 				currentResouce = ConsumerGroup[0]
+				ShowNotification("Fetched Consumer Groups ...", app)
 			}
 			if !match {
 				pages.ShowPage("modal")
