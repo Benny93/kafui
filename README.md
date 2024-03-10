@@ -11,5 +11,5 @@ A k9s inspired terminal ui for [kaf](https://github.com/birdayz/kaf)
 TODO...
 
 ## Run application through go
-go run .\cmd\kafui\main.goA
+go run .\cmd\kafui\main.go
 
