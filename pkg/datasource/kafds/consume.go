@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"com/emptystate/kafui/pkg/api"
 	"context"
+	"encoding/binary"
 	_ "encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -298,36 +299,40 @@ func formatMessage(msg *sarama.ConsumerMessage, rawMessage []byte, keyToDisplay 
 		}
 
 		//w := tabwriter.NewWriter(stderr, tabwriterMinWidth, tabwriterWidth, tabwriterPadding, tabwriterPadChar, tabwriterFlags)
-
+		constructedMsg := ""
 		if len(msg.Headers) > 0 {
 			//fmt.Fprintf(w, "Headers:\n")
+			constructedMsg += "Headers:\n"
 		}
-		/*
-			for _, hdr := range msg.Headers {
-			/*	var hdrValue string
-				// Try to detect azure eventhub-specific encoding
-				if len(hdr.Value) > 0 {
-					switch hdr.Value[0] {
-					case 161:
-						hdrValue = string(hdr.Value[2 : 2+hdr.Value[1]])
-					case 131:
-						hdrValue = strconv.FormatUint(binary.BigEndian.Uint64(hdr.Value[1:9]), 10)
-					default:
-						hdrValue = string(hdr.Value)
-					}
+
+		for _, hdr := range msg.Headers {
+			var hdrValue string
+			// Try to detect azure eventhub-specific encoding
+			if len(hdr.Value) > 0 {
+				switch hdr.Value[0] {
+				case 161:
+					hdrValue = string(hdr.Value[2 : 2+hdr.Value[1]])
+				case 131:
+					hdrValue = strconv.FormatUint(binary.BigEndian.Uint64(hdr.Value[1:9]), 10)
+				default:
+					hdrValue = string(hdr.Value)
 				}
+			}
 
-				//fmt.Fprintf(w, "\tKey: %v\tValue: %v\n", string(hdr.Key), hdrValue)
+			//fmt.Fprintf(w, "\tKey: %v\tValue: %v\n", string(hdr.Key), hdrValue)
+			constructedMsg += fmt.Sprintf("\tKey: %v\tValue: %v\n", string(hdr.Key), hdrValue)
 
-			}*/
+		}
 
 		if msg.Key != nil && len(msg.Key) > 0 {
 			//fmt.Fprintf(w, "Key:\t%v\n", string(keyToDisplay))
+			constructedMsg += fmt.Sprintf("Key:\t%v\n", string(keyToDisplay))
 		}
 		//fmt.Fprintf(w, "Partition:\t%v\nOffset:\t%v\nTimestamp:\t%v\n", msg.Partition, msg.Offset, msg.Timestamp)
 		//w.Flush()
-
-		return rawMessage
+		constructedMsg += fmt.Sprintf("Partition:\t%v\nOffset:\t%v\nTimestamp:\t%v\n", msg.Partition, msg.Offset, msg.Timestamp)
+		constructedMsg += string(rawMessage)
+		return []byte(constructedMsg)
 	}
 }
 

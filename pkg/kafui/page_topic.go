@@ -12,6 +12,7 @@ func getHandler(app *tview.Application, textView *tview.TextView) api.MessageHan
 			text := textView.GetText(false)
 			text += msg.Value + "\n"
 			textView.SetText(text)
+			textView.ScrollToEnd()
 		})
 	}
 }
