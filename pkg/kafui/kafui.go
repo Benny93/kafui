@@ -7,10 +7,9 @@ import (
 	"fmt"
 )
 
-func Init() {
+func Init(useMock bool) {
 
 	fmt.Printf("Init...")
-	useMock := false
 	var dataSource api.KafkaDataSource
 
 	dataSource = mock.KafkaDataSourceMock{}
