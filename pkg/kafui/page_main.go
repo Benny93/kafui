@@ -20,6 +20,8 @@ var (
 	notificationTextView *tview.TextView
 
 	midFlex *tview.Flex
+
+	contextInfo *tview.InputField
 )
 
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
@@ -52,6 +54,15 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 					msgChannel <- OnPageChange
 					pages.SwitchToPage("topicPage")
 				}
+				if currentResouce == Context[0] {
+					row, _ := table.GetSelection()
+					text := table.GetCell(row, 0).Text
+					currentContextName = text
+					ShowNotification(fmt.Sprintf("Switched to context %s", currentContextName))
+					go app.QueueUpdateDraw(func() {
+						contextInfo.SetText(currentContextName)
+					})
+				}
 			}
 		}
 		return event
@@ -59,7 +70,7 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 
 	defaultLabel := "😎|"
 	searchInput := createSearchInput(defaultLabel, table, dataSource, pages, app, modal)
-	contextInfo := createContextInfo()
+	contextInfo = createContextInfo()
 	topics := fetchTopics(dataSource)
 
 	showTopicsInTable(table, topics)
