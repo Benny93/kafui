@@ -151,3 +151,13 @@ services:
                kafka-topics --create --topic second.messages --partitions 2 --replication-factor 1 --if-not-exists --bootstrap-server kafka1:29092 && \
                kafka-topics --create --topic first.messages --partitions 2 --replication-factor 1 --if-not-exists --bootstrap-server kafka0:29092 && \
                kafka-console-producer --bootstrap-server kafka1:29092 -topic second.users < /data/message.json'"
+
+  #kafui:
+  #  image: docker.io/emptystate/kafui:latest
+  #  depends_on:
+  #    - kafka0
+  #    - kafka1
+  #  volumes:
+  #    - ./data/.config:/kafhome/.kaf/config
+  #  environment:
+  #    - HOME=/kafhome

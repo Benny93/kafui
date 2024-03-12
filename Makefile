@@ -1,6 +1,6 @@
 DOCKER_CMD ?= docker
 DOCKER_REGISTRY ?= docker.io
-DOCKER_ORG ?= $(USER)
+DOCKER_ORG ?= emptystate
 DOCKER_NAME ?= kafui
 DOCKER_TAG ?= latest
 BUILD_TAG ?= latest

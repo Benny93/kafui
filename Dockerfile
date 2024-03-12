@@ -15,7 +15,7 @@ FROM scratch
 
 WORKDIR /
 
-COPY --from=BuildStage /kaf /bin/kafui
+COPY --from=BuildStage /kafui /bin/kafui
 
 USER 1001
 
