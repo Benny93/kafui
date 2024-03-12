@@ -12,11 +12,15 @@ import (
 	"github.com/rivo/tview"
 )
 
-var currentResouce string = Topic[0] // Topic is the default
+var (
+	currentResouce string = Topic[0] // Topic is the default
 
-var notificationTextView *tview.TextView
+	currentContextName string
 
-var currentContextName string
+	notificationTextView *tview.TextView
+
+	midFlex *tview.Flex
+)
 
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
 	for {
@@ -66,9 +70,10 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 
 	//topFlex.SetBorder(false).SetTitle("Top")
 
-	midFlex := tview.NewFlex().
+	midFlex = tview.NewFlex().
 		AddItem(table, 0, 3, true)
-	midFlex.SetBorder(true).SetTitle(currentResouce)
+	midFlex.SetBorder(true)
+	updateMidFlexTitle(currentResouce)
 
 	notificationTextView = createNotificationTextView()
 
@@ -182,6 +187,7 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				pages.ShowPage("modal")
 				app.SetFocus(modal)
 			} else {
+				updateMidFlexTitle(currentResouce)
 				app.SetFocus(table)
 			}
 			searchInput.SetLabel(defaultLabel)
@@ -207,6 +213,10 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 	})
 
 	return searchInput
+}
+
+func updateMidFlexTitle(currentResouce string) {
+	midFlex.SetTitle(fmt.Sprintf("<%s>", currentResouce))
 }
 
 func showConsumerGroups(table *tview.Table, cgs []api.ConsumerGroup) {
