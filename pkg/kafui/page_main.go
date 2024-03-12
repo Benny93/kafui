@@ -3,7 +3,6 @@ package kafui
 import (
 	"com/emptystate/kafui/pkg/api"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -58,10 +57,16 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 					row, _ := table.GetSelection()
 					text := table.GetCell(row, 0).Text
 					currentContextName = text
+					err := dataSource.SetContext(currentContextName)
+					if err != nil {
+						ShowNotification(fmt.Sprintf("Failed to swtich context %s", err))
+						return event
+					}
 					ShowNotification(fmt.Sprintf("Switched to context %s", currentContextName))
 					go app.QueueUpdateDraw(func() {
 						contextInfo.SetText(currentContextName)
 					})
+					switchToTopicTable(table, dataSource, app)
 				}
 			}
 		}
@@ -103,16 +108,7 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 
 	ShowNotification("Fetched topics...")
 
-	ctxList, err := dataSource.GetContexts()
-	if err != nil {
-		ShowNotification("Failed to fetch contexts ...")
-	}
-	if len(ctxList) < 1 {
-		app.Stop()
-		fmt.Println("No contexts found. Please configure contexts first")
-		os.Exit(1)
-	}
-	currentContextName = ctxList[0]
+	currentContextName = dataSource.GetContext()
 	go func() {
 		app.QueueUpdateDraw(func() {
 			contextInfo.SetText(currentContextName)
@@ -175,15 +171,13 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				match = true
 				currentResouce = Context[0]
 				ShowNotification("Fetched Contexts ...")
+				updateMidFlexTitle(currentResouce)
+				app.SetFocus(table)
 			}
 
 			if Contains(Topic, searchText) {
-				table.Clear()
-				topics := fetchTopics(dataSource)
-				showTopicsInTable(table, topics)
+				switchToTopicTable(table, dataSource, app)
 				match = true
-				currentResouce = Topic[0]
-				ShowNotification("Fetched Topics ...")
 			}
 
 			if Contains(ConsumerGroup, searchText) {
@@ -193,13 +187,12 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 				match = true
 				currentResouce = ConsumerGroup[0]
 				ShowNotification("Fetched Consumer Groups ...")
+				updateMidFlexTitle(currentResouce)
+				app.SetFocus(table)
 			}
 			if !match {
 				pages.ShowPage("modal")
 				app.SetFocus(modal)
-			} else {
-				updateMidFlexTitle(currentResouce)
-				app.SetFocus(table)
 			}
 			searchInput.SetLabel(defaultLabel)
 			searchInput.SetText("")
@@ -224,6 +217,16 @@ func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.K
 	})
 
 	return searchInput
+}
+
+func switchToTopicTable(table *tview.Table, dataSource api.KafkaDataSource, app *tview.Application) {
+	table.Clear()
+	topics := fetchTopics(dataSource)
+	showTopicsInTable(table, topics)
+	currentResouce = Topic[0]
+	ShowNotification("Fetched Topics ...")
+	updateMidFlexTitle(currentResouce)
+	app.SetFocus(table)
 }
 
 func updateMidFlexTitle(currentResouce string) {

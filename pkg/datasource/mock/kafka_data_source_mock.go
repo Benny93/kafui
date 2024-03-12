@@ -6,8 +6,20 @@ import (
 	"time"
 )
 
+var currentContext string = "kafka-dev"
+
 type KafkaDataSourceMock struct {
 	// Additional fields can be added here if needed
+}
+
+func (kp KafkaDataSourceMock) Init() {
+	// nothing todo here
+}
+
+// SetContext implements api.KafkaDataSource.
+func (kp KafkaDataSourceMock) SetContext(contextName string) error {
+	currentContext = contextName
+	return nil
 }
 
 // GetTopics retrieves a list of Kafka topics
@@ -26,6 +38,10 @@ func (kp KafkaDataSourceMock) GetTopics() ([]string, error) {
 		"topic10",
 	} // Additional topics
 	return topics, nil
+}
+
+func (kp KafkaDataSourceMock) GetContext() string {
+	return currentContext
 }
 
 // GetContexts retrieves a list of Kafka contexts

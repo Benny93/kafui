@@ -16,6 +16,6 @@ func Init(useMock bool) {
 	if !useMock {
 		dataSource = kafds.KafkaDataSourceKaf{}
 	}
-
+	dataSource.Init()
 	OpenUI(dataSource)
 }

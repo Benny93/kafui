@@ -25,9 +25,13 @@ type KafkaDataSourceKaf struct {
 
 var cfgFile string
 
+func (kp KafkaDataSourceKaf) Init() {
+	onInit()
+}
+
 // GetTopics retrieves a list of Kafka topics
 func (kp KafkaDataSourceKaf) GetTopics() ([]string, error) {
-	onInit()
+
 	admin := getClusterAdmin()
 	topicDetails, err := admin.ListTopics()
 
@@ -39,6 +43,10 @@ func (kp KafkaDataSourceKaf) GetTopics() ([]string, error) {
 	return keys, err
 }
 
+func (kp KafkaDataSourceKaf) GetContext() string {
+	return cfg.ActiveCluster().Name
+}
+
 // GetContexts retrieves a list of Kafka contexts
 func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) {
 	// Logic to fetch the list of contexts from Kafka
@@ -48,6 +56,30 @@ func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) {
 		contexts = append(contexts, cluster.Name)
 	}
 	return contexts, nil
+}
+
+func (kp KafkaDataSourceKaf) SetContext(contextName string) error {
+	cfg, err := config.ReadConfig(cfgFile)
+	if err != nil {
+		return err
+	}
+
+	// Iterate through clusters in the config
+	for _, cluster := range cfg.Clusters {
+		// Check if the cluster name matches the contextName
+		if cluster.Name == contextName {
+			currentCluster = cluster
+			err := cfg.SetCurrentCluster(currentCluster.Name)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+
+	// If no matching cluster is found, return an error
+	return fmt.Errorf("cluster with name '%s' not found", contextName)
+
 }
 
 func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) {
