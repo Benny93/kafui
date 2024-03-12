@@ -3,6 +3,7 @@ package kafui
 import (
 	"com/emptystate/kafui/pkg/api"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,8 @@ import (
 var currentResouce string = Topic[0] // Topic is the default
 
 var notificationTextView *tview.TextView
+
+var currentContextName string
 
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
 	for {
@@ -83,6 +86,23 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 	go receivingMessage(app, table, searchInput, msgChannel)
 
 	ShowNotification("Fetched topics...")
+
+	ctxList, err := dataSource.GetContexts()
+	if err != nil {
+		ShowNotification("Failed to fetch contexts ...")
+	}
+	if len(ctxList) < 1 {
+		app.Stop()
+		fmt.Println("No contexts found. Please configure contexts first")
+		os.Exit(1)
+	}
+	currentContextName = ctxList[0]
+	go func() {
+		app.QueueUpdateDraw(func() {
+			contextInfo.SetText(currentContextName)
+		})
+	}()
+
 	return flex
 }
 
