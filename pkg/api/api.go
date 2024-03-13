@@ -1,8 +1,9 @@
 package api
 
 type Message struct {
-	Key   string
-	Value string
+	Key    string
+	Value  string
+	Offset int64
 }
 
 type ConsumerGroup struct {

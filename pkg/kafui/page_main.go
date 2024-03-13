@@ -136,7 +136,7 @@ func switchToTopicTable(table *tview.Table, dataSource api.KafkaDataSource, app 
 }
 
 func updateMidFlexTitle(currentResouce string, amount int) {
-	midFlex.SetTitle(fmt.Sprintf("<%s (%d)>", currentResouce, amount))
+	midFlex.SetTitle(fmt.Sprintf("<%s (%d)>", currentResouce, amount-1))
 }
 
 func showConsumerGroups(table *tview.Table, cgs []api.ConsumerGroup) {

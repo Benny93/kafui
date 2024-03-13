@@ -256,8 +256,9 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 	//_, _ = colorableOut.Write(dataToDisplay)
 	//fmt.Fprintln(outWriter)
 	newMessage := api.Message{
-		Key:   "bar",
-		Value: string(dataToDisplay),
+		Key:    "bar",
+		Value:  string(dataToDisplay),
+		Offset: msg.Offset,
 	}
 	handler(newMessage)
 	mu.Unlock()
