@@ -18,18 +18,21 @@ func getHandler(app *tview.Application, textView *tview.TextView) api.MessageHan
 	}
 }
 
-func receivingMessageTopicPage(app *tview.Application, flex *tview.Flex, textView *tview.TextView, dataSource api.KafkaDataSource, msgChannel chan UIEvent) {
+func receivingMessageTopicPage(app *tview.Application, pages *tview.Pages, flex *tview.Flex, textView *tview.TextView, dataSource api.KafkaDataSource, msgChannel chan UIEvent) {
 	for {
 		msg := <-msgChannel
 		if msg == OnPageChange {
-			app.QueueUpdateDraw(func() {
-				flex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
-				textView.SetText("")
-			})
-			handlerFunc := getHandler(app, textView)
-			err := dataSource.ConsumeTopic(currentTopic, handlerFunc)
-			if err != nil {
-				panic("Error consume messages!")
+			frontPage, _ := pages.GetFrontPage()
+			if frontPage == "topicPage" {
+				app.QueueUpdateDraw(func() {
+					flex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
+					textView.SetText("")
+				})
+				handlerFunc := getHandler(app, textView)
+				err := dataSource.ConsumeTopic(currentTopic, handlerFunc)
+				if err != nil {
+					panic("Error consume messages!")
+				}
 			}
 
 		}
@@ -61,7 +64,7 @@ func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tv
 	flex := tview.NewFlex().
 		AddItem(centralFlex, 0, 2, true)
 
-	go receivingMessageTopicPage(app, midFlex, textView, dataSource, msgChannel)
+	go receivingMessageTopicPage(app, pages, midFlex, textView, dataSource, msgChannel)
 
 	return flex
 }

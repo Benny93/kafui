@@ -4,16 +4,19 @@ import (
 	"com/emptystate/kafui/pkg/api"
 	"fmt"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/atotto/clipboard"
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
 )
 
 func SetupTableInput(table *tview.Table, app *tview.Application, pages *tview.Pages, dataSource api.KafkaDataSource, msgChannel chan UIEvent) {
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter {
+			frontPage, _ := pages.GetFrontPage()
+			if frontPage != "main" {
+				return event
+			}
 			// Check if the table has focus
 			if app.GetFocus() == table {
 				if currentResouce == Topic[0] {
