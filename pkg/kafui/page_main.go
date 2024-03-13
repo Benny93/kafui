@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -67,6 +68,18 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 						contextInfo.SetText(currentContextName)
 					})
 					switchToTopicTable(table, dataSource, app)
+				}
+			}
+		}
+		if event.Key() == tcell.KeyRune {
+			switch event.Rune() {
+			case 'c':
+				row, column := table.GetSelection()
+				cell := table.GetCell(row, column)
+				if cell != nil {
+					content := cell.Text
+					clipboard.WriteAll(content)
+					ShowNotification("😎 Copied selection to clipboard ...")
 				}
 			}
 		}

@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/IBM/sarama v1.43.0
+	github.com/atotto/clipboard v0.1.4
 	github.com/birdayz/kaf v0.2.7
 	github.com/gdamore/tcell/v2 v2.6.1-0.20231203215052-2917c3801e73
 	github.com/golang/protobuf v1.5.3

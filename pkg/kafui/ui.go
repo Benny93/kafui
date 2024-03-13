@@ -2,6 +2,7 @@ package kafui
 
 import (
 	"com/emptystate/kafui/pkg/api"
+	"fmt"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -47,7 +48,10 @@ func OpenUI(dataSource api.KafkaDataSource) {
 		}
 
 		if event.Key() == tcell.KeyEsc {
-			pages.SwitchToPage("main")
+			frontPage, _ := pages.GetFrontPage()
+			if frontPage != "main" {
+				pages.SwitchToPage("main")
+			}
 		}
 
 		// Return the event to continue processing other key events
@@ -64,6 +68,15 @@ func OpenUI(dataSource api.KafkaDataSource) {
 	pages.SetChangedFunc(func() {
 		msgChannel <- OnPageChange
 	})
+
+	// Recover from panics and handle gracefully
+	defer func() {
+		if r := recover(); r != nil {
+			tviewApp.Stop()
+			fmt.Println("An error occurred:", r)
+			fmt.Println("Application stopped.")
+		}
+	}()
 
 	if err := tviewApp.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
 		panic(err)
