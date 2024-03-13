@@ -66,7 +66,7 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 	midFlex = tview.NewFlex().
 		AddItem(table, 0, 3, true)
 	midFlex.SetBorder(true)
-	updateMidFlexTitle(currentResouce)
+	updateMidFlexTitle(currentResouce, table.GetRowCount())
 
 	notificationTextView = createNotificationTextView()
 
@@ -131,12 +131,12 @@ func switchToTopicTable(table *tview.Table, dataSource api.KafkaDataSource, app 
 	showTopicsInTable(table, topics)
 	currentResouce = Topic[0]
 	ShowNotification("Fetched Topics ...")
-	updateMidFlexTitle(currentResouce)
+	updateMidFlexTitle(currentResouce, table.GetRowCount())
 	app.SetFocus(table)
 }
 
-func updateMidFlexTitle(currentResouce string) {
-	midFlex.SetTitle(fmt.Sprintf("<%s>", currentResouce))
+func updateMidFlexTitle(currentResouce string, amount int) {
+	midFlex.SetTitle(fmt.Sprintf("<%s (%d)>", currentResouce, amount))
 }
 
 func showConsumerGroups(table *tview.Table, cgs []api.ConsumerGroup) {

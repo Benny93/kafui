@@ -95,7 +95,7 @@ func handleResouceSearch(searchText string, table *tview.Table, searchInput *tvi
 		match = true
 		currentResouce = Context[0]
 		ShowNotification("Fetched Contexts ...")
-		updateMidFlexTitle(currentResouce)
+		updateMidFlexTitle(currentResouce, table.GetRowCount())
 		app.SetFocus(table)
 	}
 
@@ -111,7 +111,7 @@ func handleResouceSearch(searchText string, table *tview.Table, searchInput *tvi
 		match = true
 		currentResouce = ConsumerGroup[0]
 		ShowNotification("Fetched Consumer Groups ...")
-		updateMidFlexTitle(currentResouce)
+		updateMidFlexTitle(currentResouce, table.GetRowCount())
 		app.SetFocus(table)
 	}
 	if !match {
