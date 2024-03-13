@@ -79,6 +79,7 @@ func OpenUI(dataSource api.KafkaDataSource) {
 	}()
 
 	if err := tviewApp.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
+		fmt.Println("Run ended in panic")
 		panic(err)
 	}
 }
