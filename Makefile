@@ -14,7 +14,9 @@ run:
 run-mock:
 	go run -ldflags "-w -s" ./cmd/kafui --mock
 release:
-	goreleaser --rm-dist
+	goreleaser --clean
+release-snapshot:
+	goreleaser --clean --snapshot
 run-kafka:
 	cd example/dockercompose/ && docker compose up -d
 docker-build:
