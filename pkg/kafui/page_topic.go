@@ -2,6 +2,7 @@ package kafui
 
 import (
 	"com/emptystate/kafui/pkg/api"
+	"fmt"
 
 	"github.com/rivo/tview"
 )
@@ -17,12 +18,12 @@ func getHandler(app *tview.Application, textView *tview.TextView) api.MessageHan
 	}
 }
 
-func receivingMessageTopicPage(app *tview.Application, topFlex *tview.Flex, textView *tview.TextView, dataSource api.KafkaDataSource, msgChannel chan UIEvent) {
+func receivingMessageTopicPage(app *tview.Application, flex *tview.Flex, textView *tview.TextView, dataSource api.KafkaDataSource, msgChannel chan UIEvent) {
 	for {
 		msg := <-msgChannel
 		if msg == OnPageChange {
 			app.QueueUpdateDraw(func() {
-				topFlex.SetBorder(true).SetTitle("Topic " + currentTopic)
+				flex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
 				textView.SetText("")
 			})
 			handlerFunc := getHandler(app, textView)
@@ -46,7 +47,7 @@ func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tv
 
 	topFlex := tview.NewFlex()
 
-	topFlex.SetBorder(true).SetTitle("Topic " + currentTopic)
+	topFlex.SetBorder(false)
 
 	midFlex := tview.NewFlex().
 		AddItem(textView, 0, 3, true)
@@ -54,13 +55,13 @@ func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tv
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(topFlex, 0, 1, false).
-		AddItem(midFlex, 0, 3, true).
-		AddItem(tview.NewFlex().SetBorder(true).SetTitle("Bottom (5 rows)"), 5, 1, false)
+		AddItem(midFlex, 0, 5, true).
+		AddItem(tview.NewFlex().SetBorder(false), 0, 1, false)
 
 	flex := tview.NewFlex().
 		AddItem(centralFlex, 0, 2, true)
 
-	go receivingMessageTopicPage(app, topFlex, textView, dataSource, msgChannel)
+	go receivingMessageTopicPage(app, midFlex, textView, dataSource, msgChannel)
 
 	return flex
 }
