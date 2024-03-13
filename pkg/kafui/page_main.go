@@ -4,11 +4,8 @@ import (
 	"com/emptystate/kafui/pkg/api"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/atotto/clipboard"
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -22,6 +19,8 @@ var (
 	midFlex *tview.Flex
 
 	contextInfo *tview.InputField
+
+	currentSearchMode SearchMode = ResouceSearch
 )
 
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
@@ -33,6 +32,12 @@ func receivingMessage(app *tview.Application, table *tview.Table, searchInput *t
 		if msg == OnFocusSearch {
 			searchInput.SetLabel("🧐>")
 			app.SetFocus(searchInput)
+			currentSearchMode = ResouceSearch
+		}
+		if msg == OnStartTableSearch {
+			searchInput.SetLabel("💡?")
+			app.SetFocus(searchInput)
+			currentSearchMode = TableSearch
 		}
 	}
 }
@@ -43,51 +48,9 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 1)
 
-	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter {
-			// Check if the table has focus
-			if app.GetFocus() == table {
-				if currentResouce == Topic[0] {
-					row, _ := table.GetSelection()
-					text := table.GetCell(row, 0).Text
-					currentTopic = text
-					msgChannel <- OnPageChange
-					pages.SwitchToPage("topicPage")
-				}
-				if currentResouce == Context[0] {
-					row, _ := table.GetSelection()
-					text := table.GetCell(row, 0).Text
-					currentContextName = text
-					err := dataSource.SetContext(currentContextName)
-					if err != nil {
-						ShowNotification(fmt.Sprintf("Failed to swtich context %s", err))
-						return event
-					}
-					ShowNotification(fmt.Sprintf("Switched to context %s", currentContextName))
-					go app.QueueUpdateDraw(func() {
-						contextInfo.SetText(currentContextName)
-					})
-					switchToTopicTable(table, dataSource, app)
-				}
-			}
-		}
-		if event.Key() == tcell.KeyRune {
-			switch event.Rune() {
-			case 'c':
-				row, column := table.GetSelection()
-				cell := table.GetCell(row, column)
-				if cell != nil {
-					content := cell.Text
-					clipboard.WriteAll(content)
-					ShowNotification("😎 Copied selection to clipboard ...")
-				}
-			}
-		}
-		return event
-	})
+	SetupTableInput(table, app, pages, dataSource, msgChannel)
 
-	defaultLabel := "😎|"
-	searchInput := createSearchInput(defaultLabel, table, dataSource, pages, app, modal)
+	searchInput := CreateSearchInput(table, dataSource, pages, app, modal)
 	contextInfo = createContextInfo()
 	topics := fetchTopics(dataSource)
 
@@ -159,77 +122,6 @@ func createContextInfo() *tview.InputField {
 
 	inputField.SetDisabled(true)
 	return inputField
-}
-
-func createSearchInput(defaultLabel string, table *tview.Table, dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal) *tview.InputField {
-	searchInput := tview.NewInputField().
-		SetLabel(defaultLabel).
-		SetFieldWidth(0)
-	searchInput.SetBorder(true).SetBackgroundColor(tcell.ColorBlack).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
-	searchInput.SetFieldBackgroundColor(tcell.ColorBlack)
-	selectedStyle := tcell.Style{}
-	selectedStyle.Background(tcell.ColorWhite)
-	searchInput.SetAutocompleteStyles(tcell.ColorBlue, tcell.Style{}, selectedStyle)
-	searchText := ""
-
-	searchInput.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
-			searchText = searchInput.GetText()
-			match := false
-			if Contains(Context, searchText) {
-				table.Clear()
-				searchInput.SetLabel(defaultLabel)
-				contexts := fetchContexts(dataSource)
-				showContextsInTable(table, contexts)
-				match = true
-				currentResouce = Context[0]
-				ShowNotification("Fetched Contexts ...")
-				updateMidFlexTitle(currentResouce)
-				app.SetFocus(table)
-			}
-
-			if Contains(Topic, searchText) {
-				switchToTopicTable(table, dataSource, app)
-				match = true
-			}
-
-			if Contains(ConsumerGroup, searchText) {
-				table.Clear()
-				cgs := fetchConsumerGroups(dataSource)
-				showConsumerGroups(table, cgs)
-				match = true
-				currentResouce = ConsumerGroup[0]
-				ShowNotification("Fetched Consumer Groups ...")
-				updateMidFlexTitle(currentResouce)
-				app.SetFocus(table)
-			}
-			if !match {
-				pages.ShowPage("modal")
-				app.SetFocus(modal)
-			}
-			searchInput.SetLabel(defaultLabel)
-			searchInput.SetText("")
-
-		}
-	})
-
-	searchInput.SetAutocompleteFunc(func(currentText string) (entries []string) {
-		if len(currentText) == 0 {
-			return
-		}
-		words := append(append(Context, Topic...), ConsumerGroup...)
-		for _, word := range words {
-			if strings.HasPrefix(strings.ToLower(word), strings.ToLower(currentText)) {
-				entries = append(entries, word)
-			}
-		}
-		if len(entries) <= 1 {
-			entries = nil
-		}
-		return
-	})
-
-	return searchInput
 }
 
 func switchToTopicTable(table *tview.Table, dataSource api.KafkaDataSource, app *tview.Application) {

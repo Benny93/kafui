@@ -12,8 +12,23 @@ var currentTopic string = ""
 var tviewApp *tview.Application
 
 func OpenUI(dataSource api.KafkaDataSource) {
+	tview.Styles = tview.Theme{
+		PrimitiveBackgroundColor:    tcell.ColorBlack.TrueColor(),
+		ContrastBackgroundColor:     tcell.ColorBlue.TrueColor(),
+		MoreContrastBackgroundColor: tcell.ColorGreen.TrueColor(),
+		BorderColor:                 tcell.ColorWhite.TrueColor(),
+		TitleColor:                  tcell.ColorWhite.TrueColor(),
+		GraphicsColor:               tcell.ColorWhite.TrueColor(),
+		PrimaryTextColor:            tcell.ColorDarkCyan.TrueColor(),
+		SecondaryTextColor:          tcell.ColorWhite.TrueColor(),
+		TertiaryTextColor:           tcell.ColorGreen.TrueColor(),
+		InverseTextColor:            tcell.ColorBlue.TrueColor(),
+		ContrastSecondaryTextColor:  tcell.ColorNavy.TrueColor(),
+	}
+
 	// Create the application
 	tviewApp = tview.NewApplication()
+
 	pages := tview.NewPages()
 	modal := tview.NewModal().
 		SetText("Resource Not Found").
@@ -44,6 +59,12 @@ func OpenUI(dataSource api.KafkaDataSource) {
 		if event.Key() == tcell.KeyRune && event.Modifiers() == tcell.ModShift && event.Rune() == ':' {
 			// Handle the Shift + : key combination
 			msgChannel <- OnFocusSearch
+			return nil // Return nil to indicate that the event has been handled
+		}
+
+		if event.Key() == tcell.KeyRune && event.Modifiers() == tcell.ModShift && event.Rune() == '/' {
+			// Handle the Shift + : key combination
+			msgChannel <- OnStartTableSearch
 			return nil // Return nil to indicate that the event has been handled
 		}
 
