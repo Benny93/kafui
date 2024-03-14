@@ -4,6 +4,7 @@ services:
 
   kafka-ui:
     container_name: kafka-ui
+    platform: linux/amd64
     image: provectuslabs/kafka-ui:latest
     ports:
       - 8080:8080
@@ -28,6 +29,7 @@ services:
 
   kafka0:
     image: confluentinc/cp-kafka:7.2.1
+    platform: linux/amd64
     hostname: kafka0
     container_name: kafka0
     ports:
@@ -56,6 +58,7 @@ services:
 
   kafka1:
     image: confluentinc/cp-kafka:7.2.1
+    platform: linux/amd64
     hostname: kafka1
     container_name: kafka1
     ports:
@@ -84,6 +87,7 @@ services:
 
   schemaregistry0:
     image: confluentinc/cp-schema-registry:7.2.1
+    platform: linux/amd64
     ports:
       - 8085:8085
     depends_on:
@@ -100,6 +104,7 @@ services:
 
   schemaregistry1:
     image: confluentinc/cp-schema-registry:7.2.1
+    platform: linux/amd64
     ports:
       - 18085:8085
     depends_on:
@@ -116,6 +121,7 @@ services:
 
   kafka-connect0:
     image: confluentinc/cp-kafka-connect:7.2.1
+    platform: linux/amd64
     ports:
       - 8083:8083
     depends_on:
@@ -141,6 +147,7 @@ services:
 
   kafka-init-topics:
     image: confluentinc/cp-kafka:7.2.1
+    platform: linux/amd64
     volumes:
        - ./data/message.json:/data/message.json
     depends_on:
