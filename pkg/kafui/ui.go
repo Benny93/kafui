@@ -14,16 +14,16 @@ var tviewApp *tview.Application
 func OpenUI(dataSource api.KafkaDataSource) {
 	tview.Styles = tview.Theme{
 		PrimitiveBackgroundColor:    tcell.ColorBlack.TrueColor(),
-		ContrastBackgroundColor:     tcell.ColorBlue.TrueColor(),
+		ContrastBackgroundColor:     tcell.ColorBlack.TrueColor(),
 		MoreContrastBackgroundColor: tcell.ColorGreen.TrueColor(),
 		BorderColor:                 tcell.ColorWhite.TrueColor(),
 		TitleColor:                  tcell.ColorWhite.TrueColor(),
-		GraphicsColor:               tcell.ColorWhite.TrueColor(),
+		GraphicsColor:               tcell.ColorBlack.TrueColor(),
 		PrimaryTextColor:            tcell.ColorDarkCyan.TrueColor(),
 		SecondaryTextColor:          tcell.ColorWhite.TrueColor(),
 		TertiaryTextColor:           tcell.ColorGreen.TrueColor(),
-		InverseTextColor:            tcell.ColorBlue.TrueColor(),
-		ContrastSecondaryTextColor:  tcell.ColorNavy.TrueColor(),
+		InverseTextColor:            tcell.ColorGreen.TrueColor(),
+		ContrastSecondaryTextColor:  tcell.ColorWhite.TrueColor(),
 	}
 
 	// Create the application

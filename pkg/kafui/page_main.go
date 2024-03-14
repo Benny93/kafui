@@ -57,15 +57,19 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 
 	showTopicsInTable(table, topics)
 
+	searchFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(searchInput, 0, 1, true)
+
 	topFlex := tview.NewFlex().
-		AddItem(contextInfo, 0, 1, false).
-		AddItem(searchInput, 0, 1, true).SetDirection(tview.FlexRow)
+		AddItem(contextInfo, 0, 2, false).
+		AddItem(searchFlex, 3, 1, true).SetDirection(tview.FlexRow)
 
 	//topFlex.SetBorder(false).SetTitle("Top")
 
 	midFlex = tview.NewFlex().
 		AddItem(table, 0, 3, true)
 	midFlex.SetBorder(true)
+
 	updateMidFlexTitle(currentResouce, table.GetRowCount())
 
 	notificationTextView = createNotificationTextView()
@@ -74,7 +78,7 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 		AddItem(notificationTextView, 0, 3, false)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(topFlex, 0, 1, false).
+		AddItem(topFlex, 5, 1, false).
 		AddItem(midFlex, 0, 3, true).
 		AddItem(bottomFlex, 5, 1, false)
 

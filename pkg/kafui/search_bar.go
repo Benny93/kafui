@@ -13,8 +13,8 @@ func CreateSearchInput(table *tview.Table, dataSource api.KafkaDataSource, pages
 	searchInput := tview.NewInputField().
 		SetLabel(defaultLabel).
 		SetFieldWidth(0)
-	searchInput.SetBorder(true).SetBackgroundColor(tcell.ColorBlack).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
-	searchInput.SetFieldBackgroundColor(tcell.ColorBlack)
+	searchInput.SetBorder(true).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
+	//searchInput.SetFieldBackgroundColor(tcell.ColorBlack)
 	selectedStyle := tcell.Style{}
 	selectedStyle.Background(tcell.ColorWhite)
 	searchInput.SetAutocompleteStyles(tcell.ColorBlue, tcell.Style{}, selectedStyle)
