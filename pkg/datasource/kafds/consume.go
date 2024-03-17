@@ -2,7 +2,6 @@ package kafds
 
 import (
 	"bytes"
-	"com/emptystate/kafui/pkg/api"
 	"context"
 	"encoding/binary"
 	_ "encoding/binary"
@@ -10,6 +9,8 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+
+	"github.com/Benny93/kafui/pkg/api"
 
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/avro"

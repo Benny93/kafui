@@ -1,8 +1,9 @@
 package kafui
 
 import (
-	"com/emptystate/kafui/pkg/api"
 	"fmt"
+
+	"github.com/Benny93/kafui/pkg/api"
 
 	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"

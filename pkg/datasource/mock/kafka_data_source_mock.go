@@ -1,9 +1,10 @@
 package mock
 
 import (
-	"com/emptystate/kafui/pkg/api"
 	"fmt"
 	"time"
+
+	"github.com/Benny93/kafui/pkg/api"
 )
 
 var currentContext string = "kafka-dev"

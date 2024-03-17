@@ -1,7 +1,6 @@
 package kafds
 
 import (
-	"com/emptystate/kafui/pkg/api"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -11,6 +10,8 @@ import (
 	"log"
 	"os"
 	"sort"
+
+	"github.com/Benny93/kafui/pkg/api"
 
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/avro"

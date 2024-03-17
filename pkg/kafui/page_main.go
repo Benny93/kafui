@@ -1,11 +1,12 @@
 package kafui
 
 import (
-	"com/emptystate/kafui/pkg/api"
 	"fmt"
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/Benny93/kafui/pkg/api"
 
 	"github.com/rivo/tview"
 )

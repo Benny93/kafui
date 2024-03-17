@@ -1,7 +1,7 @@
 package main
 
 import (
-	"com/emptystate/kafui/pkg/kafui"
+	"github.com/Benny93/kafui/pkg/kafui"
 
 	"github.com/spf13/cobra"
 )

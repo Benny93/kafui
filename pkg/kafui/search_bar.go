@@ -1,8 +1,9 @@
 package kafui
 
 import (
-	"com/emptystate/kafui/pkg/api"
 	"strings"
+
+	"github.com/Benny93/kafui/pkg/api"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
