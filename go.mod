@@ -1,4 +1,4 @@
-module com/emptystate/kafui
+module github.com/Benny93/kafui
 
 go 1.18
 
