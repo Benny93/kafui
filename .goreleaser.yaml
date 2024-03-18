@@ -10,7 +10,6 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
-    main: ./cmd/kafui # Specify the path to your main package here
     goos:
       - linux
       - windows

@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"github.com/Benny93/kafui/pkg/kafui"
@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func main() {
+func DoExecute() {
 	rootCmd := &cobra.Command{
 		Use:   "kafui",
 		Short: "k9s style kafka explorer",
