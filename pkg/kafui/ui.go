@@ -57,13 +57,13 @@ func OpenUI(dataSource api.KafkaDataSource) {
 	// Set the input capture to capture key events
 	tviewApp.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		// Check if the pressed key is Shift + :
-		if event.Key() == tcell.KeyRune && event.Modifiers() == tcell.ModShift && event.Rune() == ':' {
+		if event.Rune() == ':' {
 			// Handle the Shift + : key combination
 			msgChannel <- OnFocusSearch
 			return nil // Return nil to indicate that the event has been handled
 		}
 
-		if event.Key() == tcell.KeyRune && event.Modifiers() == tcell.ModShift && event.Rune() == '/' {
+		if event.Rune() == '/' {
 			// Handle the Shift + : key combination
 			msgChannel <- OnStartTableSearch
 			return nil // Return nil to indicate that the event has been handled

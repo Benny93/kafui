@@ -20,6 +20,11 @@ func SetupTableInput(table *tview.Table, app *tview.Application, pages *tview.Pa
 			}
 			// Check if the table has focus
 			if app.GetFocus() == table {
+				r, _ := table.GetSelection()
+				if r == 0 {
+					return event
+				}
+
 				if currentResouce == Topic[0] {
 					row, _ := table.GetSelection()
 					text := table.GetCell(row, 0).Text
