@@ -2,11 +2,11 @@ package kafui
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/fvbommel/sortorder"
 
 	"github.com/rivo/tview"
 )
@@ -170,7 +170,7 @@ func fetchConsumerGroups(dataSource api.KafkaDataSource) []api.ConsumerGroup {
 }
 
 func showContextsInTable(table *tview.Table, contexts []string) {
-	sort.Strings(contexts)
+	contexts = sortorder.Natural(contexts)
 	table.SetCell(0, 0, tview.NewTableCell("Context").SetTextColor(tview.Styles.SecondaryTextColor))
 	for i, context := range contexts {
 		cell := tview.NewTableCell(context)
@@ -202,7 +202,8 @@ func showTopicsInTable(table *tview.Table, topics []string) {
 	table.SetCell(0, 0, tview.NewTableCell("Topics").SetTextColor(tview.Styles.SecondaryTextColor))
 
 	// Sort topics alphabetically
-	sort.Strings(topics)
+	//sort.Strings(topics)
+	topics = sortorder.Natural(topics)
 
 	for i, topic := range topics {
 		cell := tview.NewTableCell(topic)
