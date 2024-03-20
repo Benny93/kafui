@@ -6,13 +6,13 @@ DOCKER_TAG ?= latest
 BUILD_TAG ?= latest
 
 build:
-	go build -ldflags "-w -s" ./cmd/kafui
+	go build -ldflags "-w -s" .
 install:
-	go install -ldflags "-w -s" ./cmd/kafui
+	go install -ldflags "-w -s" .
 run:
-	go run -ldflags "-w -s" ./cmd/kafui
+	go run -ldflags "-w -s" .
 run-mock:
-	go run -ldflags "-w -s" ./cmd/kafui --mock
+	go run -ldflags "-w -s" . --mock
 release:
 	goreleaser --clean
 release-snapshot:
