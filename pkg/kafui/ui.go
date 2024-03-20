@@ -56,6 +56,7 @@ func OpenUI(dataSource api.KafkaDataSource) {
 
 	// Set the input capture to capture key events
 	tviewApp.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+
 		// Check if the pressed key is Shift + :
 		if event.Rune() == ':' {
 			// Handle the Shift + : key combination

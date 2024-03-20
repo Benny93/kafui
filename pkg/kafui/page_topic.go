@@ -9,6 +9,12 @@ import (
 	"github.com/rivo/tview"
 )
 
+var (
+	messagesFlex     *tview.Flex
+	messagesTextView *tview.TextView
+	reportTextView   *tview.TextView
+)
+
 func getHandler(app *tview.Application, textView *tview.TextView, reportV *tview.TextView) api.MessageHandlerFunc {
 	return func(msg api.Message) {
 		app.QueueUpdateDraw(func() {
@@ -35,30 +41,23 @@ func ReportConsumption(message string, textView *tview.TextView) {
 	}()
 }
 
-func receivingMessageTopicPage(app *tview.Application, pages *tview.Pages, flex *tview.Flex, textView *tview.TextView, dataSource api.KafkaDataSource, reportv *tview.TextView, msgChannel chan UIEvent) {
-	for {
-		msg := <-msgChannel
-		if msg == OnPageChange {
-			frontPage, _ := pages.GetFrontPage()
-			if frontPage == "topicPage" {
-				app.QueueUpdateDraw(func() {
-					flex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
-					textView.SetText("")
-				})
-				handlerFunc := getHandler(app, textView, reportv)
-				err := dataSource.ConsumeTopic(currentTopic, handlerFunc)
-				if err != nil {
-					panic("Error consume messages!")
-				}
-			}
-
+func PageConsumeTopic(app *tview.Application, dataSource api.KafkaDataSource) {
+	go func() {
+		app.QueueUpdateDraw(func() {
+			messagesFlex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
+			messagesTextView.SetText("")
+		})
+		handlerFunc := getHandler(app, messagesTextView, reportTextView)
+		err := dataSource.ConsumeTopic(currentTopic, handlerFunc)
+		if err != nil {
+			panic("Error consume messages!")
 		}
-	}
+	}()
 }
 
 func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *tview.Flex {
 
-	textView := tview.NewTextView().
+	messagesTextView = tview.NewTextView().
 		SetDynamicColors(true).
 		SetRegions(true).
 		SetChangedFunc(func() {
@@ -69,24 +68,22 @@ func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tv
 
 	topFlex.SetBorder(false)
 
-	midFlex := tview.NewFlex().
-		AddItem(textView, 0, 3, true)
-	midFlex.SetBorder(true).SetTitle("Messages")
+	messagesFlex = tview.NewFlex().
+		AddItem(messagesTextView, 0, 3, true)
+	messagesFlex.SetBorder(true).SetTitle("Messages")
 
-	tv := createNotificationTextView()
+	reportTextView = createNotificationTextView()
 
 	bottomFlex := tview.NewFlex().
-		AddItem(tv, 0, 1, false)
+		AddItem(reportTextView, 0, 1, false)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(topFlex, 5, 1, false).
-		AddItem(midFlex, 0, 5, true).
+		AddItem(messagesFlex, 0, 5, true).
 		AddItem(bottomFlex, 5, 1, false)
 
 	flex := tview.NewFlex().
 		AddItem(centralFlex, 0, 2, true)
-
-	go receivingMessageTopicPage(app, pages, midFlex, textView, dataSource, tv, msgChannel)
 
 	return flex
 }

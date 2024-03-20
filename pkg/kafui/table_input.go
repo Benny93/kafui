@@ -31,6 +31,7 @@ func SetupTableInput(table *tview.Table, app *tview.Application, pages *tview.Pa
 					currentTopic = text
 					msgChannel <- OnPageChange
 					pages.SwitchToPage("topicPage")
+					PageConsumeTopic(app, dataSource)
 				}
 				if currentResouce == Context[0] {
 					row, _ := table.GetSelection()
