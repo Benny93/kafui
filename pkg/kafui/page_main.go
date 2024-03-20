@@ -11,6 +11,8 @@ import (
 	"github.com/rivo/tview"
 )
 
+const refreshInterval = 5000 * time.Millisecond
+
 var (
 	currentResouce string = Topic[0] // Topic is the default
 
@@ -44,6 +46,47 @@ func receivingMessage(app *tview.Application, table *tview.Table, searchInput *t
 	}
 }
 
+func currentTimeString() string {
+	t := time.Now()
+	return fmt.Sprintf(t.Format("Current time is 15:04"))
+}
+
+func updateTableRoutine(app *tview.Application, table *tview.Table, timerView *tview.TextView, dataSource api.KafkaDataSource) {
+	for {
+		app.QueueUpdateDraw(func() {
+			timerView.SetText(currentTimeString())
+			UpdateTable(table, dataSource)
+
+		})
+		time.Sleep(refreshInterval)
+	}
+}
+
+func UpdateTable(table *tview.Table, dataSource api.KafkaDataSource) {
+	if currentResouce == Topic[0] {
+		table.Clear()
+		topics := fetchTopics(dataSource)
+		showTopicsInTable(table, topics)
+		currentResouce = Topic[0]
+		ShowNotification("Fetched Topics ...")
+		updateMidFlexTitle(currentResouce, table.GetRowCount())
+	} else if currentResouce == Context[0] {
+		table.Clear()
+		contexts := fetchContexts(dataSource)
+		showContextsInTable(table, contexts)
+		currentResouce = Context[0]
+		ShowNotification("Fetched Contexts ...")
+		updateMidFlexTitle(currentResouce, table.GetRowCount())
+	} else if currentResouce == ConsumerGroup[0] {
+		table.Clear()
+		cgs := fetchConsumerGroups(dataSource)
+		showConsumerGroups(table, cgs)
+		currentResouce = ConsumerGroup[0]
+		ShowNotification("Fetched Consumer Groups ...")
+		updateMidFlexTitle(currentResouce, table.GetRowCount())
+	}
+}
+
 func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, msgChannel chan UIEvent) *tview.Flex {
 
 	table := tview.NewTable().SetBorders(false)
@@ -74,9 +117,12 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 	updateMidFlexTitle(currentResouce, table.GetRowCount())
 
 	notificationTextView = createNotificationTextView()
+	timerView := tview.NewTextView().SetText("00:00")
+	timerView.SetBorder(false)
 
-	bottomFlex := tview.NewFlex().
-		AddItem(notificationTextView, 0, 3, false)
+	bottomFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(notificationTextView, 0, 3, false).
+		AddItem(timerView, 0, 1, false)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(topFlex, 5, 1, false).
@@ -87,6 +133,8 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 		AddItem(centralFlex, 0, 2, true)
 
 	go receivingMessage(app, table, searchInput, msgChannel)
+
+	go updateTableRoutine(app, table, timerView, dataSource)
 
 	ShowNotification("Fetched topics...")
 

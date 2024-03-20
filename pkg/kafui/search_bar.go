@@ -89,35 +89,25 @@ func handleTableSearch(searchText string, table *tview.Table) {
 func handleResouceSearch(searchText string, table *tview.Table, searchInput *tview.InputField, defaultLabel string, dataSource api.KafkaDataSource, app *tview.Application, pages *tview.Pages, modal *tview.Modal) {
 	match := false
 	if Contains(Context, searchText) {
-		table.Clear()
-		searchInput.SetLabel(defaultLabel)
-		contexts := fetchContexts(dataSource)
-		showContextsInTable(table, contexts)
 		match = true
 		currentResouce = Context[0]
-		ShowNotification("Fetched Contexts ...")
-		updateMidFlexTitle(currentResouce, table.GetRowCount())
-		app.SetFocus(table)
 	}
 
 	if Contains(Topic, searchText) {
-		switchToTopicTable(table, dataSource, app)
+		currentResouce = Topic[0]
 		match = true
 	}
 
 	if Contains(ConsumerGroup, searchText) {
-		table.Clear()
-		cgs := fetchConsumerGroups(dataSource)
-		showConsumerGroups(table, cgs)
-		match = true
 		currentResouce = ConsumerGroup[0]
-		ShowNotification("Fetched Consumer Groups ...")
-		updateMidFlexTitle(currentResouce, table.GetRowCount())
-		app.SetFocus(table)
+		match = true
 	}
 	if !match {
 		pages.ShowPage("modal")
 		app.SetFocus(modal)
+	} else {
+		UpdateTable(table, dataSource)
+		app.SetFocus(table)
 	}
 	searchInput.SetLabel(defaultLabel)
 	searchInput.SetText("")
