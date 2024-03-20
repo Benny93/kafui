@@ -79,9 +79,9 @@ func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tv
 		AddItem(tv, 0, 1, false)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(topFlex, 0, 1, false).
+		AddItem(topFlex, 5, 1, false).
 		AddItem(midFlex, 0, 5, true).
-		AddItem(bottomFlex, 0, 1, false)
+		AddItem(bottomFlex, 5, 1, false)
 
 	flex := tview.NewFlex().
 		AddItem(centralFlex, 0, 2, true)
