@@ -3,6 +3,7 @@ package kafui
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -25,6 +26,8 @@ var (
 	contextInfo *tview.InputField
 
 	currentSearchMode SearchMode = ResouceSearch
+
+	currentSearchString string = ""
 )
 
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
@@ -37,11 +40,13 @@ func receivingMessage(app *tview.Application, table *tview.Table, searchInput *t
 			searchInput.SetLabel("🧐>")
 			app.SetFocus(searchInput)
 			currentSearchMode = ResouceSearch
+			currentSearchString = ""
 		}
 		if msg == OnStartTableSearch {
 			searchInput.SetLabel("💡?")
 			app.SetFocus(searchInput)
 			currentSearchMode = TableSearch
+			currentSearchString = ""
 		}
 	}
 }
@@ -252,6 +257,10 @@ func showTopicsInTable(table *tview.Table, topics []string) {
 	// Sort topics alphabetically
 	//sort.Strings(topics)
 	topics = sortorder.Natural(topics)
+
+	if currentSearchString != "" {
+		topics = filter(topics, func(s string) bool { return strings.Contains(s, currentSearchString) })
+	}
 
 	for i, topic := range topics {
 		cell := tview.NewTableCell(topic)

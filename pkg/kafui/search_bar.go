@@ -27,9 +27,15 @@ func CreateSearchInput(table *tview.Table, dataSource api.KafkaDataSource, pages
 			if currentSearchMode == ResouceSearch {
 				handleResouceSearch(searchText, table, searchInput, defaultLabel, dataSource, app, pages, modal)
 			} else {
-				handleTableSearch(searchText, table)
+				handleTableSearch(searchText, app, table, dataSource)
 			}
 
+		}
+	})
+
+	searchInput.SetChangedFunc(func(text string) {
+		if currentSearchMode == TableSearch {
+			currentSearchString = text
 		}
 	})
 
@@ -52,38 +58,11 @@ func CreateSearchInput(table *tview.Table, dataSource api.KafkaDataSource, pages
 	return searchInput
 }
 
-func handleTableSearch(searchText string, table *tview.Table) {
+func handleTableSearch(searchText string, app *tview.Application, table *tview.Table, dataSource api.KafkaDataSource) {
 	// filter table by given searchText
-	// Store all rows
-	var visibleRows [][]*tview.TableCell
-	for row := 0; row < table.GetRowCount(); row++ {
-		var visibleCells []*tview.TableCell
-		for column := 0; column < table.GetColumnCount(); column++ {
-			cell := table.GetCell(row, column)
-			if cell == nil {
-				continue
-			}
-			cellText := cell.Text
-			// Check if the cell content contains the search text
-			if strings.Contains(strings.ToLower(cellText), strings.ToLower(searchText)) {
-				visibleCells = append(visibleCells, cell)
-			}
-		}
-		// If any cell in the row matches the search text, add the row to visibleRows
-		if len(visibleCells) > 0 {
-			visibleRows = append(visibleRows, visibleCells)
-		}
-	}
-
-	// Clear the table
-	table.Clear()
-
-	// Add filtered rows to the table
-	for _, row := range visibleRows {
-		for _, cell := range row {
-			table.SetCell(table.GetRowCount(), table.GetColumnCount(), cell)
-		}
-	}
+	currentSearchString = searchText
+	UpdateTable(table, dataSource)
+	app.SetFocus(table)
 }
 
 func handleResouceSearch(searchText string, table *tview.Table, searchInput *tview.InputField, defaultLabel string, dataSource api.KafkaDataSource, app *tview.Application, pages *tview.Pages, modal *tview.Modal) {
