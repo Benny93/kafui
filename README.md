@@ -14,3 +14,4 @@ TODO...
 ## Run application through go
 go run .\cmd\kafui\main.go
 
+godownloader.sh | BINDIR=$HOME/bin bash
