@@ -9,9 +9,8 @@ A k9s inspired terminal ui for [kaf](https://github.com/birdayz/kaf)
 
 ## Install
 
-TODO...
+Install via install script:
 
-## Run application through go
-go run .\cmd\kafui\main.go
-
-godownloader.sh | BINDIR=$HOME/bin bash
+```bash
+curl https://raw.githubusercontent.com/Benny93/kafui/main/godownloader.sh | BINDIR=$HOME/bin bash
+```
