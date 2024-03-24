@@ -1,7 +1,9 @@
 package kafui
 
 import (
+	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -10,18 +12,25 @@ import (
 )
 
 var (
-	messagesFlex     *tview.Flex
-	messagesTextView *tview.TextView
-	reportTextView   *tview.TextView
+	messagesFlex         *tview.Flex
+	consumerTable        *tview.Table
+	consumerTableNextRow int
+	reportTextView       *tview.TextView
+	cancelConsumption    context.CancelFunc
 )
 
-func getHandler(app *tview.Application, textView *tview.TextView, reportV *tview.TextView) api.MessageHandlerFunc {
+func getHandler(app *tview.Application, table *tview.Table, reportV *tview.TextView) api.MessageHandlerFunc {
 	return func(msg api.Message) {
 		app.QueueUpdateDraw(func() {
-			text := textView.GetText(false)
-			text += msg.Value + "\n"
-			textView.SetText(text)
-			textView.ScrollToEnd()
+
+			table.SetCell(consumerTableNextRow, 0, tview.NewTableCell(strconv.FormatInt(msg.Offset, 10)))
+			table.SetCell(consumerTableNextRow, 1, tview.NewTableCell(msg.Key))
+			cell := tview.NewTableCell(msg.Value)
+			cell.SetExpansion(1)
+			table.SetCell(consumerTableNextRow, 2, cell)
+			consumerTableNextRow++
+			table.ScrollToEnd()
+
 		})
 		ReportConsumption(fmt.Sprintf("Consumed message at offset %d", msg.Offset), reportV)
 	}
@@ -45,10 +54,15 @@ func PageConsumeTopic(app *tview.Application, dataSource api.KafkaDataSource) {
 	go func() {
 		app.QueueUpdateDraw(func() {
 			messagesFlex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
-			messagesTextView.SetText("")
+			consumerTable.SetCell(0, 0, tview.NewTableCell("Offset").SetTextColor(tview.Styles.SecondaryTextColor))
+			consumerTable.SetCell(0, 1, tview.NewTableCell("Key").SetTextColor(tview.Styles.SecondaryTextColor))
+			consumerTable.SetCell(0, 2, tview.NewTableCell("Value").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
+			consumerTableNextRow = 1
 		})
-		handlerFunc := getHandler(app, messagesTextView, reportTextView)
-		err := dataSource.ConsumeTopic(currentTopic, handlerFunc)
+		handlerFunc := getHandler(app, consumerTable, reportTextView)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancelConsumption = cancel
+		err := dataSource.ConsumeTopic(ctx, currentTopic, handlerFunc)
 		if err != nil {
 			panic("Error consume messages!")
 		}
@@ -57,19 +71,23 @@ func PageConsumeTopic(app *tview.Application, dataSource api.KafkaDataSource) {
 
 func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *tview.Flex {
 
-	messagesTextView = tview.NewTextView().
-		SetDynamicColors(true).
-		SetRegions(true).
-		SetChangedFunc(func() {
-			app.Draw()
-		})
+	// consumerTable = tview.NewTextView().
+	// SetDynamicColors(true).
+	// SetRegions(true).
+	// SetChangedFunc(func() {
+	// 	app.Draw()
+	// })
+
+	consumerTable = tview.NewTable()
+	consumerTable.SetSelectable(true, false)
+	consumerTable.SetFixed(1, 1)
 
 	topFlex := tview.NewFlex()
 
 	topFlex.SetBorder(false)
 
 	messagesFlex = tview.NewFlex().
-		AddItem(messagesTextView, 0, 3, true)
+		AddItem(consumerTable, 0, 3, true)
 	messagesFlex.SetBorder(true).SetTitle("Messages")
 
 	reportTextView = createNotificationTextView()
@@ -86,4 +104,13 @@ func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tv
 		AddItem(centralFlex, 0, 2, true)
 
 	return flex
+}
+
+func CloseTopicPage() {
+
+	go func() {
+		consumerTable.Clear()
+		consumerTableNextRow = 0
+		cancelConsumption()
+	}()
 }

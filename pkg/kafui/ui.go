@@ -72,6 +72,10 @@ func OpenUI(dataSource api.KafkaDataSource) {
 
 		if event.Key() == tcell.KeyEsc {
 			frontPage, _ := pages.GetFrontPage()
+			if frontPage == "topicPage" {
+				CloseTopicPage()
+			}
+
 			if frontPage != "main" {
 				pages.SwitchToPage("main")
 			}

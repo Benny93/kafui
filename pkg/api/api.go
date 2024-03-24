@@ -1,5 +1,7 @@
 package api
 
+import "context"
+
 type Message struct {
 	Key    string
 	Value  string
@@ -21,5 +23,5 @@ type KafkaDataSource interface {
 	GetContext() string
 	SetContext(contextName string) error
 	GetConsumerGroups() ([]ConsumerGroup, error)
-	ConsumeTopic(topicName string, handleMessage MessageHandlerFunc) error
+	ConsumeTopic(ctx context.Context, topicName string, handleMessage MessageHandlerFunc) error
 }

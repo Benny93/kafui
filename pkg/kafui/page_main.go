@@ -75,21 +75,21 @@ func UpdateTable(table *tview.Table, dataSource api.KafkaDataSource) {
 		topics := fetchTopics(dataSource)
 		showTopicsInTable(table, topics)
 		currentResouce = Topic[0]
-		ShowNotification("Fetched Topics ...")
+		//ShowNotification("Fetched Topics ...")
 		updateMidFlexTitle(currentResouce, table.GetRowCount())
 	} else if currentResouce == Context[0] {
 		table.Clear()
 		contexts := fetchContexts(dataSource)
 		showContextsInTable(table, contexts)
 		currentResouce = Context[0]
-		ShowNotification("Fetched Contexts ...")
+		//ShowNotification("Fetched Contexts ...")
 		updateMidFlexTitle(currentResouce, table.GetRowCount())
 	} else if currentResouce == ConsumerGroup[0] {
 		table.Clear()
 		cgs := fetchConsumerGroups(dataSource)
 		showConsumerGroups(table, cgs)
 		currentResouce = ConsumerGroup[0]
-		ShowNotification("Fetched Consumer Groups ...")
+		//ShowNotification("Fetched Consumer Groups ...")
 		updateMidFlexTitle(currentResouce, table.GetRowCount())
 	}
 }
