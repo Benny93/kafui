@@ -176,7 +176,7 @@ func createNotificationTextView() *tview.TextView {
 func createContextInfo() *tview.InputField {
 	inputField := tview.NewInputField().
 		SetLabel("Current Context: ").
-		SetFieldWidth(10).
+		SetFieldWidth(0).
 		SetText("n/a")
 
 	inputField.SetDisabled(true)

@@ -45,7 +45,11 @@ func (kp KafkaDataSourceKaf) GetTopics() ([]string, error) {
 }
 
 func (kp KafkaDataSourceKaf) GetContext() string {
-	return cfg.ActiveCluster().Name
+	activeCluster := cfg.ActiveCluster()
+	if activeCluster == nil {
+		return "default localhost:9092"
+	}
+	return activeCluster.Name
 }
 
 // GetContexts retrieves a list of Kafka contexts
