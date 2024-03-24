@@ -1,6 +1,8 @@
 module github.com/Benny93/kafui
 
-go 1.18
+go 1.21
+
+toolchain go1.22.1
 
 require (
 	github.com/IBM/sarama v1.43.0
@@ -10,6 +12,7 @@ require (
 	github.com/gdamore/tcell/v2 v2.6.1-0.20231203215052-2917c3801e73
 	github.com/golang/protobuf v1.5.3
 	github.com/hokaccha/go-prettyjson v0.0.0-20190818114111-108c894c2c0e
+	github.com/maruel/natural v1.1.1
 	github.com/mattn/go-colorable v0.1.13
 	github.com/rivo/tview v0.0.0-20240204151237-861aa94d61c8
 	github.com/spf13/cobra v1.8.0

@@ -2,6 +2,7 @@ package kafui
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/fvbommel/sortorder"
 
+	"github.com/maruel/natural"
 	"github.com/rivo/tview"
 )
 
@@ -252,17 +254,16 @@ func fetchTopics(dataSource api.KafkaDataSource) []string {
 }
 
 func showTopicsInTable(table *tview.Table, topics []string) {
+	table.Clear()
 	table.SetCell(0, 0, tview.NewTableCell("Topics").SetTextColor(tview.Styles.SecondaryTextColor))
-
-	// Sort topics alphabetically
-	//sort.Strings(topics)
-	topics = sortorder.Natural(topics)
-
+	filtered := topics
 	if currentSearchString != "" {
-		topics = filter(topics, func(s string) bool { return strings.Contains(s, currentSearchString) })
+		filtered = filter(topics, func(s string) bool { return strings.Contains(s, currentSearchString) })
 	}
 
-	for i, topic := range topics {
+	sort.Sort(natural.StringSlice(filtered))
+
+	for i, topic := range filtered {
 		cell := tview.NewTableCell(topic)
 		cell.SetExpansion(1)
 		table.SetCell(i+1, 0, cell)
