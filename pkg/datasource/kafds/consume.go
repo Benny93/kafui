@@ -250,14 +250,14 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 		}
 	}
 
-	dataToDisplay = formatMessage(msg, dataToDisplay, keyToDisplay, &stderr)
+	//dataToDisplay = formatMessage(msg, dataToDisplay, keyToDisplay, &stderr)
 
 	mu.Lock()
 	//stderr.WriteTo(errWriter)
 	//_, _ = colorableOut.Write(dataToDisplay)
 	//fmt.Fprintln(outWriter)
 	newMessage := api.Message{
-		Key:    "bar",
+		Key:    string(keyToDisplay),
 		Value:  string(dataToDisplay),
 		Offset: msg.Offset,
 	}
