@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/gdamore/tcell/v2"
 
 	"github.com/rivo/tview"
 )
@@ -17,6 +18,7 @@ var (
 	consumerTableNextRow int
 	reportTextView       *tview.TextView
 	cancelConsumption    context.CancelFunc
+	messageDetailPage    *DetailPage
 )
 
 func getHandler(app *tview.Application, table *tview.Table, reportV *tview.TextView) api.MessageHandlerFunc {
@@ -68,6 +70,21 @@ func PageConsumeTopic(app *tview.Application, dataSource api.KafkaDataSource) {
 		}
 	}()
 }
+func handleEnter(table *tview.Table, app *tview.Application, pages *tview.Pages) func(event *tcell.EventKey) *tcell.EventKey {
+	return func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			// Get the selected row index
+			row, _ := table.GetSelection()
+			valueCell := table.GetCell(row, 2)
+			// Display the value content in a new page
+			if row >= 0 {
+				messageDetailPage = NewDetailPage(app, pages, valueCell.Text)
+				messageDetailPage.Show()
+			}
+		}
+		return event
+	}
+}
 
 func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *tview.Flex {
 
@@ -81,6 +98,7 @@ func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tv
 	consumerTable = tview.NewTable()
 	consumerTable.SetSelectable(true, false)
 	consumerTable.SetFixed(1, 1)
+	consumerTable.SetInputCapture(handleEnter(consumerTable, app, pages))
 
 	topFlex := tview.NewFlex()
 

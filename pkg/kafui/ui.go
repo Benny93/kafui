@@ -75,6 +75,11 @@ func OpenUI(dataSource api.KafkaDataSource) {
 			if frontPage == "topicPage" {
 				CloseTopicPage()
 			}
+			if frontPage == "DetailPage" {
+				messageDetailPage.Hide()
+				//pages.SwitchToPage("topicPage")
+				return event
+			}
 
 			if frontPage != "main" {
 				pages.SwitchToPage("main")
