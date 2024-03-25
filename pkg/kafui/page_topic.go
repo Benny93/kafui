@@ -12,28 +12,39 @@ import (
 	"github.com/rivo/tview"
 )
 
-var (
-	messagesFlex         *tview.Flex
-	consumerTable        *tview.Table
-	consumerTableNextRow int
-	reportTextView       *tview.TextView
-	cancelConsumption    context.CancelFunc
-	cancelRefresh        context.CancelFunc
-	messageDetailPage    *DetailPage
-	consumedMessages     []api.Message
-	newMessageConsumed   bool
-)
+type TopicPage struct {
+	app                *tview.Application
+	dataSource         api.KafkaDataSource
+	pages              *tview.Pages
+	msgChannel         chan UIEvent
+	messagesFlex       *tview.Flex
+	consumerTable      *tview.Table
+	cancelConsumption  context.CancelFunc
+	cancelRefresh      context.CancelFunc
+	messageDetailPage  *DetailPage
+	consumedMessages   []api.Message
+	newMessageConsumed bool
+}
 
-func getHandler() api.MessageHandlerFunc {
-	var empty []api.Message
-	consumedMessages = empty
-	return func(msg api.Message) {
-		consumedMessages = append(consumedMessages, msg)
-		newMessageConsumed = true
+func NewTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *TopicPage {
+	return &TopicPage{
+		app:        app,
+		dataSource: dataSource,
+		pages:      pages,
+		msgChannel: msgChannel,
 	}
 }
 
-func refreshTopicTable(ctx context.Context, app *tview.Application, table *tview.Table) {
+func (tp *TopicPage) getHandler() api.MessageHandlerFunc {
+	var empty []api.Message
+	tp.consumedMessages = empty
+	return func(msg api.Message) {
+		tp.consumedMessages = append(tp.consumedMessages, msg)
+		tp.newMessageConsumed = true
+	}
+}
+
+func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 	refreshTicker := time.NewTicker(100 * time.Millisecond)
 	defer refreshTicker.Stop()
 
@@ -43,114 +54,103 @@ func refreshTopicTable(ctx context.Context, app *tview.Application, table *tview
 			// Exit the function if the context is done
 			return
 		case <-refreshTicker.C:
-			if !newMessageConsumed {
+			if !tp.newMessageConsumed {
 				continue
 			}
-			newMessageConsumed = false
-			app.QueueUpdateDraw(func() {
+			tp.newMessageConsumed = false
+			tp.app.QueueUpdateDraw(func() {
 				// Clear the table before updating it
-				table.Clear()
-				createFirstRowTopicTable()
+				tp.consumerTable.Clear()
+				tp.createFirstRowTopicTable()
 
 				// Iterate over the consumedMessages slice using range
-				for _, msg := range consumedMessages {
-					rowIndex := table.GetRowCount() // Get the current row index
-					table.SetCell(rowIndex, 0, tview.NewTableCell(strconv.FormatInt(msg.Offset, 10)))
-					table.SetCell(rowIndex, 1, tview.NewTableCell(msg.Key))
+				for _, msg := range tp.consumedMessages {
+					rowIndex := tp.consumerTable.GetRowCount() // Get the current row index
+					tp.consumerTable.SetCell(rowIndex, 0, tview.NewTableCell(strconv.FormatInt(msg.Offset, 10)))
+					tp.consumerTable.SetCell(rowIndex, 1, tview.NewTableCell(msg.Key))
 					cell := tview.NewTableCell(msg.Value)
 					cell.SetExpansion(1)
-					table.SetCell(rowIndex, 2, cell)
+					tp.consumerTable.SetCell(rowIndex, 2, cell)
 				}
-				table.ScrollToEnd()
-				table.Select(table.GetRowCount()-1, 0) // Select the last row
+				tp.consumerTable.ScrollToEnd()
+				tp.consumerTable.Select(tp.consumerTable.GetRowCount()-1, 0) // Select the last row
 			})
 		}
 	}
 }
 
-func HideNotification(textView *tview.TextView) {
+func (tp *TopicPage) HideNotification(textView *tview.TextView) {
 	go func() {
 
 		time.Sleep(1 * time.Second)
-		tviewApp.QueueUpdateDraw(func() {
+		tp.app.QueueUpdateDraw(func() {
 			textView.SetText("")
 		})
 	}()
 }
 
-func PageConsumeTopic(app *tview.Application, dataSource api.KafkaDataSource) {
+func (tp *TopicPage) PageConsumeTopic(currentTopic string) {
 	var emptyArray []api.Message
-	consumedMessages = emptyArray
+	tp.consumedMessages = emptyArray
 	go func() {
-		app.QueueUpdateDraw(func() {
-			createFirstRowTopicTable()
+		tp.app.QueueUpdateDraw(func() {
+			tp.createFirstRowTopicTable()
 		})
-		handlerFunc := getHandler()
+		handlerFunc := tp.getHandler()
 		ctx, cancel := context.WithCancel(context.Background())
-		cancelConsumption = cancel
-		err := dataSource.ConsumeTopic(ctx, currentTopic, handlerFunc)
+		tp.cancelConsumption = cancel
+		err := tp.dataSource.ConsumeTopic(ctx, currentTopic, handlerFunc)
 		if err != nil {
 			panic("Error consume messages!")
 		}
 	}()
 	ctx, c := context.WithCancel(context.Background())
-	cancelRefresh = c
-	go refreshTopicTable(ctx, app, consumerTable)
+	tp.cancelRefresh = c
+	go tp.refreshTopicTable(ctx)
 }
 
-func createFirstRowTopicTable() {
-	messagesFlex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
-	consumerTable.SetCell(0, 0, tview.NewTableCell("Offset").SetTextColor(tview.Styles.SecondaryTextColor))
-	consumerTable.SetCell(0, 1, tview.NewTableCell("Key").SetTextColor(tview.Styles.SecondaryTextColor))
-	consumerTable.SetCell(0, 2, tview.NewTableCell("Value").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
-	consumerTableNextRow = 1
+func (tp *TopicPage) createFirstRowTopicTable() {
+	tp.messagesFlex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
+	tp.consumerTable.SetCell(0, 0, tview.NewTableCell("Offset").SetTextColor(tview.Styles.SecondaryTextColor))
+	tp.consumerTable.SetCell(0, 1, tview.NewTableCell("Key").SetTextColor(tview.Styles.SecondaryTextColor))
+	tp.consumerTable.SetCell(0, 2, tview.NewTableCell("Value").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
+
 }
-func handleEnter(table *tview.Table, app *tview.Application, pages *tview.Pages) func(event *tcell.EventKey) *tcell.EventKey {
+
+func (tp *TopicPage) handleEnter() func(event *tcell.EventKey) *tcell.EventKey {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter {
 			// Get the selected row index
-			row, _ := table.GetSelection()
-			valueCell := table.GetCell(row, 2)
+			row, _ := tp.consumerTable.GetSelection()
+			valueCell := tp.consumerTable.GetCell(row, 2)
 			// Display the value content in a new page
 			if row > 0 {
-				messageDetailPage = NewDetailPage(app, pages, valueCell.Text)
-				messageDetailPage.Show()
+				tp.messageDetailPage = NewDetailPage(tp.app, tp.pages, valueCell.Text)
+				tp.messageDetailPage.Show()
 			}
 		}
 		return event
 	}
 }
 
-func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *tview.Flex {
-
-	// consumerTable = tview.NewTextView().
-	// SetDynamicColors(true).
-	// SetRegions(true).
-	// SetChangedFunc(func() {
-	// 	app.Draw()
-	// })
-
-	consumerTable = tview.NewTable()
-	consumerTable.SetSelectable(true, false)
-	consumerTable.SetFixed(1, 1)
-	consumerTable.SetInputCapture(handleEnter(consumerTable, app, pages))
+func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex {
+	tp.consumerTable = tview.NewTable()
+	tp.consumerTable.SetSelectable(true, false)
+	tp.consumerTable.SetFixed(1, 1)
+	tp.consumerTable.SetInputCapture(tp.handleEnter())
 
 	topFlex := tview.NewFlex()
-
 	topFlex.SetBorder(false)
 
-	messagesFlex = tview.NewFlex().
-		AddItem(consumerTable, 0, 3, true)
-	messagesFlex.SetBorder(true).SetTitle("Messages")
-
-	//reportTextView = createNotificationTextView()
+	tp.messagesFlex = tview.NewFlex().
+		AddItem(tp.consumerTable, 0, 3, true)
+	tp.messagesFlex.SetBorder(true).SetTitle("Messages")
 
 	bottomFlex := tview.NewFlex()
-	//AddItem(reportTextView, 0, 1, false)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(topFlex, 5, 1, false).
-		AddItem(messagesFlex, 0, 5, true).
+		AddItem(tp.messagesFlex, 0, 5, true).
 		AddItem(bottomFlex, 5, 1, false)
 
 	flex := tview.NewFlex().
@@ -159,12 +159,11 @@ func CreateTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tv
 	return flex
 }
 
-func CloseTopicPage() {
-
+func (tp *TopicPage) CloseTopicPage() {
 	go func() {
-		consumerTable.Clear()
-		consumerTableNextRow = 0
-		cancelConsumption()
-		cancelRefresh()
+		tp.consumerTable.Clear()
+
+		tp.cancelConsumption()
+		tp.cancelRefresh()
 	}()
 }

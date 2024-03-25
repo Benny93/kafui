@@ -11,6 +11,7 @@ import (
 
 var currentTopic string = ""
 var tviewApp *tview.Application
+var topicPage *TopicPage
 
 func OpenUI(dataSource api.KafkaDataSource) {
 	tview.Styles = tview.Theme{
@@ -73,10 +74,10 @@ func OpenUI(dataSource api.KafkaDataSource) {
 		if event.Key() == tcell.KeyEsc {
 			frontPage, _ := pages.GetFrontPage()
 			if frontPage == "topicPage" {
-				CloseTopicPage()
+				topicPage.CloseTopicPage()
 			}
 			if frontPage == "DetailPage" {
-				messageDetailPage.Hide()
+				topicPage.messageDetailPage.Hide()
 				//pages.SwitchToPage("topicPage")
 				return event
 			}
@@ -90,12 +91,13 @@ func OpenUI(dataSource api.KafkaDataSource) {
 		return event
 	})
 
-	topicPage := CreateTopicPage(dataSource, pages, tviewApp, msgChannel)
+	topicPage = NewTopicPage(dataSource, pages, tviewApp, msgChannel)
+	topicPageFlex := topicPage.CreateTopicPage("Current Topic")
 
 	pages.
 		AddPage("main", flex, true, true).
 		AddPage("modal", modal, true, false).
-		AddPage("topicPage", topicPage, true, false)
+		AddPage("topicPage", topicPageFlex, true, false)
 
 	pages.SetChangedFunc(func() {
 		msgChannel <- OnPageChange
