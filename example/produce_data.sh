@@ -7,7 +7,7 @@ fetch_and_send_data() {
 
     if [ -n "$response" ]; then
         # Pipe the exchange rate to Kafka
-        echo "$response" | kaf produce Bitcoin_topic_14 --key BTC
+        echo "$response" | kaf produce Bitcoin --key BTC
     else
         echo "Error: Failed to fetch exchange rate for BTC."
     fi

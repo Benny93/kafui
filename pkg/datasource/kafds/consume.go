@@ -77,6 +77,7 @@ func DoConsume(ctx context.Context, topic string, handleMessage api.MessageHandl
 		outputFormat = OutputFormatRaw
 	}
 	offsetFlag = "oldest" // TODO as parameter
+	follow = true
 
 	switch offsetFlag {
 	case "oldest":
