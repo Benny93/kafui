@@ -67,7 +67,7 @@ func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, 
 
 var handler api.MessageHandlerFunc // todo remove global var
 
-func DoConsume(ctx context.Context, topic string, context string, handleMessage api.MessageHandlerFunc) {
+func DoConsume(ctx context.Context, topic string, handleMessage api.MessageHandlerFunc) {
 	var offset int64
 	cfg := getConfig()
 	client := getClientFromConfig(cfg)

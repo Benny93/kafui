@@ -77,7 +77,7 @@ func handleEnter(table *tview.Table, app *tview.Application, pages *tview.Pages)
 			row, _ := table.GetSelection()
 			valueCell := table.GetCell(row, 2)
 			// Display the value content in a new page
-			if row >= 0 {
+			if row > 0 {
 				messageDetailPage = NewDetailPage(app, pages, valueCell.Text)
 				messageDetailPage.Show()
 			}

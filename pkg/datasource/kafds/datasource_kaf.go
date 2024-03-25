@@ -135,7 +135,7 @@ func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string,
 		keys = append(keys, key)
 	}
 
-	DoConsume(ctx, topicName, "Todo", handleMessage)
+	DoConsume(ctx, topicName, handleMessage)
 
 	//cgs := []string{"message1", "message2", "message3"} // Example
 	return nil
