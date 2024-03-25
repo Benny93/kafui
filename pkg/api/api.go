@@ -8,6 +8,20 @@ type Message struct {
 	Offset int64
 }
 
+type ConsumeFlags struct {
+	Follow     bool
+	Tail       int32
+	OffsetFlag string
+}
+
+func DefaultConsumeFlags() ConsumeFlags {
+	return ConsumeFlags{
+		Follow:     true,
+		Tail:       50,
+		OffsetFlag: "latest",
+	}
+}
+
 type ConsumerGroup struct {
 	Name      string
 	State     string
@@ -23,5 +37,5 @@ type KafkaDataSource interface {
 	GetContext() string
 	SetContext(contextName string) error
 	GetConsumerGroups() ([]ConsumerGroup, error)
-	ConsumeTopic(ctx context.Context, topicName string, handleMessage MessageHandlerFunc) error
+	ConsumeTopic(ctx context.Context, topicName string, flags ConsumeFlags, handleMessage MessageHandlerFunc) error
 }

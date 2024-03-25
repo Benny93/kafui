@@ -67,7 +67,7 @@ func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, 
 
 var handler api.MessageHandlerFunc // todo remove global var
 
-func DoConsume(ctx context.Context, topic string, handleMessage api.MessageHandlerFunc) {
+func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc) {
 	var offset int64
 	cfg := getConfig()
 	client := getClientFromConfig(cfg)
@@ -77,7 +77,8 @@ func DoConsume(ctx context.Context, topic string, handleMessage api.MessageHandl
 		outputFormat = OutputFormatRaw
 	}
 	offsetFlag = "oldest" // TODO as parameter
-	follow = true
+	follow = consumeFlags.Follow
+	tail = consumeFlags.Tail
 
 	switch offsetFlag {
 	case "oldest":
