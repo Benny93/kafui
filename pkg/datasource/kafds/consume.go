@@ -252,7 +252,7 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 
 	//dataToDisplay = formatMessage(msg, dataToDisplay, keyToDisplay, &stderr)
 
-	mu.Lock()
+	//mu.Lock()
 	//stderr.WriteTo(errWriter)
 	//_, _ = colorableOut.Write(dataToDisplay)
 	//fmt.Fprintln(outWriter)
@@ -262,7 +262,7 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 		Offset: msg.Offset,
 	}
 	handler(newMessage)
-	mu.Unlock()
+	//mu.Unlock()
 }
 
 func formatMessage(msg *sarama.ConsumerMessage, rawMessage []byte, keyToDisplay []byte, stderr *bytes.Buffer) []byte {
