@@ -30,23 +30,22 @@ func getHandler(app *tview.Application, table *tview.Table, reportV *tview.TextV
 			cell := tview.NewTableCell(msg.Value)
 			cell.SetExpansion(1)
 			table.SetCell(consumerTableNextRow, 2, cell)
+
 			consumerTableNextRow++
 			table.ScrollToEnd()
+			table.Select(consumerTableNextRow, 0)
+			reportV.SetText(fmt.Sprintf("Consumed message at offset %d", msg.Offset))
 
 		})
-		ReportConsumption(fmt.Sprintf("Consumed message at offset %d", msg.Offset), reportV)
+		HideNotification(reportV)
 	}
 }
 
-func ReportConsumption(message string, textView *tview.TextView) {
+func HideNotification(textView *tview.TextView) {
 	go func() {
-		tviewApp.QueueUpdateDraw(func() {
-			textView.SetText(message)
-		})
-		// Schedule hiding TextView after 2 seconds
 
 		time.Sleep(1 * time.Second)
-		tviewApp.QueueUpdateDraw(func() {
+		tviewApp.QueueUpdate(func() {
 			textView.SetText("")
 		})
 	}()
