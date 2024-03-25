@@ -2,8 +2,10 @@ package kafui
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/TylerBrock/colorjson"
+	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -55,6 +57,9 @@ func (vp *DetailPage) Show() {
 
 	// Add the value page to the pages container
 	vp.pages.AddPage("DetailPage", valueFlex, true, true)
+
+	vp.valueTextView.SetInputCapture(vp.handleInput)
+
 }
 
 // Hide hides the page.
@@ -62,13 +67,41 @@ func (vp *DetailPage) Hide() {
 	vp.pages.RemovePage("DetailPage")
 }
 
+func (vp *DetailPage) handleInput(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() == tcell.KeyRune && event.Rune() == 'c' && vp.valueTextView.HasFocus() {
+		// Copy the content of valueTextView to the clipboard
+
+		clipboard.WriteAll(vp.valueTextView.GetText(true))
+		// Show a notification that the content has been copied
+		vp.showCopiedNotification()
+		return nil
+	}
+	return event
+}
+
 // TODO: HandleKey handles key events for the value page.
-// func (vp *DetailPage) HandleKey(event *tcell.EventKey) *tcell.EventKey {
-// 	if event.Key() == tcell.KeyEsc {
-// 		// Switch back to the original page when Escape is pressed
-// 		//vp.pages.SwitchToPage("TopicPage")
-// 		vp.Hide()
-// 		return nil
-// 	}
-// 	return event
-// }
+//
+//	func (vp *DetailPage) HandleKey(event *tcell.EventKey) *tcell.EventKey {
+//		if event.Key() == tcell.KeyEsc {
+//			// Switch back to the original page when Escape is pressed
+//			//vp.pages.SwitchToPage("TopicPage")
+//			vp.Hide()
+//			return nil
+//		}
+//		return event
+//	}
+func (vp *DetailPage) showCopiedNotification() {
+	go func() {
+		_, page := vp.pages.GetFrontPage()
+		item := tview.NewTextView().SetText("😎 Content copied to clipboard ...").SetTextAlign(tview.AlignCenter)
+		vp.app.QueueUpdateDraw(func() {
+
+			page.(*tview.Flex).AddItem(item, 1, 0, false)
+		})
+		// Hide the notification after 2 seconds
+		time.Sleep(2 * time.Second)
+		vp.app.QueueUpdateDraw(func() {
+			page.(*tview.Flex).RemoveItem(item)
+		})
+	}()
+}
