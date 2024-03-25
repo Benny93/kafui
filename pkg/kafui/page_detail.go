@@ -1,6 +1,9 @@
 package kafui
 
 import (
+	"encoding/json"
+
+	"github.com/TylerBrock/colorjson"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -13,13 +16,24 @@ type DetailPage struct {
 }
 
 func NewDetailPage(app *tview.Application, pages *tview.Pages, value string) *DetailPage {
+
+	// Format and colorize JSON
+	var obj map[string]interface{}
+	json.Unmarshal([]byte(value), &obj)
+	f := colorjson.NewFormatter()
+	f.Indent = 2
+	s, _ := f.Marshal(obj)
+
 	valueTextView := tview.NewTextView().
-		SetText(value).
+		//SetText("Placeholder :)").
 		SetTextAlign(tview.AlignLeft).
 		SetDynamicColors(true).
-		SetWordWrap(true)
+		SetWordWrap(false)
 	valueTextView.SetTextColor(tcell.ColorWhite)
 	valueTextView.SetBorder(true)
+
+	writer := tview.ANSIWriter(valueTextView)
+	writer.Write(s)
 
 	return &DetailPage{
 		app:           app,

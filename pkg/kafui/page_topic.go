@@ -79,16 +79,6 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 	}
 }
 
-func (tp *TopicPage) HideNotification(textView *tview.TextView) {
-	go func() {
-
-		time.Sleep(1 * time.Second)
-		tp.app.QueueUpdateDraw(func() {
-			textView.SetText("")
-		})
-	}()
-}
-
 func (tp *TopicPage) PageConsumeTopic(currentTopic string) {
 	var emptyArray []api.Message
 	tp.consumedMessages = emptyArray
