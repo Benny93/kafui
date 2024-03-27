@@ -120,7 +120,7 @@ brews:
     # Your app's description.
     #
     # Templates: allowed
-    description: "k9s inspired terminal ui to quickly browse multiple kafka instance from the command line"
+    description: "k9s inspired terminal ui to quickly browse multiple kafka instances"
 
     # SPDX identifier of your app's license.
     license: "MIT"
