@@ -52,9 +52,15 @@ It uses the same configuration file as kaf so you can use your existing kaf conf
 
 ### Homebrew
 
+If you're using Homebrew on macOS or Linux, you can easily install `kafui` using the following commands:
+
 ```bash
+brew tap benny93/kafui
 brew install kafui
 ```
+
+This will tap into the `benny93/kafui` repository and install the `kafui` package on your system. 
+
 
 ### Downloader Script
 
