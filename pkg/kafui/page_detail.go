@@ -19,13 +19,6 @@ type DetailPage struct {
 
 func NewDetailPage(app *tview.Application, pages *tview.Pages, value string) *DetailPage {
 
-	// Format and colorize JSON
-	var obj map[string]interface{}
-	json.Unmarshal([]byte(value), &obj)
-	f := colorjson.NewFormatter()
-	f.Indent = 2
-	s, _ := f.Marshal(obj)
-
 	valueTextView := tview.NewTextView().
 		//SetText("Placeholder :)").
 		SetTextAlign(tview.AlignLeft).
@@ -34,8 +27,18 @@ func NewDetailPage(app *tview.Application, pages *tview.Pages, value string) *De
 	valueTextView.SetTextColor(tcell.ColorWhite)
 	valueTextView.SetBorder(true)
 
-	writer := tview.ANSIWriter(valueTextView)
-	writer.Write(s)
+	// Format and colorize JSON
+	var obj map[string]interface{}
+	merror := json.Unmarshal([]byte(value), &obj)
+	f := colorjson.NewFormatter()
+	f.Indent = 2
+	s, err := f.Marshal(obj)
+	if merror != nil || err != nil {
+		valueTextView.SetText(value)
+	} else {
+		writer := tview.ANSIWriter(valueTextView)
+		writer.Write(s)
+	}
 
 	return &DetailPage{
 		app:           app,

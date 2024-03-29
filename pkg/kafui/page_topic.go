@@ -70,10 +70,7 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 					rowIndex := tp.consumerTable.GetRowCount() // Get the current row index
 					tp.consumerTable.SetCell(rowIndex, 0, tview.NewTableCell(strconv.FormatInt(msg.Offset, 10)))
 					tp.consumerTable.SetCell(rowIndex, 1, tview.NewTableCell(msg.Key))
-					shortenedText := msg.Value[:100]
-					if len(shortenedText) < len(msg.Value) {
-						shortenedText = shortenedText + "..."
-					}
+					shortenedText := tp.shortValue(msg)
 					cell := tview.NewTableCell(shortenedText)
 					cell.SetExpansion(1)
 					tp.consumerTable.SetCell(rowIndex, 2, cell)
@@ -83,6 +80,17 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 			})
 		}
 	}
+}
+
+func (*TopicPage) shortValue(msg api.Message) string {
+	if len(msg.Value) <= 100 {
+		return msg.Value
+	}
+	shortenedText := msg.Value[:100]
+	if len(shortenedText) < len(msg.Value) {
+		shortenedText = shortenedText + "..."
+	}
+	return shortenedText
 }
 
 func (tp *TopicPage) PageConsumeTopic(currentTopic string) {
