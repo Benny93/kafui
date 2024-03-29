@@ -24,6 +24,7 @@ type TopicPage struct {
 	messageDetailPage  *DetailPage
 	consumedMessages   []api.Message
 	newMessageConsumed bool
+	notifyView         *tview.TextView
 }
 
 func NewTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *TopicPage {
@@ -58,6 +59,7 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 				continue
 			}
 			tp.newMessageConsumed = false
+			tp.ShowNotification(fmt.Sprintf("Consumed messages %d", len(tp.consumedMessages)))
 			tp.app.QueueUpdateDraw(func() {
 				// Clear the table before updating it
 				tp.consumerTable.Clear()
@@ -80,6 +82,7 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 }
 
 func (tp *TopicPage) PageConsumeTopic(currentTopic string) {
+	tp.ShowNotification("Consuming messages...")
 	var emptyArray []api.Message
 	tp.consumedMessages = emptyArray
 	go func() {
@@ -138,6 +141,9 @@ func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex {
 	tp.messagesFlex.SetBorder(true).SetTitle("Messages")
 
 	bottomFlex := tview.NewFlex()
+	tp.notifyView = tview.NewTextView().SetText("Notification...")
+	tp.notifyView.SetBorder(false)
+	bottomFlex.AddItem(tp.notifyView, 0, 1, false)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(topFlex, 5, 1, false).
@@ -156,5 +162,19 @@ func (tp *TopicPage) CloseTopicPage() {
 
 		tp.cancelConsumption()
 		tp.cancelRefresh()
+	}()
+}
+
+func (tp *TopicPage) ShowNotification(message string) {
+	go func() {
+		tp.app.QueueUpdateDraw(func() {
+			tp.notifyView.SetText(message)
+		})
+		// Schedule hiding TextView after 2 seconds
+
+		time.Sleep(2 * time.Second)
+		tp.app.QueueUpdateDraw(func() {
+			tp.notifyView.SetText("")
+		})
 	}()
 }

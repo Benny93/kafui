@@ -19,5 +19,7 @@ release-snapshot:
 	goreleaser --clean --snapshot
 run-kafka:
 	cd example/dockercompose/ && docker compose up -d
+stop-kafka:
+	cd example/dockercompose/ && docker compose down
 docker-build:
 	${DOCKER_CMD} build -t ${DOCKER_REGISTRY}/${DOCKER_ORG}/${DOCKER_NAME}:${DOCKER_TAG} .
