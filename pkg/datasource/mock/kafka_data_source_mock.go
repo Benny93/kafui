@@ -67,19 +67,20 @@ func (kp KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 
 func (kp KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc) error {
 	// Simulate consuming messages from the topic
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 100; i++ {
+		description := "Lorem ipsum dolor sit amet con et just me incididunt ut lab inductor laris martinus"
 		// Simulate receiving a message
 		msg := api.Message{
 			Key:    fmt.Sprintf("purchase_%s_%d", topicName, i),
-			Value:  fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s"}`, i+1, i*2+1, time.Now().Format(time.RFC3339)),
-			Offset: int64(i),
+			Value:  fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, i+1, i*2+1, time.Now().Format(time.RFC3339), description),
+			Offset: int64(i + 1),
 		}
 
 		// Call the message handler function
 		handleMessage(msg)
 
 		// Simulate some processing time
-		time.Sleep(100 * time.Millisecond)
+		//time.Sleep(100 * time.Millisecond)
 	}
 
 	return nil

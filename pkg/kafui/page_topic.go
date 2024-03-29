@@ -70,7 +70,11 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 					rowIndex := tp.consumerTable.GetRowCount() // Get the current row index
 					tp.consumerTable.SetCell(rowIndex, 0, tview.NewTableCell(strconv.FormatInt(msg.Offset, 10)))
 					tp.consumerTable.SetCell(rowIndex, 1, tview.NewTableCell(msg.Key))
-					cell := tview.NewTableCell(msg.Value)
+					shortenedText := msg.Value[:100]
+					if len(shortenedText) < len(msg.Value) {
+						shortenedText = shortenedText + "..."
+					}
+					cell := tview.NewTableCell(shortenedText)
 					cell.SetExpansion(1)
 					tp.consumerTable.SetCell(rowIndex, 2, cell)
 				}
@@ -116,10 +120,10 @@ func (tp *TopicPage) handleEnter() func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter {
 			// Get the selected row index
 			row, _ := tp.consumerTable.GetSelection()
-			valueCell := tp.consumerTable.GetCell(row, 2)
 			// Display the value content in a new page
 			if row > 0 {
-				tp.messageDetailPage = NewDetailPage(tp.app, tp.pages, valueCell.Text)
+				msgv := tp.consumedMessages[row-1].Value
+				tp.messageDetailPage = NewDetailPage(tp.app, tp.pages, msgv)
 				tp.messageDetailPage.Show()
 			}
 		}
