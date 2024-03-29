@@ -3,9 +3,10 @@ package api
 import "context"
 
 type Message struct {
-	Key    string
-	Value  string
-	Offset int64
+	Key       string
+	Value     string
+	Offset    int64
+	Partition int32
 }
 
 type ConsumeFlags struct {

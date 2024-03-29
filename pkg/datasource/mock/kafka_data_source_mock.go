@@ -71,9 +71,10 @@ func (kp KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string
 		description := "Lorem ipsum dolor sit amet con et just me incididunt ut lab inductor laris martinus"
 		// Simulate receiving a message
 		msg := api.Message{
-			Key:    fmt.Sprintf("purchase_%s_%d", topicName, i),
-			Value:  fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, i+1, i*2+1, time.Now().Format(time.RFC3339), description),
-			Offset: int64(i + 1),
+			Key:       fmt.Sprintf("purchase_%s_%d", topicName, i),
+			Value:     fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, i+1, i*2+1, time.Now().Format(time.RFC3339), description),
+			Offset:    int64(i + 1),
+			Partition: 0,
 		}
 
 		// Call the message handler function
