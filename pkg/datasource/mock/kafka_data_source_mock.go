@@ -25,20 +25,19 @@ func (kp KafkaDataSourceMock) SetContext(contextName string) error {
 }
 
 // GetTopics retrieves a list of Kafka topics
-func (kp KafkaDataSourceMock) GetTopics() ([]string, error) {
+func (kp KafkaDataSourceMock) GetTopics() (map[string]api.Topic, error) {
 	// Logic to fetch the list of topics from Kafka
-	topics := []string{
-		"topic1",
-		"topic2",
-		"topic3",
-		"topic4",
-		"topic5",
-		"topic6",
-		"topic7",
-		"topic8",
-		"topic9",
-		"topic10",
+	topics := make(map[string]api.Topic)
+	for i := 0; i < 100; i++ {
+		topics[fmt.Sprintf("Topic %d", i)] = api.Topic{
+			ReplicationFactor: 1,
+			ReplicaAssignment: map[int32][]int32{},
+			NumPartitions:     1,
+			ConfigEntries:     make(map[string]*string),
+		}
+
 	} // Additional topics
+
 	return topics, nil
 }
 

@@ -31,17 +31,24 @@ func (kp KafkaDataSourceKaf) Init() {
 }
 
 // GetTopics retrieves a list of Kafka topics
-func (kp KafkaDataSourceKaf) GetTopics() ([]string, error) {
+func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) {
 
 	admin := getClusterAdmin()
 	topicDetails, err := admin.ListTopics()
 
-	keys := make([]string, 0, len(topicDetails))
-	for key := range topicDetails {
-		keys = append(keys, key)
+	topics := make(map[string]api.Topic)
+
+	for key, value := range topicDetails {
+
+		topics[key] = api.Topic{
+			NumPartitions:     value.NumPartitions,
+			ReplicationFactor: value.ReplicationFactor,
+			ReplicaAssignment: value.ReplicaAssignment,
+			ConfigEntries:     value.ConfigEntries,
+		}
 	}
 
-	return keys, err
+	return topics, err
 }
 
 func (kp KafkaDataSourceKaf) GetContext() string {

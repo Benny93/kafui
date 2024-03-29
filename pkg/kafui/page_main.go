@@ -244,29 +244,38 @@ func fetchContexts(dataSource api.KafkaDataSource) []string {
 	return contexts
 }
 
-func fetchTopics(dataSource api.KafkaDataSource) []string {
+func fetchTopics(dataSource api.KafkaDataSource) map[string]api.Topic {
 	topics, err := dataSource.GetTopics()
 	if err != nil {
 		ShowNotification(fmt.Sprintf("Error reading topics:", err))
-		return []string{}
+		return make(map[string]api.Topic)
 	}
 	return topics
 }
 
-func showTopicsInTable(table *tview.Table, topics []string) {
+func showTopicsInTable(table *tview.Table, topics map[string]api.Topic) {
 	table.Clear()
-	table.SetCell(0, 0, tview.NewTableCell("Topics").SetTextColor(tview.Styles.SecondaryTextColor))
-	filtered := topics
-	if currentSearchString != "" {
-		filtered = filter(topics, func(s string) bool { return strings.Contains(s, currentSearchString) })
+	table.SetCell(0, 0, tview.NewTableCell("Topic").SetTextColor(tview.Styles.SecondaryTextColor))
+	table.SetCell(0, 1, tview.NewTableCell("Num Partitions").SetTextColor(tview.Styles.SecondaryTextColor))
+	table.SetCell(0, 2, tview.NewTableCell("Replication Factor").SetTextColor(tview.Styles.SecondaryTextColor))
+
+	keys := make([]string, 0, len(topics))
+	for key := range topics {
+		if currentSearchString == "" || strings.Contains(key, currentSearchString) {
+			keys = append(keys, key)
+		}
 	}
 
-	sort.Sort(natural.StringSlice(filtered))
+	sort.Sort(natural.StringSlice(keys))
 
-	for i, topic := range filtered {
-		cell := tview.NewTableCell(topic)
+	for i, key := range keys {
+		value := topics[key]
+
+		cell := tview.NewTableCell(key)
 		cell.SetExpansion(1)
 		table.SetCell(i+1, 0, cell)
+		table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprint(value.NumPartitions)))
+		table.SetCell(i+1, 2, tview.NewTableCell(fmt.Sprint(value.ReplicationFactor)))
 	}
 	table.SetTitle(currentResouce)
 }
