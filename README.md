@@ -5,11 +5,6 @@ It uses the same configuration file as kaf so you can use your existing kaf conf
 
 ![asciicinema](asciicinema.gif)
 
-![image topics](./doc/images/image.png)
-![image groups](./doc/images/image-1.png)
-![context select](./doc/images/image-2.png)
-
-
 ## Install
 
 ### Go install
@@ -68,4 +63,30 @@ Install via downloader script:
 
 ```bash
 curl https://raw.githubusercontent.com/Benny93/kafui/main/godownloader.sh | BINDIR=$HOME/bin bash
+```
+
+## Configuration
+
+First setup the config file at `$HOME/.kaf/config` using kaf
+```bash
+kaf config add-cluster local -b localhost:9092
+```
+replaace `localhost:9092` with your broker.
+If you use a schema registry open the config file and add the required configurations.
+See [https://github.com/birdayz/kaf?tab=readme-ov-file#configuration](https://github.com/birdayz/kaf?tab=readme-ov-file#configuration)
+
+Your configuration may look something like this:
+```yaml
+current-cluster: local
+clusteroverride: ""
+clusters:
+- name: local
+  version: ""
+  brokers:
+  - localhost:9092
+  SASL: null
+  TLS: null
+  security-protocol: ""
+  schema-registry-url: localhost:8085
+  schema-registry-credentials: null
 ```
