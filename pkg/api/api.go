@@ -3,10 +3,12 @@ package api
 import "context"
 
 type Message struct {
-	Key       string
-	Value     string
-	Offset    int64
-	Partition int32
+	Key           string
+	Value         string
+	Offset        int64
+	Partition     int32
+	KeySchemaID   string
+	ValueSchemaID string
 }
 type Topic struct {
 	// NumPartitions contains the number of partitions to create in the topic

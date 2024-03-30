@@ -70,11 +70,13 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 					rowIndex := tp.consumerTable.GetRowCount() // Get the current row index
 					tp.consumerTable.SetCell(rowIndex, 0, tview.NewTableCell(strconv.FormatInt(msg.Offset, 10)))
 					tp.consumerTable.SetCell(rowIndex, 1, tview.NewTableCell(fmt.Sprint(msg.Partition)))
-					tp.consumerTable.SetCell(rowIndex, 2, tview.NewTableCell(msg.Key))
+					tp.consumerTable.SetCell(rowIndex, 2, tview.NewTableCell(fmt.Sprint(msg.KeySchemaID)))
+					tp.consumerTable.SetCell(rowIndex, 3, tview.NewTableCell(fmt.Sprint(msg.ValueSchemaID)))
+					tp.consumerTable.SetCell(rowIndex, 4, tview.NewTableCell(msg.Key))
 					shortenedText := tp.shortValue(msg)
 					cell := tview.NewTableCell(shortenedText)
 					cell.SetExpansion(1)
-					tp.consumerTable.SetCell(rowIndex, 3, cell)
+					tp.consumerTable.SetCell(rowIndex, 5, cell)
 				}
 				tp.consumerTable.ScrollToEnd()
 				tp.consumerTable.Select(tp.consumerTable.GetRowCount()-1, 0) // Select the last row
@@ -120,8 +122,10 @@ func (tp *TopicPage) createFirstRowTopicTable() {
 	tp.messagesFlex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
 	tp.consumerTable.SetCell(0, 0, tview.NewTableCell("Offset").SetTextColor(tview.Styles.SecondaryTextColor))
 	tp.consumerTable.SetCell(0, 1, tview.NewTableCell("Partition").SetTextColor(tview.Styles.SecondaryTextColor))
-	tp.consumerTable.SetCell(0, 2, tview.NewTableCell("Key").SetTextColor(tview.Styles.SecondaryTextColor))
-	tp.consumerTable.SetCell(0, 3, tview.NewTableCell("Value").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
+	tp.consumerTable.SetCell(0, 2, tview.NewTableCell("KeySchemaID").SetTextColor(tview.Styles.SecondaryTextColor))
+	tp.consumerTable.SetCell(0, 3, tview.NewTableCell("ValueSchemaID").SetTextColor(tview.Styles.SecondaryTextColor))
+	tp.consumerTable.SetCell(0, 4, tview.NewTableCell("Key").SetTextColor(tview.Styles.SecondaryTextColor))
+	tp.consumerTable.SetCell(0, 5, tview.NewTableCell("Value").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
 
 }
 
