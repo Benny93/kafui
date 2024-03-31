@@ -135,7 +135,7 @@ func (tp *TopicPage) createFirstRowTopicTable(topicName string) {
 
 }
 
-func (tp *TopicPage) handleEnter() func(event *tcell.EventKey) *tcell.EventKey {
+func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter {
 			// Get the selected row index
@@ -147,6 +147,13 @@ func (tp *TopicPage) handleEnter() func(event *tcell.EventKey) *tcell.EventKey {
 				tp.messageDetailPage.Show()
 			}
 		}
+		if event.Rune() == 'g' {
+			// Handle 'g' key event
+			tp.consumerTable.ScrollToBeginning()
+		}
+		if event.Rune() == 'G' {
+			tp.consumerTable.ScrollToEnd()
+		}
 		return event
 	}
 }
@@ -155,9 +162,10 @@ func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex {
 	tp.consumerTable = tview.NewTable()
 	tp.consumerTable.SetSelectable(true, false)
 	tp.consumerTable.SetFixed(1, 1)
-	tp.consumerTable.SetInputCapture(tp.handleEnter())
+	tp.consumerTable.SetInputCapture(tp.inputCapture())
 
 	tp.topFlex = tview.NewFlex()
+	tp.topFlex.AddItem(tp.CreateInputLegend(), 0, 1, false)
 	tp.topFlex.SetBorder(false)
 
 	tp.messagesFlex = tview.NewFlex().
@@ -218,4 +226,17 @@ func (tp *TopicPage) ShowNotification(message string) {
 			tp.notifyView.SetText("")
 		})
 	}()
+}
+
+func (tp *TopicPage) CreateInputLegend() *tview.Flex {
+	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+	flex.SetBorderPadding(0, 0, 1, 0)
+
+	flex.AddItem(CreateRunInfo("↑", "Move up"), 0, 1, false)
+	flex.AddItem(CreateRunInfo("↓", "Move down"), 0, 1, false)
+	flex.AddItem(CreateRunInfo("g", "Scroll to top"), 0, 1, false)
+	flex.AddItem(CreateRunInfo("G", "Scroll to bottom"), 0, 1, false)
+	flex.AddItem(CreateRunInfo("Enter", "Show value"), 0, 1, false)
+
+	return flex
 }

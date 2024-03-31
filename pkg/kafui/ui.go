@@ -126,3 +126,14 @@ func CreatePropertyInfo(propertyName string, propertyValue string) *tview.InputF
 	inputField.SetDisabled(true)
 	return inputField
 }
+
+func CreateRunInfo(runeName string, info string) *tview.InputField {
+	inputField := tview.NewInputField().
+		SetLabel(fmt.Sprintf("<%s>: ", runeName)).
+		SetFieldWidth(0).
+		SetText(info)
+	inputField.SetDisabled(true)
+	inputField.SetLabelColor(tcell.ColorBlue)
+	inputField.SetFieldTextColor(tcell.ColorBlue)
+	return inputField
+}
