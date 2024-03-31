@@ -30,6 +30,8 @@ var (
 	currentSearchMode SearchMode = ResouceSearch
 
 	currentSearchString string = ""
+
+	lastFetchedTopics map[string]api.Topic
 )
 
 func receivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
@@ -250,6 +252,7 @@ func fetchTopics(dataSource api.KafkaDataSource) map[string]api.Topic {
 		ShowNotification(fmt.Sprintf("Error reading topics:", err))
 		return make(map[string]api.Topic)
 	}
+	lastFetchedTopics = topics
 	return topics
 }
 

@@ -27,11 +27,12 @@ func SetupTableInput(table *tview.Table, app *tview.Application, pages *tview.Pa
 
 				if currentResouce == Topic[0] {
 					row, _ := table.GetSelection()
-					text := table.GetCell(row, 0).Text
-					currentTopic = text
+					topicName := table.GetCell(row, 0).Text
+
+					currentTopic = lastFetchedTopics[topicName]
 					msgChannel <- OnPageChange
 					pages.SwitchToPage("topicPage")
-					topicPage.PageConsumeTopic(currentTopic)
+					topicPage.PageConsumeTopic(topicName, currentTopic)
 				}
 				if currentResouce == Context[0] {
 					row, _ := table.GetSelection()

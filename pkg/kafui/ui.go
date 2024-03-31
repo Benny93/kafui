@@ -9,7 +9,7 @@ import (
 	"github.com/rivo/tview"
 )
 
-var currentTopic string = ""
+var currentTopic api.Topic
 var tviewApp *tview.Application
 var topicPage *TopicPage
 
@@ -116,4 +116,13 @@ func OpenUI(dataSource api.KafkaDataSource) {
 		fmt.Println("Run ended in panic")
 		panic(err)
 	}
+}
+
+func CreatePropertyInfo(propertyName string, propertyValue string) *tview.InputField {
+	inputField := tview.NewInputField().
+		SetLabel(fmt.Sprintf("%s: ", propertyName)).
+		SetFieldWidth(0).
+		SetText(propertyValue)
+	inputField.SetDisabled(true)
+	return inputField
 }

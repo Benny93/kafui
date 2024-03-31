@@ -18,6 +18,8 @@ type TopicPage struct {
 	pages              *tview.Pages
 	msgChannel         chan UIEvent
 	messagesFlex       *tview.Flex
+	topFlex            *tview.Flex
+	topicInfoFlex      *tview.Flex
 	consumerTable      *tview.Table
 	cancelConsumption  context.CancelFunc
 	cancelRefresh      context.CancelFunc
@@ -25,6 +27,7 @@ type TopicPage struct {
 	consumedMessages   []api.Message
 	newMessageConsumed bool
 	notifyView         *tview.TextView
+	topicName          string
 }
 
 func NewTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *TopicPage {
@@ -63,7 +66,7 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 			tp.app.QueueUpdateDraw(func() {
 				// Clear the table before updating it
 				tp.consumerTable.Clear()
-				tp.createFirstRowTopicTable()
+				tp.createFirstRowTopicTable(tp.topicName)
 
 				// Iterate over the consumedMessages slice using range
 				for _, msg := range tp.consumedMessages {
@@ -96,19 +99,22 @@ func (*TopicPage) shortValue(msg api.Message) string {
 	return shortenedText
 }
 
-func (tp *TopicPage) PageConsumeTopic(currentTopic string) {
+func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic) {
+	tp.topicName = topicName
+	tp.topicInfoFlex = tp.CreateTopicInfoSection(topicName, currentTopic)
+	tp.topFlex.AddItem(tp.topicInfoFlex, 0, 1, false)
 	tp.ShowNotification("Consuming messages...")
 	var emptyArray []api.Message
 	tp.consumedMessages = emptyArray
 	go func() {
 		tp.app.QueueUpdateDraw(func() {
-			tp.createFirstRowTopicTable()
+			tp.createFirstRowTopicTable(topicName)
 		})
 		handlerFunc := tp.getHandler()
 		ctx, cancel := context.WithCancel(context.Background())
 		tp.cancelConsumption = cancel
 		flags := api.DefaultConsumeFlags()
-		err := tp.dataSource.ConsumeTopic(ctx, currentTopic, flags, handlerFunc)
+		err := tp.dataSource.ConsumeTopic(ctx, topicName, flags, handlerFunc)
 		if err != nil {
 			panic("Error consume messages!")
 		}
@@ -118,8 +124,8 @@ func (tp *TopicPage) PageConsumeTopic(currentTopic string) {
 	go tp.refreshTopicTable(ctx)
 }
 
-func (tp *TopicPage) createFirstRowTopicTable() {
-	tp.messagesFlex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", currentTopic))
+func (tp *TopicPage) createFirstRowTopicTable(topicName string) {
+	tp.messagesFlex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", topicName))
 	tp.consumerTable.SetCell(0, 0, tview.NewTableCell("Offset").SetTextColor(tview.Styles.SecondaryTextColor))
 	tp.consumerTable.SetCell(0, 1, tview.NewTableCell("Partition").SetTextColor(tview.Styles.SecondaryTextColor))
 	tp.consumerTable.SetCell(0, 2, tview.NewTableCell("KeySchemaID").SetTextColor(tview.Styles.SecondaryTextColor))
@@ -151,8 +157,8 @@ func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex {
 	tp.consumerTable.SetFixed(1, 1)
 	tp.consumerTable.SetInputCapture(tp.handleEnter())
 
-	topFlex := tview.NewFlex()
-	topFlex.SetBorder(false)
+	tp.topFlex = tview.NewFlex()
+	tp.topFlex.SetBorder(false)
 
 	tp.messagesFlex = tview.NewFlex().
 		AddItem(tp.consumerTable, 0, 3, true)
@@ -164,12 +170,25 @@ func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex {
 	bottomFlex.AddItem(tp.notifyView, 0, 1, false)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(topFlex, 5, 1, false).
+		AddItem(tp.topFlex, 5, 1, false).
 		AddItem(tp.messagesFlex, 0, 5, true).
 		AddItem(bottomFlex, 5, 1, false)
 
 	flex := tview.NewFlex().
 		AddItem(centralFlex, 0, 2, true)
+
+	return flex
+}
+
+func (tp *TopicPage) CreateTopicInfoSection(topicName string, topicDetail api.Topic) *tview.Flex {
+	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+	flex.SetBorderPadding(0, 0, 1, 0)
+	//flex.SetBorder(true)
+	flex.
+		AddItem(CreatePropertyInfo("Name", topicName), 0, 1, false).
+		AddItem(CreatePropertyInfo("MessageCount", fmt.Sprint(topicDetail.MessageCount)), 0, 1, false).
+		AddItem(CreatePropertyInfo("Number of Partitions", fmt.Sprint(topicDetail.NumPartitions)), 0, 1, false).
+		AddItem(CreatePropertyInfo("Replication Factor", fmt.Sprint(topicDetail.ReplicationFactor)), 0, 1, false)
 
 	return flex
 }
@@ -180,6 +199,10 @@ func (tp *TopicPage) CloseTopicPage() {
 
 		tp.cancelConsumption()
 		tp.cancelRefresh()
+		if tp.topicInfoFlex != nil {
+			tp.topFlex.RemoveItem(tp.topicInfoFlex)
+		}
+
 	}()
 }
 
