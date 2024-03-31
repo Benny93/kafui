@@ -186,7 +186,7 @@ func (tp *TopicPage) CreateTopicInfoSection(topicName string, topicDetail api.To
 	//flex.SetBorder(true)
 	flex.
 		AddItem(CreatePropertyInfo("Name", topicName), 0, 1, false).
-		AddItem(CreatePropertyInfo("MessageCount", fmt.Sprint(topicDetail.MessageCount)), 0, 1, false).
+		AddItem(CreatePropertyInfo("Number of Messages", fmt.Sprint(topicDetail.MessageCount)), 0, 1, false).
 		AddItem(CreatePropertyInfo("Number of Partitions", fmt.Sprint(topicDetail.NumPartitions)), 0, 1, false).
 		AddItem(CreatePropertyInfo("Replication Factor", fmt.Sprint(topicDetail.ReplicationFactor)), 0, 1, false)
 
