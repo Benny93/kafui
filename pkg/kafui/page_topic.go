@@ -128,8 +128,8 @@ func (tp *TopicPage) createFirstRowTopicTable(topicName string) {
 	tp.messagesFlex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", topicName))
 	tp.consumerTable.SetCell(0, 0, tview.NewTableCell("Offset").SetTextColor(tview.Styles.SecondaryTextColor))
 	tp.consumerTable.SetCell(0, 1, tview.NewTableCell("Partition").SetTextColor(tview.Styles.SecondaryTextColor))
-	tp.consumerTable.SetCell(0, 2, tview.NewTableCell("KeySchemaID").SetTextColor(tview.Styles.SecondaryTextColor))
-	tp.consumerTable.SetCell(0, 3, tview.NewTableCell("ValueSchemaID").SetTextColor(tview.Styles.SecondaryTextColor))
+	tp.consumerTable.SetCell(0, 2, tview.NewTableCell("KeySID").SetTextColor(tview.Styles.SecondaryTextColor))
+	tp.consumerTable.SetCell(0, 3, tview.NewTableCell("ValueSID").SetTextColor(tview.Styles.SecondaryTextColor))
 	tp.consumerTable.SetCell(0, 4, tview.NewTableCell("Key").SetTextColor(tview.Styles.SecondaryTextColor))
 	tp.consumerTable.SetCell(0, 5, tview.NewTableCell("Value").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
 
@@ -153,6 +153,12 @@ func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey 
 		}
 		if event.Rune() == 'G' {
 			tp.consumerTable.ScrollToEnd()
+		}
+		if event.Key() == tcell.KeyRune {
+			switch event.Rune() {
+			case 'c':
+				CopySelectedRowToClipboard(tp.consumerTable, tp.ShowNotification)
+			}
 		}
 		return event
 	}
@@ -193,7 +199,7 @@ func (tp *TopicPage) CreateTopicInfoSection(topicName string, topicDetail api.To
 	flex.SetBorderPadding(0, 0, 1, 0)
 	//flex.SetBorder(true)
 	flex.
-		AddItem(CreatePropertyInfo("Name", topicName), 0, 1, false).
+		AddItem(CreatePropertyInfo("Topic Name", topicName), 0, 1, false).
 		AddItem(CreatePropertyInfo("Number of Messages", fmt.Sprint(topicDetail.MessageCount)), 0, 1, false).
 		AddItem(CreatePropertyInfo("Number of Partitions", fmt.Sprint(topicDetail.NumPartitions)), 0, 1, false).
 		AddItem(CreatePropertyInfo("Replication Factor", fmt.Sprint(topicDetail.ReplicationFactor)), 0, 1, false)
@@ -229,14 +235,22 @@ func (tp *TopicPage) ShowNotification(message string) {
 }
 
 func (tp *TopicPage) CreateInputLegend() *tview.Flex {
-	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+	flex := tview.NewFlex()
 	flex.SetBorderPadding(0, 0, 1, 0)
+	left := tview.NewFlex().SetDirection(tview.FlexRow)
+	right := tview.NewFlex().SetDirection(tview.FlexRow)
+	right.SetBorderPadding(0, 1, 0, 0)
 
-	flex.AddItem(CreateRunInfo("↑", "Move up"), 0, 1, false)
-	flex.AddItem(CreateRunInfo("↓", "Move down"), 0, 1, false)
-	flex.AddItem(CreateRunInfo("g", "Scroll to top"), 0, 1, false)
-	flex.AddItem(CreateRunInfo("G", "Scroll to bottom"), 0, 1, false)
-	flex.AddItem(CreateRunInfo("Enter", "Show value"), 0, 1, false)
+	left.AddItem(CreateRunInfo("↑", "Move up"), 0, 1, false)
+	left.AddItem(CreateRunInfo("↓", "Move down"), 0, 1, false)
+	left.AddItem(CreateRunInfo("g", "Scroll to top"), 0, 1, false)
+	left.AddItem(CreateRunInfo("G", "Scroll to bottom"), 0, 1, false)
+	left.AddItem(CreateRunInfo("c", "Copy current line"), 0, 1, false)
+	right.AddItem(CreateRunInfo("Enter", "Show value"), 0, 1, false)
+	right.AddItem(CreateRunInfo("Esc", "Go Back"), 0, 1, false)
+
+	flex.AddItem(left, 0, 1, false)
+	flex.AddItem(right, 0, 1, false)
 
 	return flex
 }
