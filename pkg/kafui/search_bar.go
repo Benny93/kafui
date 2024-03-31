@@ -1,6 +1,7 @@
 package kafui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -24,6 +25,12 @@ func CreateSearchInput(table *tview.Table, dataSource api.KafkaDataSource, pages
 	searchInput.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			searchText = searchInput.GetText()
+			// Check if search text is "q" or "exit"
+			if searchText == "q" || searchText == "exit" {
+				app.Stop()
+				fmt.Println("Goodbye!")
+				return
+			}
 			if currentSearchMode == ResouceSearch {
 				handleResouceSearch(searchText, table, searchInput, defaultLabel, dataSource, app, pages, modal)
 			} else {
