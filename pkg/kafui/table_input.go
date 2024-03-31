@@ -2,6 +2,7 @@ package kafui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
 
@@ -54,15 +55,47 @@ func SetupTableInput(table *tview.Table, app *tview.Application, pages *tview.Pa
 		if event.Key() == tcell.KeyRune {
 			switch event.Rune() {
 			case 'c':
-				row, column := table.GetSelection()
-				cell := table.GetCell(row, column)
-				if cell != nil {
-					content := cell.Text
-					clipboard.WriteAll(content)
-					ShowNotification("😎 Copied selection to clipboard ...")
-				}
+				copySelectedRowToClipboard(table)
 			}
 		}
 		return event
 	})
+}
+
+// Function to copy the selected row of the table to the clipboard in CSV format
+func copySelectedRowToClipboard(table *tview.Table) {
+	// Get the selected row index
+	row, _ := table.GetSelection()
+
+	// Check if the row index is valid
+	if row < 1 || row >= table.GetRowCount() {
+		ShowNotification("Copy: Invalid row selection")
+		return
+	}
+
+	// Initialize a slice to hold column values
+	var rowValues []string
+
+	// Iterate over each column in the selected row
+	for column := 0; column < table.GetColumnCount(); column++ {
+		cell := table.GetCell(row, column)
+		if cell != nil {
+			// Append the cell text to the rowValues slice
+			rowValues = append(rowValues, cell.Text)
+		}
+	}
+
+	// Create a CSV string by joining rowValues with commas
+	csvString := strings.Join(rowValues, ",")
+
+	// Copy the CSV string to the clipboard
+	err := clipboard.WriteAll(csvString)
+	if err != nil {
+		// Handle error
+		ShowNotification("Copy: Error copying CSV string to clipboard")
+		return
+	}
+
+	// Show notification
+	ShowNotification("😎 Copied selection to clipboard ...")
 }
