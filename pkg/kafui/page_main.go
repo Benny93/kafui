@@ -256,8 +256,9 @@ func fetchTopics(dataSource api.KafkaDataSource) map[string]api.Topic {
 func showTopicsInTable(table *tview.Table, topics map[string]api.Topic) {
 	table.Clear()
 	table.SetCell(0, 0, tview.NewTableCell("Topic").SetTextColor(tview.Styles.SecondaryTextColor))
-	table.SetCell(0, 1, tview.NewTableCell("Num Partitions").SetTextColor(tview.Styles.SecondaryTextColor))
-	table.SetCell(0, 2, tview.NewTableCell("Replication Factor").SetTextColor(tview.Styles.SecondaryTextColor))
+	table.SetCell(0, 1, tview.NewTableCell("Num Messages").SetTextColor(tview.Styles.SecondaryTextColor))
+	table.SetCell(0, 2, tview.NewTableCell("Num Partitions").SetTextColor(tview.Styles.SecondaryTextColor))
+	table.SetCell(0, 3, tview.NewTableCell("Replication Factor").SetTextColor(tview.Styles.SecondaryTextColor))
 
 	keys := make([]string, 0, len(topics))
 	for key := range topics {
@@ -274,8 +275,10 @@ func showTopicsInTable(table *tview.Table, topics map[string]api.Topic) {
 		cell := tview.NewTableCell(key)
 		cell.SetExpansion(1)
 		table.SetCell(i+1, 0, cell)
-		table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprint(value.NumPartitions)))
-		table.SetCell(i+1, 2, tview.NewTableCell(fmt.Sprint(value.ReplicationFactor)))
+		table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprint(value.MessageCount)))
+		table.SetCell(i+1, 2, tview.NewTableCell(fmt.Sprint(value.NumPartitions)))
+		table.SetCell(i+1, 3, tview.NewTableCell(fmt.Sprint(value.ReplicationFactor)))
+
 	}
 	table.SetTitle(currentResouce)
 }

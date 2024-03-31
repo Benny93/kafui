@@ -20,6 +20,8 @@ type Topic struct {
 	ReplicaAssignment map[int32][]int32
 	// ConfigEntries contains the custom topic configurations to set.
 	ConfigEntries map[string]*string
+	// Num of messages in the topic across all partitions
+	MessageCount int64
 }
 
 type ConsumeFlags struct {
