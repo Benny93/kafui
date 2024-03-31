@@ -258,8 +258,8 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 	//stderr.WriteTo(errWriter)
 	//_, _ = colorableOut.Write(dataToDisplay)
 	//fmt.Fprintln(outWriter)
-	keySchema := getSchemaIdIfPresent(keyToDisplay)
-	valueSchema := getSchemaIdIfPresent(dataToDisplay)
+	keySchema := getSchemaIdIfPresent(msg.Key)
+	valueSchema := getSchemaIdIfPresent(msg.Value)
 	newMessage := api.Message{
 		Key:           string(keyToDisplay),
 		Value:         string(dataToDisplay),
@@ -276,7 +276,7 @@ func getSchemaIdIfPresent(b []byte) string {
 	// Ensure avro header is present with the magic start-byte.
 	if len(b) < 5 || b[0] != 0x00 {
 		// The message does not contain Avro-encoded data
-		return "N/A"
+		return ""
 	}
 
 	// Schema ID is stored in the 4 bytes following the magic byte.
