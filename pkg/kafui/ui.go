@@ -57,7 +57,7 @@ func OpenUI(dataSource api.KafkaDataSource) {
 
 	// Set the input capture to capture key events
 	tviewApp.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-
+		frontPage, _ := pages.GetFrontPage()
 		// Check if the pressed key is Shift + :
 		if event.Rune() == ':' {
 			// Handle the Shift + : key combination
@@ -65,14 +65,14 @@ func OpenUI(dataSource api.KafkaDataSource) {
 			return nil // Return nil to indicate that the event has been handled
 		}
 
-		if event.Rune() == '/' {
+		if event.Rune() == '/' && frontPage == "main" {
 			// Handle the Shift + : key combination
 			msgChannel <- OnStartTableSearch
 			return nil // Return nil to indicate that the event has been handled
 		}
 
 		if event.Key() == tcell.KeyEsc {
-			frontPage, _ := pages.GetFrontPage()
+
 			if frontPage == "topicPage" {
 				topicPage.CloseTopicPage()
 			}

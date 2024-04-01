@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -31,6 +32,10 @@ type TopicPage struct {
 	topicName          string
 	topicDetails       api.Topic
 	consumeFlags       api.ConsumeFlags
+	searchText         string
+	tableSearch        *tview.Flex
+	bottomFlex         *tview.Flex
+	requireRefresh     bool
 }
 
 func NewTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *TopicPage {
@@ -62,11 +67,12 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 			// Exit the function if the context is done
 			return
 		case <-refreshTicker.C:
-			if !tp.newMessageConsumed {
+			if !tp.newMessageConsumed && !tp.requireRefresh {
 				continue
 			}
+			tp.requireRefresh = false
 			tp.newMessageConsumed = false
-			tp.ShowNotification(fmt.Sprintf("Consumed messages %d", len(tp.consumedMessages)))
+			//tp.ShowNotification(fmt.Sprintf("Consumed messages %d", len(tp.consumedMessages)))
 			tp.app.QueueUpdateDraw(func() {
 				// Clear the table before updating it
 				tp.consumerTable.Clear()
@@ -74,6 +80,12 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 
 				// Iterate over the consumedMessages slice using range
 				for _, msg := range tp.consumedMessages {
+					if tp.searchText != "" {
+						// skip message if none field fuzzy matches search text
+						if !fieldFuzzyMatchesSearchText(msg, tp.searchText) {
+							continue // Skip this message
+						}
+					}
 					rowIndex := tp.consumerTable.GetRowCount() // Get the current row index
 					tp.consumerTable.SetCell(rowIndex, 0, tview.NewTableCell(strconv.FormatInt(msg.Offset, 10)))
 					tp.consumerTable.SetCell(rowIndex, 1, tview.NewTableCell(fmt.Sprint(msg.Partition)))
@@ -90,6 +102,24 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 			})
 		}
 	}
+}
+
+func fieldFuzzyMatchesSearchText(msg api.Message, searchText string) bool {
+
+	// Convert all fields to lowercase for case-insensitive comparison
+	searchText = strings.ToLower(searchText)
+
+	// Check if any field contains the search text in a fuzzy manner
+	if strings.Contains(strings.ToLower(strconv.FormatInt(msg.Offset, 10)), searchText) ||
+		strings.Contains(strings.ToLower(fmt.Sprint(msg.Partition)), searchText) ||
+		strings.Contains(strings.ToLower(fmt.Sprint(msg.KeySchemaID)), searchText) ||
+		strings.Contains(strings.ToLower(fmt.Sprint(msg.ValueSchemaID)), searchText) ||
+		strings.Contains(strings.ToLower(msg.Key), searchText) ||
+		strings.Contains(strings.ToLower(msg.Value), searchText) {
+		return true
+	}
+
+	return false
 }
 
 func (*TopicPage) shortValue(msg api.Message) string {
@@ -141,7 +171,11 @@ func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, 
 }
 
 func (tp *TopicPage) createFirstRowTopicTable(topicName string) {
-	tp.messagesFlex.SetBorder(true).SetTitle(fmt.Sprintf("<%s>", topicName))
+	title := fmt.Sprintf("<%s>", topicName)
+	if tp.searchText != "" {
+		title = fmt.Sprintf("<%s/%s>", topicName, tp.searchText)
+	}
+	tp.messagesFlex.SetBorder(true).SetTitle(title)
 	tp.consumerTable.SetCell(0, 0, tview.NewTableCell("Offset").SetTextColor(tview.Styles.SecondaryTextColor))
 	tp.consumerTable.SetCell(0, 1, tview.NewTableCell("Partition").SetTextColor(tview.Styles.SecondaryTextColor))
 	tp.consumerTable.SetCell(0, 2, tview.NewTableCell("KeySID").SetTextColor(tview.Styles.SecondaryTextColor))
@@ -169,6 +203,17 @@ func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey 
 		}
 		if event.Rune() == 'G' {
 			tp.consumerTable.ScrollToEnd()
+		}
+		if event.Rune() == '/' {
+			if tp.tableSearch == nil {
+				tp.tableSearch = tp.CreateInputSearch(func() {
+					tp.bottomFlex.RemoveItem(tp.tableSearch)
+					tp.app.SetFocus(tp.consumerTable)
+					tp.tableSearch = nil
+				})
+				tp.bottomFlex.AddItem(tp.tableSearch, 0, 1, false)
+			}
+			tp.app.SetFocus(tp.tableSearch)
 		}
 		if event.Rune() == 'o' {
 			// Toggle between "newest" and "oldest" values
@@ -209,15 +254,15 @@ func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex {
 		AddItem(tp.consumerTable, 0, 3, true)
 	tp.messagesFlex.SetBorder(true).SetTitle("Messages")
 
-	bottomFlex := tview.NewFlex()
+	tp.bottomFlex = tview.NewFlex().SetDirection(tview.FlexRow)
 	tp.notifyView = tview.NewTextView().SetText("Notification...")
 	tp.notifyView.SetBorder(false)
-	bottomFlex.AddItem(tp.notifyView, 0, 1, false)
+	tp.bottomFlex.AddItem(tp.notifyView, 0, 1, false)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tp.topFlex, 5, 1, false).
 		AddItem(tp.messagesFlex, 0, 5, true).
-		AddItem(bottomFlex, 5, 1, false)
+		AddItem(tp.bottomFlex, 5, 1, false)
 
 	flex := tview.NewFlex().
 		AddItem(centralFlex, 0, 2, true)
@@ -259,6 +304,11 @@ func (tp *TopicPage) CloseTopicPage() {
 
 func (tp *TopicPage) clearConsumedData() {
 	tp.consumerTable.Clear()
+	tp.searchText = ""
+	if tp.tableSearch != nil {
+		tp.bottomFlex.RemoveItem(tp.tableSearch)
+		tp.tableSearch = nil
+	}
 
 	tp.cancelConsumption()
 	tp.cancelRefresh()
@@ -298,10 +348,36 @@ func (tp *TopicPage) CreateInputLegend() *tview.Flex {
 	left.AddItem(CreateRunInfo("c", "Copy current line"), 0, 1, false)
 	right.AddItem(CreateRunInfo("Enter", "Show value"), 0, 1, false)
 	right.AddItem(CreateRunInfo("Esc", "Go Back"), 0, 1, false)
-	right.AddItem(CreateRunInfo("o", "toggle start offset"), 0, 1, false)
+	right.AddItem(CreateRunInfo("o", "Toggle start offset"), 0, 1, false)
+	right.AddItem(CreateRunInfo("/", "Search Table"), 0, 1, false)
 
 	flex.AddItem(left, 0, 1, false)
 	flex.AddItem(right, 0, 1, false)
 
 	return flex
+}
+
+func (tp *TopicPage) CreateInputSearch(onDone func()) *tview.Flex {
+	i := tview.NewInputField().
+		SetLabel("💡?").
+		SetFieldWidth(0)
+	i.SetText(tp.searchText)
+	i.SetBorder(true).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
+	i.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			tp.searchText = i.GetText()
+			tp.requireRefresh = true
+			onDone()
+		}
+	})
+
+	i.SetChangedFunc(func(text string) {
+		tp.searchText = text
+		tp.requireRefresh = true
+	})
+
+	f := tview.NewFlex()
+	f.SetBorder(false)
+	f.AddItem(i, 0, 1, true)
+	return f
 }
