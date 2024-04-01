@@ -29,6 +29,7 @@ type TopicPage struct {
 	newMessageConsumed bool
 	notifyView         *tview.TextView
 	topicName          string
+	topicDetails       api.Topic
 	consumeFlags       api.ConsumeFlags
 }
 
@@ -102,9 +103,10 @@ func (*TopicPage) shortValue(msg api.Message) string {
 	return shortenedText
 }
 
-func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic) {
+func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, flags api.ConsumeFlags) {
 	tp.topicName = topicName
-	tp.consumeFlags = api.DefaultConsumeFlags()
+	tp.topicDetails = currentTopic
+	tp.consumeFlags = flags
 	topicInfoFlex := tp.CreateTopicInfoSection(topicName, currentTopic)
 	tp.topFlexElements.PushBack(topicInfoFlex)
 	tp.topFlex.AddItem(topicInfoFlex, 0, 1, false)
@@ -162,7 +164,15 @@ func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey 
 			tp.consumerTable.ScrollToEnd()
 		}
 		if event.Rune() == 'o' {
-			tp.consumerTable.ScrollToEnd()
+			// Toggle between "newest" and "oldest" values
+			if tp.consumeFlags.OffsetFlag == "latest" {
+				tp.consumeFlags.OffsetFlag = "oldest"
+				tp.consumeFlags.Tail = 0
+			} else {
+				tp.consumeFlags.OffsetFlag = "latest"
+				tp.consumeFlags.Tail = 50
+			}
+			tp.RestartConsumer()
 		}
 		if event.Key() == tcell.KeyRune {
 			switch event.Rune() {
@@ -172,6 +182,11 @@ func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey 
 		}
 		return event
 	}
+}
+
+func (tp *TopicPage) RestartConsumer() {
+	tp.clearConsumedData()
+	tp.PageConsumeTopic(tp.topicName, tp.topicDetails, tp.consumeFlags)
 }
 
 func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex {
@@ -222,7 +237,7 @@ func (tp *TopicPage) CreateConsumeFlagsSection() *tview.Flex {
 	flex.SetBorderPadding(0, 0, 1, 0)
 	//flex.SetBorder(true)
 	flex.
-		AddItem(CreatePropertyInfo("Offset", tp.consumeFlags.OffsetFlag), 0, 1, false).
+		AddItem(CreatePropertyInfo("From Offset", tp.consumeFlags.OffsetFlag), 0, 1, false).
 		AddItem(CreatePropertyInfo("Follow", fmt.Sprint(tp.consumeFlags.Follow)), 0, 1, false).
 		AddItem(CreatePropertyInfo("Tail", fmt.Sprint(tp.consumeFlags.Tail)), 0, 1, false)
 
@@ -231,18 +246,22 @@ func (tp *TopicPage) CreateConsumeFlagsSection() *tview.Flex {
 
 func (tp *TopicPage) CloseTopicPage() {
 	go func() {
-		tp.consumerTable.Clear()
-
-		tp.cancelConsumption()
-		tp.cancelRefresh()
-
-		for e := tp.topFlexElements.Front(); e != nil; e = e.Next() {
-			if value, ok := e.Value.(tview.Primitive); ok {
-				tp.topFlex.RemoveItem(value)
-			}
-		}
+		tp.clearConsumedData()
 
 	}()
+}
+
+func (tp *TopicPage) clearConsumedData() {
+	tp.consumerTable.Clear()
+
+	tp.cancelConsumption()
+	tp.cancelRefresh()
+
+	for e := tp.topFlexElements.Front(); e != nil; e = e.Next() {
+		if value, ok := e.Value.(tview.Primitive); ok {
+			tp.topFlex.RemoveItem(value)
+		}
+	}
 }
 
 func (tp *TopicPage) ShowNotification(message string) {
