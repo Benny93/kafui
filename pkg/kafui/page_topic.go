@@ -26,7 +26,7 @@ type TopicPage struct {
 	cancelConsumption  context.CancelFunc
 	cancelRefresh      context.CancelFunc
 	messageDetailPage  *DetailPage
-	consumedMessages   []api.Message
+	consumedMessages   map[string]api.Message
 	newMessageConsumed bool
 	notifyView         *tview.TextView
 	topicName          string
@@ -49,12 +49,17 @@ func NewTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview
 }
 
 func (tp *TopicPage) getHandler() api.MessageHandlerFunc {
-	var empty []api.Message
-	tp.consumedMessages = empty
+
+	tp.consumedMessages = make(map[string]api.Message)
 	return func(msg api.Message) {
-		tp.consumedMessages = append(tp.consumedMessages, msg)
+		key := tp.getMessageKey(fmt.Sprint(msg.Partition), fmt.Sprint(msg.Offset))
+		tp.consumedMessages[key] = msg
 		tp.newMessageConsumed = true
 	}
+}
+
+func (tp *TopicPage) getMessageKey(partition string, offset string) string {
+	return fmt.Sprintf("%s:%s", partition, offset)
 }
 
 func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
@@ -151,8 +156,8 @@ func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, 
 	tp.topFlex.AddItem(inputLegend, 0, 1, false)
 
 	tp.ShowNotification("Consuming messages...")
-	var emptyArray []api.Message
-	tp.consumedMessages = emptyArray
+
+	tp.consumedMessages = make(map[string]api.Message)
 	go func() {
 		tp.app.QueueUpdateDraw(func() {
 			tp.createFirstRowTopicTable(topicName)
@@ -190,9 +195,12 @@ func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey 
 		if event.Key() == tcell.KeyEnter {
 			// Get the selected row index
 			row, _ := tp.consumerTable.GetSelection()
+			off := tp.consumerTable.GetCell(row, 0)
+			part := tp.consumerTable.GetCell(row, 1)
+			key := tp.getMessageKey(part.Text, off.Text)
 			// Display the value content in a new page
 			if row > 0 {
-				msgv := tp.consumedMessages[row-1].Value
+				msgv := tp.consumedMessages[key].Value
 				tp.messageDetailPage = NewDetailPage(tp.app, tp.pages, msgv)
 				tp.messageDetailPage.Show()
 			}
