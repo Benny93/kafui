@@ -1,6 +1,7 @@
 package kafui
 
 import (
+	"container/list"
 	"context"
 	"fmt"
 	"strconv"
@@ -19,7 +20,7 @@ type TopicPage struct {
 	msgChannel         chan UIEvent
 	messagesFlex       *tview.Flex
 	topFlex            *tview.Flex
-	topicInfoFlex      *tview.Flex
+	topFlexElements    *list.List
 	consumerTable      *tview.Table
 	cancelConsumption  context.CancelFunc
 	cancelRefresh      context.CancelFunc
@@ -33,10 +34,11 @@ type TopicPage struct {
 
 func NewTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *TopicPage {
 	return &TopicPage{
-		app:        app,
-		dataSource: dataSource,
-		pages:      pages,
-		msgChannel: msgChannel,
+		app:             app,
+		dataSource:      dataSource,
+		pages:           pages,
+		msgChannel:      msgChannel,
+		topFlexElements: list.New(),
 	}
 }
 
@@ -103,9 +105,12 @@ func (*TopicPage) shortValue(msg api.Message) string {
 func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic) {
 	tp.topicName = topicName
 	tp.consumeFlags = api.DefaultConsumeFlags()
-	tp.topicInfoFlex = tp.CreateTopicInfoSection(topicName, currentTopic)
-	tp.topFlex.AddItem(tp.topicInfoFlex, 0, 1, false)
-	tp.topFlex.AddItem(tp.CreateConsumeFlagsSection(), 0, 1, false)
+	topicInfoFlex := tp.CreateTopicInfoSection(topicName, currentTopic)
+	tp.topFlexElements.PushBack(topicInfoFlex)
+	tp.topFlex.AddItem(topicInfoFlex, 0, 1, false)
+	consumerFlagsFlex := tp.CreateConsumeFlagsSection()
+	tp.topFlexElements.PushBack(consumerFlagsFlex)
+	tp.topFlex.AddItem(consumerFlagsFlex, 0, 1, false)
 	tp.ShowNotification("Consuming messages...")
 	var emptyArray []api.Message
 	tp.consumedMessages = emptyArray
@@ -154,6 +159,9 @@ func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey 
 			tp.consumerTable.ScrollToBeginning()
 		}
 		if event.Rune() == 'G' {
+			tp.consumerTable.ScrollToEnd()
+		}
+		if event.Rune() == 'o' {
 			tp.consumerTable.ScrollToEnd()
 		}
 		if event.Key() == tcell.KeyRune {
@@ -227,8 +235,11 @@ func (tp *TopicPage) CloseTopicPage() {
 
 		tp.cancelConsumption()
 		tp.cancelRefresh()
-		if tp.topicInfoFlex != nil {
-			tp.topFlex.RemoveItem(tp.topicInfoFlex)
+
+		for e := tp.topFlexElements.Front(); e != nil; e = e.Next() {
+			if value, ok := e.Value.(tview.Primitive); ok {
+				tp.topFlex.RemoveItem(value)
+			}
 		}
 
 	}()
@@ -262,6 +273,7 @@ func (tp *TopicPage) CreateInputLegend() *tview.Flex {
 	left.AddItem(CreateRunInfo("c", "Copy current line"), 0, 1, false)
 	right.AddItem(CreateRunInfo("Enter", "Show value"), 0, 1, false)
 	right.AddItem(CreateRunInfo("Esc", "Go Back"), 0, 1, false)
+	right.AddItem(CreateRunInfo("o", "toggle start offset"), 0, 1, false)
 
 	flex.AddItem(left, 0, 1, false)
 	flex.AddItem(right, 0, 1, false)
