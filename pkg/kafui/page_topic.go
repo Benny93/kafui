@@ -28,6 +28,7 @@ type TopicPage struct {
 	newMessageConsumed bool
 	notifyView         *tview.TextView
 	topicName          string
+	consumeFlags       api.ConsumeFlags
 }
 
 func NewTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *TopicPage {
@@ -101,8 +102,10 @@ func (*TopicPage) shortValue(msg api.Message) string {
 
 func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic) {
 	tp.topicName = topicName
+	tp.consumeFlags = api.DefaultConsumeFlags()
 	tp.topicInfoFlex = tp.CreateTopicInfoSection(topicName, currentTopic)
 	tp.topFlex.AddItem(tp.topicInfoFlex, 0, 1, false)
+	tp.topFlex.AddItem(tp.CreateConsumeFlagsSection(), 0, 1, false)
 	tp.ShowNotification("Consuming messages...")
 	var emptyArray []api.Message
 	tp.consumedMessages = emptyArray
@@ -113,8 +116,7 @@ func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic) 
 		handlerFunc := tp.getHandler()
 		ctx, cancel := context.WithCancel(context.Background())
 		tp.cancelConsumption = cancel
-		flags := api.DefaultConsumeFlags()
-		err := tp.dataSource.ConsumeTopic(ctx, topicName, flags, handlerFunc)
+		err := tp.dataSource.ConsumeTopic(ctx, topicName, tp.consumeFlags, handlerFunc)
 		if err != nil {
 			panic("Error consume messages!")
 		}
@@ -203,6 +205,18 @@ func (tp *TopicPage) CreateTopicInfoSection(topicName string, topicDetail api.To
 		AddItem(CreatePropertyInfo("Number of Messages", fmt.Sprint(topicDetail.MessageCount)), 0, 1, false).
 		AddItem(CreatePropertyInfo("Number of Partitions", fmt.Sprint(topicDetail.NumPartitions)), 0, 1, false).
 		AddItem(CreatePropertyInfo("Replication Factor", fmt.Sprint(topicDetail.ReplicationFactor)), 0, 1, false)
+
+	return flex
+}
+
+func (tp *TopicPage) CreateConsumeFlagsSection() *tview.Flex {
+	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+	flex.SetBorderPadding(0, 0, 1, 0)
+	//flex.SetBorder(true)
+	flex.
+		AddItem(CreatePropertyInfo("Offset", tp.consumeFlags.OffsetFlag), 0, 1, false).
+		AddItem(CreatePropertyInfo("Follow", fmt.Sprint(tp.consumeFlags.Follow)), 0, 1, false).
+		AddItem(CreatePropertyInfo("Tail", fmt.Sprint(tp.consumeFlags.Tail)), 0, 1, false)
 
 	return flex
 }
