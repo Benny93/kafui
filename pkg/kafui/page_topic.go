@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -83,8 +84,14 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
 				tp.consumerTable.Clear()
 				tp.createFirstRowTopicTable(tp.topicName)
 
+				values := make([]api.Message, 0)
+				for _, value := range tp.consumedMessages {
+					values = append(values, value)
+				}
+				sort.Sort(ByOffsetThenPartition(values))
+
 				// Iterate over the consumedMessages slice using range
-				for _, msg := range tp.consumedMessages {
+				for _, msg := range values {
 					if tp.searchText != "" {
 						// skip message if none field fuzzy matches search text
 						if !fieldFuzzyMatchesSearchText(msg, tp.searchText) {

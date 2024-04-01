@@ -1,5 +1,7 @@
 package kafui
 
+import "github.com/Benny93/kafui/pkg/api"
+
 //https://stackoverflow.com/a/70802740
 func Contains[T comparable](s []T, e T) bool {
 	for _, v := range s {
@@ -18,4 +20,18 @@ func filter[T any](ss []T, test func(T) bool) (ret []T) {
 		}
 	}
 	return
+}
+
+// Implement the sort.Interface
+type ByOffsetThenPartition []api.Message
+
+func (a ByOffsetThenPartition) Len() int      { return len(a) }
+func (a ByOffsetThenPartition) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a ByOffsetThenPartition) Less(i, j int) bool {
+	// First, compare by Offset
+	if a[i].Offset != a[j].Offset {
+		return a[i].Offset < a[j].Offset
+	}
+	// If Offset values are equal, then compare by Partition
+	return a[i].Partition < a[j].Partition
 }
