@@ -107,12 +107,19 @@ func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, 
 	tp.topicName = topicName
 	tp.topicDetails = currentTopic
 	tp.consumeFlags = flags
+	// topic info
 	topicInfoFlex := tp.CreateTopicInfoSection(topicName, currentTopic)
 	tp.topFlexElements.PushBack(topicInfoFlex)
 	tp.topFlex.AddItem(topicInfoFlex, 0, 1, false)
+	// consumer flags
 	consumerFlagsFlex := tp.CreateConsumeFlagsSection()
 	tp.topFlexElements.PushBack(consumerFlagsFlex)
 	tp.topFlex.AddItem(consumerFlagsFlex, 0, 1, false)
+	// input legend
+	inputLegend := tp.CreateInputLegend()
+	tp.topFlexElements.PushBack(inputLegend)
+	tp.topFlex.AddItem(inputLegend, 0, 1, false)
+
 	tp.ShowNotification("Consuming messages...")
 	var emptyArray []api.Message
 	tp.consumedMessages = emptyArray
@@ -196,7 +203,6 @@ func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex {
 	tp.consumerTable.SetInputCapture(tp.inputCapture())
 
 	tp.topFlex = tview.NewFlex()
-	tp.topFlex.AddItem(tp.CreateInputLegend(), 0, 1, false)
 	tp.topFlex.SetBorder(false)
 
 	tp.messagesFlex = tview.NewFlex().
