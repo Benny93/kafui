@@ -50,11 +50,12 @@ func NewDetailPage(app *tview.Application, pages *tview.Pages, value string) *De
 
 func (vp *DetailPage) Show() {
 	// Create a new flex layout for the value page
-	valueFlex := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(tview.NewTextView().SetText("Message Value").SetTextAlign(tview.AlignCenter), 1, 0, false).
-		AddItem(tview.NewTextView(), 2, 1, false)
-
+	valueFlex := tview.NewFlex()
+	valueFlex.SetDirection(tview.FlexRow)
+	//SetDirection(tview.FlexRow).
+	//AddItem(tview.NewTextView().SetText("Message Value").SetTextAlign(tview.AlignCenter), 1, 0, false).
+	//AddItem(tview.NewTextView(), 2, 1, false)
+	valueFlex.AddItem(vp.CreateInputLegend(), 5, 1, false)
 	// Add the TextView to the flex layout
 	valueFlex.AddItem(vp.valueTextView, 0, 1, true)
 
@@ -107,4 +108,25 @@ func (vp *DetailPage) showCopiedNotification() {
 			page.(*tview.Flex).RemoveItem(item)
 		})
 	}()
+}
+
+func (vp *DetailPage) CreateInputLegend() *tview.Flex {
+	flex := tview.NewFlex()
+	flex.SetBorderPadding(0, 0, 1, 0)
+	left := tview.NewFlex().SetDirection(tview.FlexRow)
+	right := tview.NewFlex().SetDirection(tview.FlexRow)
+	right.SetBorderPadding(0, 1, 0, 0)
+
+	left.AddItem(CreateRunInfo("↑", "Move up"), 0, 1, false)
+	left.AddItem(CreateRunInfo("↓", "Move down"), 0, 1, false)
+	left.AddItem(CreateRunInfo("g", "Scroll to top"), 0, 1, false)
+	left.AddItem(CreateRunInfo("G", "Scroll to bottom"), 0, 1, false)
+	left.AddItem(CreateRunInfo("c", "Copy content"), 0, 1, false)
+	//right.AddItem(CreateRunInfo("Enter", "Show value"), 0, 1, false)
+	right.AddItem(CreateRunInfo("Esc", "Go Back"), 0, 1, false)
+
+	flex.AddItem(left, 0, 1, false)
+	flex.AddItem(right, 0, 1, false)
+
+	return flex
 }
