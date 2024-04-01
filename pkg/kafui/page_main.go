@@ -42,6 +42,7 @@ func receivingMessage(app *tview.Application, table *tview.Table, searchInput *t
 		}
 		if msg == OnFocusSearch {
 			searchInput.SetLabel("🧐>")
+			searchInput.SetText("")
 			app.SetFocus(searchInput)
 			currentSearchMode = ResouceSearch
 			currentSearchString = ""
@@ -113,8 +114,11 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 	searchFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(searchInput, 0, 1, true)
 
+	infoFlex := tview.NewFlex()
+	infoFlex.AddItem(contextInfo, 0, 1, false)
+	infoFlex.AddItem(CreateMainInputLegend(), 0, 1, false)
 	topFlex := tview.NewFlex().
-		AddItem(contextInfo, 0, 2, false).
+		AddItem(infoFlex, 0, 2, false).
 		AddItem(searchFlex, 3, 1, true).SetDirection(tview.FlexRow)
 
 	//topFlex.SetBorder(false).SetTitle("Top")
@@ -134,7 +138,7 @@ func CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tvi
 		AddItem(timerView, 0, 1, false)
 
 	centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(topFlex, 5, 1, false).
+		AddItem(topFlex, 8, 1, false).
 		AddItem(midFlex, 0, 3, true).
 		AddItem(bottomFlex, 5, 1, false)
 
@@ -284,4 +288,26 @@ func showTopicsInTable(table *tview.Table, topics map[string]api.Topic) {
 
 	}
 	table.SetTitle(currentResouce)
+}
+
+func CreateMainInputLegend() *tview.Flex {
+	flex := tview.NewFlex()
+	flex.SetBorderPadding(0, 0, 1, 0)
+	left := tview.NewFlex().SetDirection(tview.FlexRow)
+	right := tview.NewFlex().SetDirection(tview.FlexRow)
+	right.SetBorderPadding(0, 1, 0, 0)
+
+	left.AddItem(CreateRunInfo("↑", "Move up"), 0, 1, false)
+	left.AddItem(CreateRunInfo("↓", "Move down"), 0, 1, false)
+	left.AddItem(CreateRunInfo(":", "Search resource"), 0, 1, false)
+	left.AddItem(CreateRunInfo("/", "Search in table"), 0, 1, false)
+	right.AddItem(CreateRunInfo("g", "Scroll to top"), 0, 1, false)
+	right.AddItem(CreateRunInfo("G", "Scroll to bottom"), 0, 1, false)
+	right.AddItem(CreateRunInfo("c", "Copy current line"), 0, 1, false)
+	right.AddItem(CreateRunInfo("Enter", "Show details"), 0, 1, false)
+
+	flex.AddItem(left, 0, 1, false)
+	flex.AddItem(right, 0, 1, false)
+
+	return flex
 }
