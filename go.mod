@@ -4,6 +4,9 @@ go 1.21
 
 toolchain go1.22.1
 
+// fix for two different versions of genproto
+replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20230525234030-28d5490b6b19
+
 require (
 	github.com/IBM/sarama v1.43.0
 	github.com/TylerBrock/colorjson v0.0.0-20200706003622-8a50f05110d2
@@ -25,7 +28,6 @@ require (
 require (
 	github.com/Landoop/schema-registry v0.0.0-20190327143759-50a5701c1891 // indirect
 	github.com/bufbuild/protocompile v0.7.1 // indirect
-	github.com/confluentinc/confluent-kafka-go v1.9.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/eapache/go-resiliency v1.6.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
