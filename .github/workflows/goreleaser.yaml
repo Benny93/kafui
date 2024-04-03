@@ -9,7 +9,6 @@ jobs:
   goreleaser:
     permissions:
       contents: write
-      metadata: write
       packages: write
     runs-on: ubuntu-latest
     steps:
