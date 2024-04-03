@@ -237,3 +237,25 @@ brews:
       # Default: 'ssh -i {{ .KeyPath }} -o StrictHostKeyChecking=accept-new -F /dev/null'
       # Templates: allowed
       #  ssh_command: 'ssh -i {{ .Env.KEY }} -o SomeOption=yes'
+
+winget:
+  - name: kafui
+    publisher: Benjamin Vollmer
+    short_description: "Terminal UI to explore kafka topics"
+    license: "mit"
+    package_identifier: github.com.benny93.kafui
+    tags:
+      - kafka
+      - go
+      - cli
+    repository:
+      # https://github.com/Benny93/winget-pkgs
+      owner: Benny93
+      name: winget-pkgs
+      branch: master
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
