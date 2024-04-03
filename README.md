@@ -7,6 +7,27 @@ It uses the same configuration file as kaf so you can use your existing kaf conf
 
 ## Install
 
+### Homebrew
+
+If you're using Homebrew on macOS or Linux, you can easily install `kafui` using the following commands:
+
+```bash
+brew tap benny93/kafui
+brew install kafui
+```
+
+This will tap into the `benny93/kafui` repository and install the `kafui` package on your system. 
+
+
+### Downloader Script
+
+Install via downloader script:
+
+```bash
+curl https://raw.githubusercontent.com/Benny93/kafui/main/godownloader.sh | BINDIR=$HOME/bin bash
+```
+
+
 ### Go install
 
 1. **Set Environment Variables (For Unix-like Systems):**
@@ -45,25 +66,6 @@ It uses the same configuration file as kaf so you can use your existing kaf conf
 
    This command fetches the latest version of the `kafui` package from the specified GitHub repository and installs it in your `GOPATH/bin` directory. After installation, you can execute the `kafui` command from anywhere in your terminal.
 
-### Homebrew
-
-If you're using Homebrew on macOS or Linux, you can easily install `kafui` using the following commands:
-
-```bash
-brew tap benny93/kafui
-brew install kafui
-```
-
-This will tap into the `benny93/kafui` repository and install the `kafui` package on your system. 
-
-
-### Downloader Script
-
-Install via downloader script:
-
-```bash
-curl https://raw.githubusercontent.com/Benny93/kafui/main/godownloader.sh | BINDIR=$HOME/bin bash
-```
 
 ## Configuration
 
@@ -71,7 +73,7 @@ First setup the config file at `$HOME/.kaf/config` using kaf
 ```bash
 kaf config add-cluster local -b localhost:9092
 ```
-replaace `localhost:9092` with your broker.
+replace `localhost:9092` with your broker.
 If you use a schema registry open the config file and add the required configurations.
 See [https://github.com/birdayz/kaf?tab=readme-ov-file#configuration](https://github.com/birdayz/kaf?tab=readme-ov-file#configuration)
 
