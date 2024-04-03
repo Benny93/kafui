@@ -4,9 +4,6 @@ go 1.21
 
 toolchain go1.22.1
 
-// fix for two different versions of genproto
-replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20230525234030-28d5490b6b19
-
 require (
 	github.com/IBM/sarama v1.43.0
 	github.com/TylerBrock/colorjson v0.0.0-20200706003622-8a50f05110d2
