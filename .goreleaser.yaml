@@ -49,6 +49,7 @@ brews:
     # Default: ProjectName
     # Templates: allowed
     name: kafui
+    token: "{{ .Env.TAP_GITHUB_TOKEN }}"
 
     # IDs of the archives to use.
     # Empty means all IDs.
