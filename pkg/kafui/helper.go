@@ -1,8 +1,13 @@
 package kafui
 
-import "github.com/Benny93/kafui/pkg/api"
+import (
+	"fmt"
 
-//https://stackoverflow.com/a/70802740
+	"github.com/Benny93/kafui/pkg/api"
+	"github.com/rivo/tview"
+)
+
+// https://stackoverflow.com/a/70802740
 func Contains[T comparable](s []T, e T) bool {
 	for _, v := range s {
 		if v == e {
@@ -34,4 +39,12 @@ func (a ByOffsetThenPartition) Less(i, j int) bool {
 	}
 	// If Offset values are equal, then compare by Partition
 	return a[i].Partition < a[j].Partition
+}
+
+func RecoverAndExit(app *tview.Application) {
+	if r := recover(); r != nil {
+		app.Stop()
+		fmt.Println("An error occurred:", r)
+		fmt.Println("Application stopped.")
+	}
 }

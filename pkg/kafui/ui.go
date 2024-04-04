@@ -103,13 +103,7 @@ func OpenUI(dataSource api.KafkaDataSource) {
 	})
 
 	// Recover from panics and handle gracefully
-	defer func() {
-		if r := recover(); r != nil {
-			tviewApp.Stop()
-			fmt.Println("An error occurred:", r)
-			fmt.Println("Application stopped.")
-		}
-	}()
+	defer RecoverAndExit(tviewApp)
 
 	if err := tviewApp.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
 		fmt.Println("Run ended in panic")
