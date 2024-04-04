@@ -11,7 +11,7 @@ import (
 	"github.com/rivo/tview"
 )
 
-func SetupTableInput(table *tview.Table, app *tview.Application, pages *tview.Pages, dataSource api.KafkaDataSource, msgChannel chan UIEvent) {
+func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, pages *tview.Pages, dataSource api.KafkaDataSource, msgChannel chan UIEvent) {
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter {
@@ -26,37 +26,37 @@ func SetupTableInput(table *tview.Table, app *tview.Application, pages *tview.Pa
 					return event
 				}
 
-				if currentResouce == Topic[0] {
+				if m.CurrentResource == Topic[0] {
 					row, _ := table.GetSelection()
 					topicName := table.GetCell(row, 0).Text
 
-					currentTopic = lastFetchedTopics[topicName]
+					currentTopic = m.LastFetchedTopics[topicName]
 					msgChannel <- OnPageChange
 					pages.SwitchToPage("topicPage")
 					consumeFlags := api.DefaultConsumeFlags()
 					topicPage.PageConsumeTopic(topicName, currentTopic, consumeFlags)
 				}
-				if currentResouce == Context[0] {
+				if m.CurrentResource == Context[0] {
 					row, _ := table.GetSelection()
 					text := table.GetCell(row, 0).Text
-					currentContextName = text
-					err := dataSource.SetContext(currentContextName)
+					m.CurrentContextName = text
+					err := dataSource.SetContext(m.CurrentContextName)
 					if err != nil {
-						ShowNotification(fmt.Sprintf("Failed to swtich context %s", err))
+						m.ShowNotification(fmt.Sprintf("Failed to swtich context %s", err))
 						return event
 					}
-					ShowNotification(fmt.Sprintf("Switched to context %s", currentContextName))
+					m.ShowNotification(fmt.Sprintf("Switched to context %s", m.CurrentContextName))
 					go app.QueueUpdateDraw(func() {
-						contextInfo.SetText(currentContextName)
+						m.ContextInfo.SetText(m.CurrentContextName)
 					})
-					switchToTopicTable(table, dataSource, app)
+					m.switchToTopicTable(table, dataSource, app)
 				}
 			}
 		}
 		if event.Key() == tcell.KeyRune {
 			switch event.Rune() {
 			case 'c':
-				CopySelectedRowToClipboard(table, ShowNotification)
+				CopySelectedRowToClipboard(table, m.ShowNotification)
 			}
 		}
 		return event

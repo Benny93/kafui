@@ -10,43 +10,73 @@ import (
 	"github.com/rivo/tview"
 )
 
-func CreateSearchInput(table *tview.Table, dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal) *tview.InputField {
-	defaultLabel := "😎|"
-	searchInput := tview.NewInputField().
-		SetLabel(defaultLabel).
+type SearchBar struct {
+	Table           *tview.Table
+	DataSource      api.KafkaDataSource
+	Pages           *tview.Pages
+	App             *tview.Application
+	Modal           *tview.Modal
+	DefaultLabel    string
+	SearchInput     *tview.InputField
+	CurrentMode     SearchMode
+	CurrentString   string
+	CurrentResource string
+	UpdateTable     func(resourceName string, searchText string)
+}
+
+func NewSearchBar(table *tview.Table, dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, updateTable func(resouceName string, searchText string)) *SearchBar {
+	return &SearchBar{
+		Table:           table,
+		DataSource:      dataSource,
+		Pages:           pages,
+		App:             app,
+		Modal:           modal,
+		DefaultLabel:    "😎|",
+		SearchInput:     nil,
+		CurrentMode:     ResouceSearch,
+		CurrentString:   "",
+		CurrentResource: Topic[0],
+		UpdateTable:     updateTable,
+	}
+}
+
+func (s *SearchBar) CreateSearchInput(msgChannel chan UIEvent) *tview.InputField {
+	s.SearchInput = tview.NewInputField().
+		SetLabel(s.DefaultLabel).
 		SetFieldWidth(0)
-	searchInput.SetBorder(true).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
+	s.SearchInput.SetBorder(true).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
 	//searchInput.SetFieldBackgroundColor(tcell.ColorBlack)
 	selectedStyle := tcell.Style{}
 	selectedStyle.Background(tcell.ColorWhite)
-	searchInput.SetAutocompleteStyles(tcell.ColorBlue, tcell.Style{}, selectedStyle)
+	s.SearchInput.SetAutocompleteStyles(tcell.ColorBlue, tcell.Style{}, selectedStyle)
 	searchText := ""
 
-	searchInput.SetDoneFunc(func(key tcell.Key) {
+	s.SearchInput.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
-			searchText = searchInput.GetText()
+			searchText = s.SearchInput.GetText()
 			// Check if search text is "q" or "exit"
 			if searchText == "q" || searchText == "exit" {
-				app.Stop()
+				s.App.Stop()
 				fmt.Println("Goodbye!")
 				return
 			}
-			if currentSearchMode == ResouceSearch {
-				handleResouceSearch(searchText, table, searchInput, defaultLabel, dataSource, app, pages, modal)
+			if s.CurrentMode == ResouceSearch {
+				s.handleResouceSearch(searchText)
 			} else {
-				handleTableSearch(searchText, app, table, dataSource)
+				s.handleTableSearch(searchText)
 			}
 
 		}
 	})
 
-	searchInput.SetChangedFunc(func(text string) {
-		if currentSearchMode == TableSearch {
-			currentSearchString = text
+	s.SearchInput.SetChangedFunc(func(text string) {
+		if s.CurrentMode == TableSearch {
+			s.CurrentString = text
+			s.UpdateTable(s.CurrentResource, s.CurrentString)
 		}
 	})
 
-	searchInput.SetAutocompleteFunc(func(currentText string) (entries []string) {
+	s.SearchInput.SetAutocompleteFunc(func(currentText string) (entries []string) {
 		if len(currentText) == 0 {
 			return
 		}
@@ -62,39 +92,63 @@ func CreateSearchInput(table *tview.Table, dataSource api.KafkaDataSource, pages
 		return
 	})
 
-	return searchInput
+	go s.ReceivingMessage(s.App, s.Table, s.SearchInput, msgChannel)
+
+	return s.SearchInput
 }
 
-func handleTableSearch(searchText string, app *tview.Application, table *tview.Table, dataSource api.KafkaDataSource) {
+func (s *SearchBar) handleTableSearch(searchText string) {
 	// filter table by given searchText
-	currentSearchString = searchText
-	UpdateTable(table, dataSource)
-	app.SetFocus(table)
+	s.CurrentString = searchText
+	s.UpdateTable(s.CurrentResource, s.CurrentString)
+	s.App.SetFocus(s.Table)
 }
 
-func handleResouceSearch(searchText string, table *tview.Table, searchInput *tview.InputField, defaultLabel string, dataSource api.KafkaDataSource, app *tview.Application, pages *tview.Pages, modal *tview.Modal) {
+func (s *SearchBar) handleResouceSearch(searchText string) {
 	match := false
 	if Contains(Context, searchText) {
 		match = true
-		currentResouce = Context[0]
+		s.CurrentResource = Context[0]
 	}
 
 	if Contains(Topic, searchText) {
-		currentResouce = Topic[0]
+		s.CurrentResource = Topic[0]
 		match = true
 	}
 
 	if Contains(ConsumerGroup, searchText) {
-		currentResouce = ConsumerGroup[0]
+		s.CurrentResource = ConsumerGroup[0]
 		match = true
 	}
 	if !match {
-		pages.ShowPage("modal")
-		app.SetFocus(modal)
+		s.Pages.ShowPage("modal")
+		s.App.SetFocus(s.Modal)
 	} else {
-		UpdateTable(table, dataSource)
-		app.SetFocus(table)
+		s.UpdateTable(s.CurrentResource, s.CurrentString)
+		s.App.SetFocus(s.Table)
 	}
-	searchInput.SetLabel(defaultLabel)
-	searchInput.SetText("")
+	s.SearchInput.SetLabel(s.DefaultLabel)
+	s.SearchInput.SetText("")
+}
+
+func (s *SearchBar) ReceivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
+	for {
+		msg := <-msgChannel
+		if msg == OnModalClose {
+			app.SetFocus(table)
+		}
+		if msg == OnFocusSearch {
+			searchInput.SetLabel("🧐>")
+			searchInput.SetText("")
+			app.SetFocus(searchInput)
+			s.CurrentMode = ResouceSearch
+			s.CurrentString = ""
+		}
+		if msg == OnStartTableSearch {
+			searchInput.SetLabel("💡?")
+			app.SetFocus(searchInput)
+			s.CurrentMode = TableSearch
+			s.CurrentString = ""
+		}
+	}
 }

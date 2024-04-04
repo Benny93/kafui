@@ -39,9 +39,8 @@ func OpenUI(dataSource api.KafkaDataSource) {
 	// channel to publish messages to
 	msgChannel := make(chan UIEvent)
 
-	// Fetch context data from api.KafkaDataSource
-	// show dialog that the requested resource could not be found
-	flex := CreateMainPage(dataSource, pages, tviewApp, modal, msgChannel)
+	mainPage := NewMainPage()
+	flex := mainPage.CreateMainPage(dataSource, pages, tviewApp, modal, msgChannel)
 
 	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		pages.HidePage("modal")
