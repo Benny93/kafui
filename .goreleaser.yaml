@@ -240,7 +240,7 @@ brews:
 
 winget:
   - name: kafui
-    publisher: Benjamin Vollmer
+    publisher: github\com\benny93
     short_description: "Terminal UI to explore kafka topics"
     license: "mit"
     package_identifier: github.com.benny93.kafui
