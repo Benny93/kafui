@@ -252,7 +252,7 @@ func (m *MainPage) ShowTopicsInTable(table *tview.Table, topics map[string]api.T
 
 	keys := make([]string, 0, len(topics))
 	for key := range topics {
-		if m.CurrentSearchString == "" || strings.Contains(key, m.CurrentSearchString) {
+		if m.CurrentSearchString == "" || strings.Contains(strings.ToLower(key), strings.ToLower(m.CurrentSearchString)) {
 			keys = append(keys, key)
 		}
 	}
