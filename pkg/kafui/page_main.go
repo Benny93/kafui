@@ -41,8 +41,10 @@ func (m *MainPage) CurrentTimeString() string {
 }
 
 func (m *MainPage) UpdateTableRoutine(app *tview.Application, table *tview.Table, timerView *tview.TextView, dataSource api.KafkaDataSource) {
+	defer RecoverAndExit(app)
 	for {
 		app.QueueUpdateDraw(func() {
+
 			timerView.SetText(m.CurrentTimeString())
 			m.UpdateTable(table, dataSource)
 
@@ -136,6 +138,7 @@ func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.P
 
 	m.CurrentContextName = dataSource.GetContext()
 	go func() {
+		defer RecoverAndExit(app)
 		app.QueueUpdateDraw(func() {
 			m.ContextInfo.SetText(m.CurrentContextName)
 		})
@@ -146,6 +149,7 @@ func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.P
 
 func (m *MainPage) ShowNotification(message string) {
 	go func() {
+		defer RecoverAndExit(tviewApp)
 		tviewApp.QueueUpdateDraw(func() {
 			m.NotificationTextView.SetText(message)
 		})
@@ -155,6 +159,7 @@ func (m *MainPage) ShowNotification(message string) {
 		tviewApp.QueueUpdateDraw(func() {
 			m.NotificationTextView.SetText("")
 		})
+
 	}()
 }
 

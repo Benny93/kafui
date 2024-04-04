@@ -132,6 +132,7 @@ func (s *SearchBar) handleResouceSearch(searchText string) {
 }
 
 func (s *SearchBar) ReceivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) {
+	defer RecoverAndExit(s.App)
 	for {
 		msg := <-msgChannel
 		if msg == OnModalClose {

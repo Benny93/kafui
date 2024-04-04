@@ -64,6 +64,7 @@ func (tp *TopicPage) getMessageKey(partition string, offset string) string {
 }
 
 func (tp *TopicPage) refreshTopicTable(ctx context.Context) {
+	defer RecoverAndExit(tp.app)
 	refreshTicker := time.NewTicker(100 * time.Millisecond)
 	defer refreshTicker.Stop()
 
@@ -166,6 +167,7 @@ func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, 
 
 	tp.consumedMessages = make(map[string]api.Message)
 	go func() {
+		defer RecoverAndExit(tp.app)
 		tp.app.QueueUpdateDraw(func() {
 			tp.createFirstRowTopicTable(topicName)
 		})
@@ -312,6 +314,7 @@ func (tp *TopicPage) CreateConsumeFlagsSection() *tview.Flex {
 
 func (tp *TopicPage) CloseTopicPage() {
 	go func() {
+		defer RecoverAndExit(tp.app)
 		tp.clearConsumedData()
 
 	}()
@@ -337,6 +340,7 @@ func (tp *TopicPage) clearConsumedData() {
 
 func (tp *TopicPage) ShowNotification(message string) {
 	go func() {
+		defer RecoverAndExit(tp.app)
 		tp.app.QueueUpdateDraw(func() {
 			tp.notifyView.SetText(message)
 		})

@@ -47,6 +47,7 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 					}
 					m.ShowNotification(fmt.Sprintf("Switched to context %s", m.CurrentContextName))
 					go app.QueueUpdateDraw(func() {
+						defer RecoverAndExit(app)
 						m.ContextInfo.SetText(m.CurrentContextName)
 					})
 					m.switchToTopicTable(table, dataSource, app)
