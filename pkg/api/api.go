@@ -53,5 +53,5 @@ type KafkaDataSource interface {
 	GetContext() string
 	SetContext(contextName string) error
 	GetConsumerGroups() ([]ConsumerGroup, error)
-	ConsumeTopic(ctx context.Context, topicName string, flags ConsumeFlags, handleMessage MessageHandlerFunc) error
+	ConsumeTopic(ctx context.Context, topicName string, flags ConsumeFlags, handleMessage MessageHandlerFunc, onError func(err any)) error
 }

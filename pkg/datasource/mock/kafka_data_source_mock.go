@@ -64,7 +64,7 @@ func (kp KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 	return groups, nil
 }
 
-func (kp KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc) error {
+func (kp KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error {
 	// Simulate consuming messages from the topic
 	for i := 0; i < 100; i++ {
 		description := "Lorem ipsum dolor sit amet con et just me incididunt ut lab inductor laris martinus"

@@ -174,7 +174,9 @@ func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, 
 		handlerFunc := tp.getHandler()
 		ctx, cancel := context.WithCancel(context.Background())
 		tp.cancelConsumption = cancel
-		err := tp.dataSource.ConsumeTopic(ctx, topicName, tp.consumeFlags, handlerFunc)
+		err := tp.dataSource.ConsumeTopic(ctx, topicName, tp.consumeFlags, handlerFunc, func(err any) {
+			tp.ShowNotification(fmt.Sprintf("Error consuming messages: %s", err))
+		})
 		if err != nil {
 			panic("Error consume messages!")
 		}

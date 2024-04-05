@@ -67,7 +67,7 @@ func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, 
 
 var handler api.MessageHandlerFunc // todo remove global var
 
-func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc) {
+func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) {
 	var offset int64
 	cfg := getConfig()
 	client := getClientFromConfig(cfg)
@@ -98,7 +98,7 @@ func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags,
 	if groupFlag != "" {
 		withConsumerGroup(ctx, client, topic, groupFlag)
 	} else {
-		withoutConsumerGroup(ctx, client, topic, offset)
+		withoutConsumerGroup(ctx, client, topic, offset, onError)
 	}
 
 }
@@ -139,17 +139,19 @@ func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group s
 	}
 }
 
-func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64) {
+func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) {
 	consumer, err := sarama.NewConsumerFromClient(client)
 	if err != nil {
-		errorExit("Unable to create consumer from client: %v\n", err)
+		onError(fmt.Sprintf("Unable to create consumer from client: %v\n", err))
+		return
 	}
 
 	var partitions []int32
 	if len(flagPartitions) == 0 {
 		partitions, err = consumer.Partitions(topic)
 		if err != nil {
-			errorExit("Unable to get partitions: %v\n", err)
+			onError(fmt.Sprintf("Unable to get partitions: %v\n", err))
+			return
 		}
 	} else {
 		partitions = flagPartitions
@@ -164,6 +166,12 @@ func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic strin
 
 		go func(partition int32, offset int64) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					onError(r)
+					return
+				}
+			}()
 
 			offsets, err := getOffsets(client, topic, partition)
 			if err != nil {

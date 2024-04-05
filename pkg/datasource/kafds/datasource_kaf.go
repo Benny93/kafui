@@ -147,7 +147,7 @@ func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 	return finalGroups, nil
 }
 
-func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc) error {
+func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error {
 
 	admin := getClusterAdmin()
 	topicDetails, _ := admin.ListTopics()
@@ -157,7 +157,7 @@ func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string,
 		keys = append(keys, key)
 	}
 
-	DoConsume(ctx, topicName, flags, handleMessage)
+	DoConsume(ctx, topicName, flags, handleMessage, onError)
 
 	//cgs := []string{"message1", "message2", "message3"} // Example
 	return nil
