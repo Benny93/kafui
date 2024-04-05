@@ -26,7 +26,7 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 					return event
 				}
 
-				if m.CurrentResource == Topic[0] {
+				if m.SearchBar.CurrentResource == Topic[0] {
 					row, _ := table.GetSelection()
 					topicName := table.GetCell(row, 0).Text
 
@@ -36,7 +36,7 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 					consumeFlags := api.DefaultConsumeFlags()
 					topicPage.PageConsumeTopic(topicName, currentTopic, consumeFlags)
 				}
-				if m.CurrentResource == Context[0] {
+				if m.SearchBar.CurrentResource == Context[0] {
 					row, _ := table.GetSelection()
 					text := table.GetCell(row, 0).Text
 					m.CurrentContextName = text

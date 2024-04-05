@@ -17,7 +17,6 @@ import (
 const refreshInterval = 5000 * time.Millisecond
 
 type MainPage struct {
-	CurrentResource      string
 	CurrentContextName   string
 	NotificationTextView *tview.TextView
 	MidFlex              *tview.Flex
@@ -29,7 +28,6 @@ type MainPage struct {
 
 func NewMainPage() *MainPage {
 	return &MainPage{
-		CurrentResource:    Topic[0],
 		CurrentContextName: "",
 		LastFetchedTopics:  make(map[string]api.Topic),
 	}
@@ -54,28 +52,28 @@ func (m *MainPage) UpdateTableRoutine(app *tview.Application, table *tview.Table
 }
 
 func (m *MainPage) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource) {
-	//m.ShowNotification("Update Table " + m.CurrentSearchString)
-	if m.CurrentResource == Topic[0] {
+	//m.ShowNotification("Update Table " + m.SearchBar.CurrentResource)
+	if m.SearchBar.CurrentResource == Topic[0] {
 		table.Clear()
 		topics := m.FetchTopics(dataSource)
 		m.ShowTopicsInTable(table, topics)
-		m.CurrentResource = Topic[0]
+
 		//ShowNotification("Fetched Topics ...")
-		m.UpdateMidFlexTitle(m.CurrentResource, table.GetRowCount())
-	} else if m.CurrentResource == Context[0] {
+		m.UpdateMidFlexTitle(m.SearchBar.CurrentResource, table.GetRowCount())
+	} else if m.SearchBar.CurrentResource == Context[0] {
 		table.Clear()
 		contexts := m.FetchContexts(dataSource)
 		m.ShowContextsInTable(table, contexts)
-		m.CurrentResource = Context[0]
+
 		//ShowNotification("Fetched Contexts ...")
-		m.UpdateMidFlexTitle(m.CurrentResource, table.GetRowCount())
-	} else if m.CurrentResource == ConsumerGroup[0] {
+		m.UpdateMidFlexTitle(m.SearchBar.CurrentResource, table.GetRowCount())
+	} else if m.SearchBar.CurrentResource == ConsumerGroup[0] {
 		table.Clear()
 		cgs := m.FetchConsumerGroups(dataSource)
 		m.ShowConsumerGroups(table, cgs)
-		m.CurrentResource = ConsumerGroup[0]
+
 		//ShowNotification("Fetched Consumer Groups ...")
-		m.UpdateMidFlexTitle(m.CurrentResource, table.GetRowCount())
+		m.UpdateMidFlexTitle(m.SearchBar.CurrentResource, table.GetRowCount())
 	}
 }
 
@@ -88,7 +86,7 @@ func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.P
 	m.SetupTableInput(table, app, pages, dataSource, msgChannel)
 
 	m.SearchBar = *NewSearchBar(table, dataSource, pages, app, modal, func(resouceName, searchText string) {
-		m.CurrentResource = resouceName
+
 		m.CurrentSearchString = searchText
 		m.UpdateTable(table, dataSource)
 	})
@@ -114,7 +112,7 @@ func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.P
 		AddItem(table, 0, 3, true)
 	m.MidFlex.SetBorder(true)
 
-	m.UpdateMidFlexTitle(m.CurrentResource, table.GetRowCount())
+	m.UpdateMidFlexTitle(m.SearchBar.CurrentResource, table.GetRowCount())
 
 	m.NotificationTextView = createNotificationTextView()
 	timerView := tview.NewTextView().SetText("00:00")
@@ -183,9 +181,10 @@ func (m *MainPage) switchToTopicTable(table *tview.Table, dataSource api.KafkaDa
 	table.Clear()
 	topics := m.FetchTopics(dataSource)
 	m.ShowTopicsInTable(table, topics)
-	m.CurrentResource = Topic[0]
+	m.SearchBar.CurrentResource = Topic[0]
+	m.SearchBar.CurrentResource = m.SearchBar.CurrentResource
 	m.ShowNotification("Fetched Topics ...")
-	m.UpdateMidFlexTitle(m.CurrentResource, table.GetRowCount())
+	m.UpdateMidFlexTitle(m.SearchBar.CurrentResource, table.GetRowCount())
 	app.SetFocus(table)
 }
 
@@ -226,7 +225,7 @@ func (m *MainPage) ShowContextsInTable(table *tview.Table, contexts []string) {
 		cell.SetExpansion(1)
 		table.SetCell(i+1, 0, cell)
 	}
-	table.SetTitle(m.CurrentResource)
+	table.SetTitle(m.SearchBar.CurrentResource)
 }
 
 func (m *MainPage) FetchContexts(dataSource api.KafkaDataSource) []string {
@@ -275,7 +274,7 @@ func (m *MainPage) ShowTopicsInTable(table *tview.Table, topics map[string]api.T
 		table.SetCell(i+1, 3, tview.NewTableCell(fmt.Sprint(value.ReplicationFactor)))
 
 	}
-	table.SetTitle(m.CurrentResource)
+	table.SetTitle(m.SearchBar.CurrentResource)
 }
 
 func CreateMainInputLegend() *tview.Flex {
