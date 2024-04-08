@@ -240,10 +240,10 @@ brews:
 
 winget:
   - name: kafui
-    publisher: github\com\benny93
+    publisher: benny93
     short_description: "Terminal UI to explore kafka topics"
     license: "mit"
-    package_identifier: github.com.benny93.kafui
+    package_identifier: benny93.kafui
     tags:
       - kafka
       - go
