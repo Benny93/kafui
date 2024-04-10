@@ -405,6 +405,7 @@ func getSchemaCache() (cache *avro.SchemaCache) {
 }
 
 func errorExit(format string, a ...interface{}) {
-	fmt.Fprintf(errWriter, format+"\n", a...)
-	os.Exit(1)
+
+	txt := fmt.Sprintf(format+"\n", a...)
+	panic(txt)
 }
