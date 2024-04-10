@@ -1,6 +1,7 @@
 package kafui
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -26,6 +27,7 @@ type MainPage struct {
 	FetchedContexts       map[string]string
 	FetchedConsumerGroups map[string]api.ConsumerGroup
 	SearchBar             SearchBar
+	cancelFetch           func()
 }
 
 func NewMainPage() *MainPage {
@@ -43,17 +45,19 @@ func (m *MainPage) CurrentTimeString() string {
 func (m *MainPage) UpdateTableRoutine(app *tview.Application, table *tview.Table, timerView *tview.TextView, dataSource api.KafkaDataSource) {
 	defer RecoverAndExit(app)
 	for {
+
 		app.QueueUpdateDraw(func() {
 
 			timerView.SetText(m.CurrentTimeString())
 			m.UpdateTable(table, dataSource)
 
 		})
+
 		time.Sleep(refreshIntervalTable)
 	}
 }
 
-func (m *MainPage) UpdateTableDataRoutine(app *tview.Application, dataSource api.KafkaDataSource) {
+func (m *MainPage) UpdateTableDataRoutine(ctx context.Context, app *tview.Application, dataSource api.KafkaDataSource) {
 	defer RecoverAndExit(app)
 	for {
 
@@ -76,9 +80,17 @@ func (m *MainPage) UpdateTableDataRoutine(app *tview.Application, dataSource api
 			for _, g := range groups {
 				result[g.Name] = g
 			}
+			m.FetchedConsumerGroups = result
 
 		}
-		time.Sleep(refreshInterval)
+		// Check if the context has been canceled
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			time.Sleep(refreshInterval)
+		}
+
 	}
 }
 
@@ -88,22 +100,25 @@ func (m *MainPage) UpdateTable(table *tview.Table, dataSource api.KafkaDataSourc
 
 		m.ShowTopicsInTable(table, m.LastFetchedTopics)
 
-		//ShowNotification("Fetched Topics ...")
+		//m.ShowNotification("Fetched Topics ...")
 		m.UpdateMidFlexTitle(m.SearchBar.CurrentResource, table.GetRowCount())
 	} else if m.SearchBar.CurrentResource == Context[0] {
 
 		m.ShowContextsInTable(table, m.FetchedContexts)
 
-		//ShowNotification("Fetched Contexts ...")
+		//m.ShowNotification("Fetched Contexts ...")
 		m.UpdateMidFlexTitle(m.SearchBar.CurrentResource, table.GetRowCount())
 	} else if m.SearchBar.CurrentResource == ConsumerGroup[0] {
 		m.ShowConsumerGroups(table, m.FetchedConsumerGroups)
-		//ShowNotification("Fetched Consumer Groups ...")
+		//m.ShowNotification("Fetched Consumer Groups ...")
 		m.UpdateMidFlexTitle(m.SearchBar.CurrentResource, table.GetRowCount())
 	}
 }
 
 func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, msgChannel chan UIEvent) *tview.Flex {
+
+	timerView := tview.NewTextView().SetText("00:00")
+	timerView.SetBorder(false)
 
 	table := tview.NewTable().SetBorders(false)
 	table.SetSelectable(true, false)
@@ -114,7 +129,11 @@ func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.P
 	m.SearchBar = *NewSearchBar(table, dataSource, pages, app, modal, func(resouceName, searchText string) {
 
 		m.CurrentSearchString = searchText
+		m.cancelFetch()
+		startUpdatingData(m, app, dataSource)
+
 		m.UpdateTable(table, dataSource)
+
 	})
 	searchInput := m.SearchBar.CreateSearchInput(msgChannel)
 	m.ContextInfo = createContextInfo()
@@ -141,8 +160,6 @@ func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.P
 	m.UpdateMidFlexTitle(m.SearchBar.CurrentResource, table.GetRowCount())
 
 	m.NotificationTextView = createNotificationTextView()
-	timerView := tview.NewTextView().SetText("00:00")
-	timerView.SetBorder(false)
 
 	bottomFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(m.NotificationTextView, 0, 3, false).
@@ -157,10 +174,8 @@ func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.P
 		AddItem(centralFlex, 0, 2, true)
 
 	go m.UpdateTableRoutine(app, table, timerView, dataSource)
-
-	go m.UpdateTableDataRoutine(app, dataSource)
-
-	m.ShowNotification("Fetched topics...")
+	// Create a context with cancellation
+	startUpdatingData(m, app, dataSource)
 
 	m.CurrentContextName = dataSource.GetContext()
 	go func() {
@@ -171,6 +186,18 @@ func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.P
 	}()
 
 	return flex
+}
+
+func startUpdatingData(m *MainPage, app *tview.Application, dataSource api.KafkaDataSource) {
+	m.FetchedConsumerGroups = make(map[string]api.ConsumerGroup)
+	m.FetchedContexts = make(map[string]string)
+	m.LastFetchedTopics = make(map[string]api.Topic)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	//defer cancel()
+	m.cancelFetch = cancel
+	go m.UpdateTableDataRoutine(ctx, app, dataSource)
+
 }
 
 func (m *MainPage) ShowNotification(message string) {
@@ -294,6 +321,7 @@ func (m *MainPage) FetchTopics(dataSource api.KafkaDataSource) map[string]api.To
 		return make(map[string]api.Topic)
 	}
 	m.LastFetchedTopics = topics
+	//m.ShowNotification("Fetched topics...")
 	return topics
 }
 
