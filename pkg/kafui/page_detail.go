@@ -115,7 +115,7 @@ func (vp *DetailPage) CreateInputLegend() *tview.Flex {
 	flex.SetBorderPadding(0, 0, 1, 0)
 	left := tview.NewFlex().SetDirection(tview.FlexRow)
 	right := tview.NewFlex().SetDirection(tview.FlexRow)
-	right.SetBorderPadding(0, 1, 0, 0)
+	//right.SetBorderPadding(0, 0, 0, 0)
 
 	left.AddItem(CreateRunInfo("↑", "Move up"), 0, 1, false)
 	left.AddItem(CreateRunInfo("↓", "Move down"), 0, 1, false)
