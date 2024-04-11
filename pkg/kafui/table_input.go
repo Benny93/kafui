@@ -25,18 +25,17 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 				if r == 0 {
 					return event
 				}
-
-				if m.SearchBar.CurrentResource == Topic[0] {
+				switch r := (m.SearchBar.CurrentResource).(type) {
+				case ResouceTopic:
 					row, _ := table.GetSelection()
 					topicName := table.GetCell(row, 0).Text
 
-					currentTopic = m.LastFetchedTopics[topicName]
+					currentTopic = r.LastFetchedTopics[topicName]
 					msgChannel <- OnPageChange
 					pages.SwitchToPage("topicPage")
 					consumeFlags := api.DefaultConsumeFlags()
 					topicPage.PageConsumeTopic(topicName, currentTopic, consumeFlags)
-				}
-				if m.SearchBar.CurrentResource == Context[0] {
+				case ResourceContext:
 					row, _ := table.GetSelection()
 					text := table.GetCell(row, 0).Text
 					m.CurrentContextName = text
@@ -51,7 +50,9 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 						m.ContextInfo.SetText(m.CurrentContextName)
 					})
 					m.switchToTopicTable(table, dataSource, app)
+
 				}
+
 			}
 		}
 		if event.Key() == tcell.KeyRune {

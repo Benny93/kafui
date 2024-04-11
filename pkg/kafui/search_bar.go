@@ -20,11 +20,12 @@ type SearchBar struct {
 	SearchInput     *tview.InputField
 	CurrentMode     SearchMode
 	CurrentString   string
-	CurrentResource string
-	UpdateTable     func(resourceName string, searchText string)
+	CurrentResource Resource
+	UpdateTable     func(newResource Resource, searchText string)
+	onError         func(err error)
 }
 
-func NewSearchBar(table *tview.Table, dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, updateTable func(resouceName string, searchText string)) *SearchBar {
+func NewSearchBar(table *tview.Table, dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, updateTable func(newResource Resource, searchText string), onError func(err error)) *SearchBar {
 	return &SearchBar{
 		Table:           table,
 		DataSource:      dataSource,
@@ -35,8 +36,9 @@ func NewSearchBar(table *tview.Table, dataSource api.KafkaDataSource, pages *tvi
 		SearchInput:     nil,
 		CurrentMode:     ResouceSearch,
 		CurrentString:   "",
-		CurrentResource: Topic[0],
+		CurrentResource: NewResouceTopic(dataSource, onError, func() { RecoverAndExit(app) }),
 		UpdateTable:     updateTable,
+		onError:         onError,
 	}
 }
 
@@ -108,16 +110,16 @@ func (s *SearchBar) handleResouceSearch(searchText string) {
 	match := false
 	if Contains(Context, searchText) {
 		match = true
-		s.CurrentResource = Context[0]
+		s.CurrentResource = NewResourceContext(s.onError)
 	}
 
 	if Contains(Topic, searchText) {
-		s.CurrentResource = Topic[0]
+		s.CurrentResource = NewResouceTopic(s.DataSource, s.onError, func() { RecoverAndExit(s.App) })
 		match = true
 	}
 
 	if Contains(ConsumerGroup, searchText) {
-		s.CurrentResource = ConsumerGroup[0]
+		s.CurrentResource = NewResouceConsumerGroup(s.onError)
 		match = true
 	}
 	if !match {
