@@ -39,28 +39,28 @@ func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) {
 		return nil, err
 	}
 
-	client := getClient()
+	//client := getClient()
 
 	topics := make(map[string]api.Topic)
 
 	for key, value := range topicDetails {
-
-		var messageCount int64 = 0
-		// Iterate over all partitions last offset to get the overall message count
-		for i := 0; i < int(value.NumPartitions); i++ {
-			offsets, err := getOffsets(client, key, int32(i))
-			msgCount := offsets.newest - offsets.oldest
-			if err == nil {
-				messageCount += msgCount
-			}
-		}
+		/*
+			var messageCount int64 = 0
+			// Iterate over all partitions last offset to get the overall message count
+			for i := 0; i < int(value.NumPartitions); i++ {
+				offsets, err := getOffsets(client, key, int32(i))
+				msgCount := offsets.newest - offsets.oldest
+				if err == nil {
+					messageCount += msgCount
+				}
+			}*/
 
 		topics[key] = api.Topic{
 			NumPartitions:     value.NumPartitions,
 			ReplicationFactor: value.ReplicationFactor,
 			ReplicaAssignment: value.ReplicaAssignment,
 			ConfigEntries:     value.ConfigEntries,
-			MessageCount:      messageCount,
+			MessageCount:      -1,
 		}
 	}
 

@@ -2,9 +2,14 @@ package kafui
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/maruel/natural"
+	"github.com/rivo/tview"
 )
 
 type ResouceTopic struct {
@@ -64,6 +69,43 @@ func (r ResouceTopic) StartFetchingData() {
 }
 func (r ResouceTopic) StopFetching() {
 	r.cancelFetch()
+}
+
+func (r ResouceTopic) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) {
+
+	r.ShowTopicsInTable(table, r.LastFetchedTopics, search)
+	//r.ShowNotification(fmt.Sprintf("Fetched Topics ... %d", len(r.LastFetchedTopics)))
+
+}
+
+func (r ResouceTopic) ShowTopicsInTable(table *tview.Table, topics map[string]api.Topic, search string) {
+	table.Clear()
+	table.SetCell(0, 0, tview.NewTableCell("Topic").SetTextColor(tview.Styles.SecondaryTextColor))
+	//table.SetCell(0, 1, tview.NewTableCell("Num Messages").SetTextColor(tview.Styles.SecondaryTextColor))
+	table.SetCell(0, 1, tview.NewTableCell("Num Partitions").SetTextColor(tview.Styles.SecondaryTextColor))
+	table.SetCell(0, 2, tview.NewTableCell("Replication Factor").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
+
+	keys := make([]string, 0, len(topics))
+	for key := range topics {
+		if search == "" || strings.Contains(strings.ToLower(key), strings.ToLower(search)) {
+			keys = append(keys, key)
+		}
+	}
+
+	sort.Sort(natural.StringSlice(keys))
+
+	for i, key := range keys {
+		value := topics[key]
+
+		cell := tview.NewTableCell(key)
+		cell.SetExpansion(1)
+		table.SetCell(i+1, 0, cell)
+		//table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprint(value.MessageCount)))
+		table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprint(value.NumPartitions)))
+		table.SetCell(i+1, 2, tview.NewTableCell(fmt.Sprint(value.ReplicationFactor)))
+
+	}
+	//table.SetTitle(m.SearchBar.CurrentResource.GetName())
 }
 
 func (r ResouceTopic) GetName() string {

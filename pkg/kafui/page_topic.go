@@ -292,10 +292,14 @@ func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex {
 func (tp *TopicPage) CreateTopicInfoSection(topicName string, topicDetail api.Topic) *tview.Flex {
 	flex := tview.NewFlex().SetDirection(tview.FlexRow)
 	flex.SetBorderPadding(0, 0, 1, 0)
+	msgCount := "n.a."
+	if topicDetail.MessageCount > 0 {
+		msgCount = fmt.Sprintf("%d", topicDetail.MessageCount)
+	}
 	//flex.SetBorder(true)
 	flex.
 		AddItem(CreatePropertyInfo("Topic Name", topicName), 0, 1, false).
-		AddItem(CreatePropertyInfo("Number of Messages", fmt.Sprint(topicDetail.MessageCount)), 0, 1, false).
+		AddItem(CreatePropertyInfo("Number of Messages", msgCount), 0, 1, false).
 		AddItem(CreatePropertyInfo("Number of Partitions", fmt.Sprint(topicDetail.NumPartitions)), 0, 1, false).
 		AddItem(CreatePropertyInfo("Replication Factor", fmt.Sprint(topicDetail.ReplicationFactor)), 0, 1, false)
 
