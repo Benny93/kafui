@@ -56,29 +56,32 @@ func (r *ResouceTopic) FetchTopics(dataSource api.KafkaDataSource) map[string]ap
 		return make(map[string]api.Topic)
 	}
 	r.LastFetchedTopics = topics
+	//fmt.Printf("topics %d", len(r.LastFetchedTopics)) //
 	//m.ShowNotification("Fetched topics...")
 	return topics
 }
 
-func (r ResouceTopic) StartFetchingData() {
+func (r *ResouceTopic) StartFetchingData() {
 	ctx, cancel := context.WithCancel(context.Background())
 	//defer cancel()
 	r.cancelFetch = cancel
 	r.UpdateTableDataRoutine(ctx, r.dataSource)
 
 }
-func (r ResouceTopic) StopFetching() {
-	r.cancelFetch()
+func (r *ResouceTopic) StopFetching() {
+	if r.cancelFetch != nil {
+		r.cancelFetch()
+	}
 }
 
-func (r ResouceTopic) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) {
+func (r *ResouceTopic) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) {
 
 	r.ShowTopicsInTable(table, r.LastFetchedTopics, search)
 	//r.ShowNotification(fmt.Sprintf("Fetched Topics ... %d", len(r.LastFetchedTopics)))
 
 }
 
-func (r ResouceTopic) ShowTopicsInTable(table *tview.Table, topics map[string]api.Topic, search string) {
+func (r *ResouceTopic) ShowTopicsInTable(table *tview.Table, topics map[string]api.Topic, search string) {
 	table.Clear()
 	table.SetCell(0, 0, tview.NewTableCell("Topic").SetTextColor(tview.Styles.SecondaryTextColor))
 	//table.SetCell(0, 1, tview.NewTableCell("Num Messages").SetTextColor(tview.Styles.SecondaryTextColor))

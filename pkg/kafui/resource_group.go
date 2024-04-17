@@ -15,18 +15,24 @@ import (
 type ResourceGroup struct {
 	onError               func(err error)
 	FetchedConsumerGroups map[string]api.ConsumerGroup
+	dataSource            api.KafkaDataSource
+	cancelFetch           func()
+	recoverFunc           func()
 }
 
-func NewResouceConsumerGroup(onError func(err error)) *ResourceGroup {
+func NewResourceGroup(onError func(err error), dataSource api.KafkaDataSource, recoverFunc func()) *ResourceGroup {
 	return &ResourceGroup{
-		onError: onError,
+		onError:               onError,
+		FetchedConsumerGroups: make(map[string]api.ConsumerGroup),
+		dataSource:            dataSource,
+		recoverFunc:           recoverFunc,
 	}
 }
 
-func (g *ResourceGroup) FetchGroupsRoutine(ctx context.Context, app *tview.Application, dataSource api.KafkaDataSource) {
+func (g *ResourceGroup) FetchGroupsRoutine(ctx context.Context, dataSource api.KafkaDataSource) {
 
 	go func() {
-		defer RecoverAndExit(app)
+		defer g.recoverFunc()
 		for {
 
 			groups := g.FetchConsumerGroups(dataSource)
@@ -57,13 +63,19 @@ func (g *ResourceGroup) FetchConsumerGroups(dataSource api.KafkaDataSource) []ap
 	}
 	return cgs
 }
-func (r ResourceGroup) StartFetchingData() {
+func (r *ResourceGroup) StartFetchingData() {
+	ctx, cancel := context.WithCancel(context.Background())
+	//defer cancel()
+	r.cancelFetch = cancel
+	r.FetchGroupsRoutine(ctx, r.dataSource)
 
 }
-func (r ResourceGroup) StopFetching() {
-
+func (r *ResourceGroup) StopFetching() {
+	if r.cancelFetch != nil {
+		r.cancelFetch()
+	}
 }
-func (r ResourceGroup) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) {
+func (r *ResourceGroup) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) {
 
 	r.ShowConsumerGroups(table, r.FetchedConsumerGroups, search)
 	//m.ShowNotification("Fetched Consumer Groups ...")

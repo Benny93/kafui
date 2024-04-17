@@ -45,6 +45,7 @@ func RecoverAndExit(app *tview.Application) {
 	if r := recover(); r != nil {
 		app.Stop()
 		fmt.Println("An error occurred:", r)
+		//debug.PrintStack()
 		fmt.Println("Application stopped.")
 	}
 }

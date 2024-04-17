@@ -119,7 +119,7 @@ func (s *SearchBar) handleResouceSearch(searchText string) {
 	}
 
 	if Contains(ConsumerGroup, searchText) {
-		s.CurrentResource = NewResouceConsumerGroup(s.onError)
+		s.CurrentResource = NewResourceGroup(s.onError, s.DataSource, func() { RecoverAndExit(s.App) })
 		match = true
 	}
 	if !match {

@@ -26,7 +26,7 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 					return event
 				}
 				switch r := (m.SearchBar.CurrentResource).(type) {
-				case ResouceTopic:
+				case *ResouceTopic:
 					row, _ := table.GetSelection()
 					topicName := table.GetCell(row, 0).Text
 
@@ -35,7 +35,7 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 					pages.SwitchToPage("topicPage")
 					consumeFlags := api.DefaultConsumeFlags()
 					topicPage.PageConsumeTopic(topicName, currentTopic, consumeFlags)
-				case ResourceContext:
+				case *ResourceContext:
 					row, _ := table.GetSelection()
 					text := table.GetCell(row, 0).Text
 					m.CurrentContextName = text
