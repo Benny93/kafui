@@ -19,7 +19,7 @@ type MainPage struct {
 	ContextInfo          *tview.InputField
 	CurrentSearchString  string
 	CurrentResource      *Resource
-	SearchBar            SearchBar
+	SearchBar            *SearchBar
 	cancelFetch          func()
 }
 
@@ -50,7 +50,7 @@ func (m *MainPage) UpdateTableRoutine(app *tview.Application, table *tview.Table
 }
 
 func (m *MainPage) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource) {
-	m.ShowNotification("Update Table..")
+	//m.ShowNotification("Update Table..")
 	resource := *m.CurrentResource
 	resource.UpdateTable(table, dataSource, m.SearchBar.CurrentString)
 	m.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount())
@@ -89,7 +89,7 @@ func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.P
 		m.UpdateTable(table, dataSource)
 	}
 
-	m.SearchBar = *NewSearchBar(table, dataSource, pages, app, modal, onSearchBarEnterFunc, errorFunc)
+	m.SearchBar = NewSearchBar(table, dataSource, pages, app, modal, onSearchBarEnterFunc, errorFunc)
 	searchInput := m.SearchBar.CreateSearchInput(msgChannel)
 	m.ContextInfo = createContextInfo()
 	//topics := m.FetchTopics(dataSource)
@@ -177,7 +177,7 @@ func (m *MainPage) ShowNotification(message string) {
 }
 
 func createNotificationTextView() *tview.TextView {
-	textView := tview.NewTextView().SetText("Notification...")
+	textView := tview.NewTextView().SetText("")
 	textView.SetBorder(false)
 	return textView
 }

@@ -49,7 +49,8 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 						defer RecoverAndExit(app)
 						m.ContextInfo.SetText(m.CurrentContextName)
 					})
-					m.switchToTopicTable(table, dataSource, app)
+					m.SearchBar.handleResouceSearch(Topic[0])
+					//m.switchToTopicTable(table, dataSource, app)
 
 				}
 
