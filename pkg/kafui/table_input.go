@@ -25,6 +25,7 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 				if r == 0 {
 					return event
 				}
+
 				switch r := (m.SearchBar.CurrentResource).(type) {
 				case *ResouceTopic:
 					row, _ := table.GetSelection()
@@ -41,7 +42,7 @@ func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, p
 					m.CurrentContextName = text
 					err := dataSource.SetContext(m.CurrentContextName)
 					if err != nil {
-						m.ShowNotification(fmt.Sprintf("Failed to swtich context %s", err))
+						m.ShowNotification(fmt.Sprintf("Failed to swtich context '%s' in row '%d' : %v", text, row, err))
 						return event
 					}
 					m.ShowNotification(fmt.Sprintf("Switched to context %s", m.CurrentContextName))

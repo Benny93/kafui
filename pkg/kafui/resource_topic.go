@@ -55,9 +55,8 @@ func (r *ResouceTopic) FetchTopics(dataSource api.KafkaDataSource) map[string]ap
 		r.onError(err)
 		return make(map[string]api.Topic)
 	}
-	r.LastFetchedTopics = topics
-	//fmt.Printf("topics %d", len(r.LastFetchedTopics)) //
-	//m.ShowNotification("Fetched topics...")
+	//r.LastFetchedTopics = topics
+
 	return topics
 }
 
