@@ -110,7 +110,7 @@ func (s *SearchBar) handleResouceSearch(searchText string) {
 	match := false
 	if Contains(Context, searchText) {
 		match = true
-		s.CurrentResource = NewResourceContext(s.onError)
+		s.CurrentResource = NewResourceContext(s.DataSource, s.onError, func() { RecoverAndExit(s.App) })
 	}
 
 	if Contains(Topic, searchText) {

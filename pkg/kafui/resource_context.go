@@ -15,19 +15,24 @@ type ResourceContext struct {
 	onError         func(err error)
 	FetchedContexts map[string]string
 	Name            string
+	dataSource      api.KafkaDataSource
+	cancelFetch     func()
+	recoverFunc     func()
 }
 
-func NewResourceContext(onError func(err error)) *ResourceContext {
+func NewResourceContext(dataSource api.KafkaDataSource, onError func(err error), recoverFunc func()) *ResourceContext {
 	return &ResourceContext{
-		onError: onError,
-		Name:    "Context",
+		onError:     onError,
+		Name:        "Context",
+		dataSource:  dataSource,
+		recoverFunc: recoverFunc,
 	}
 }
 
-func (c *ResourceContext) FetchContextRoutine(ctx context.Context, app *tview.Application, dataSource api.KafkaDataSource) {
+func (c *ResourceContext) FetchContextRoutine(ctx context.Context, dataSource api.KafkaDataSource) {
 
 	go func() {
-		defer RecoverAndExit(app)
+		defer c.recoverFunc()
 		for {
 
 			f := c.FetchContexts(dataSource) //TODO create struct for context holding more information
@@ -58,13 +63,19 @@ func (rc *ResourceContext) FetchContexts(dataSource api.KafkaDataSource) []strin
 	}
 	return contexts
 }
-func (r ResourceContext) StartFetchingData() {
+func (r *ResourceContext) StartFetchingData() {
+	ctx, cancel := context.WithCancel(context.Background())
+	//defer cancel()
+	r.cancelFetch = cancel
+	r.FetchContextRoutine(ctx, r.dataSource)
 
 }
-func (r ResourceContext) StopFetching() {
-
+func (r *ResourceContext) StopFetching() {
+	if r.cancelFetch != nil {
+		r.cancelFetch()
+	}
 }
-func (r ResourceContext) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) {
+func (r *ResourceContext) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) {
 
 	r.ShowContextsInTable(table, r.FetchedContexts, search)
 	//m.ShowNotification("Fetched Contexts ...")

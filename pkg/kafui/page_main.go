@@ -53,7 +53,7 @@ func (m *MainPage) UpdateTable(table *tview.Table, dataSource api.KafkaDataSourc
 	m.ShowNotification("Update Table..")
 	resource := *m.CurrentResource
 	resource.UpdateTable(table, dataSource, m.SearchBar.CurrentString)
-	m.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount()-1) //-1 because of header
+	m.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount())
 }
 
 func (m *MainPage) switchToTopicTable(table *tview.Table, dataSource api.KafkaDataSource, app *tview.Application) {
