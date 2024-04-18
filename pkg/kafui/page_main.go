@@ -20,7 +20,6 @@ type MainPage struct {
 	CurrentSearchString  string
 	CurrentResource      *Resource
 	SearchBar            *SearchBar
-	cancelFetch          func()
 }
 
 func NewMainPage() *MainPage {
@@ -54,16 +53,6 @@ func (m *MainPage) UpdateTable(table *tview.Table, dataSource api.KafkaDataSourc
 	resource := *m.CurrentResource
 	resource.UpdateTable(table, dataSource, m.SearchBar.CurrentString)
 	m.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount())
-}
-
-func (m *MainPage) switchToTopicTable(table *tview.Table, dataSource api.KafkaDataSource, app *tview.Application) {
-	//table.Clear()
-	//topics := m.FetchTopics(dataSource)
-	//m.ShowTopicsInTable(table, topics)
-	m.SearchBar.CurrentResource = NewResouceTopic(dataSource, m.SearchBar.onError, func() { RecoverAndExit(app) })
-	m.ShowNotification("Fetched Topics ...")
-	m.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount())
-	app.SetFocus(table)
 }
 
 func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, msgChannel chan UIEvent) *tview.Flex {
@@ -199,7 +188,7 @@ func (m *MainPage) UpdateMidFlexTitle(currentResouce string, amount int) {
 func (m *MainPage) FetchConsumerGroups(dataSource api.KafkaDataSource) []api.ConsumerGroup {
 	cgs, err := dataSource.GetConsumerGroups()
 	if err != nil {
-		m.ShowNotification(fmt.Sprintf("Error fetching GetConsumerGroups:", err))
+		m.ShowNotification(fmt.Sprintf("Error fetching GetConsumerGroups: %v", err))
 		return []api.ConsumerGroup{}
 	}
 	return cgs
@@ -208,7 +197,7 @@ func (m *MainPage) FetchConsumerGroups(dataSource api.KafkaDataSource) []api.Con
 func (m *MainPage) FetchContexts(dataSource api.KafkaDataSource) []string {
 	contexts, err := dataSource.GetContexts()
 	if err != nil {
-		m.ShowNotification(fmt.Sprintf("Error fetching contexts:", err))
+		m.ShowNotification(fmt.Sprintf("Error fetching contexts: %v", err))
 		return []string{}
 	}
 	return contexts

@@ -49,7 +49,7 @@ func (s *SearchBar) CreateSearchInput(msgChannel chan UIEvent) *tview.InputField
 	s.SearchInput.SetBorder(true).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
 	//searchInput.SetFieldBackgroundColor(tcell.ColorBlack)
 	selectedStyle := tcell.Style{}
-	selectedStyle.Background(tcell.ColorWhite)
+
 	s.SearchInput.SetAutocompleteStyles(tcell.ColorBlue, tcell.Style{}, selectedStyle)
 	searchText := ""
 
