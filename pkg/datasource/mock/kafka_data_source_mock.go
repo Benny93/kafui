@@ -14,7 +14,7 @@ type KafkaDataSourceMock struct {
 	// Additional fields can be added here if needed
 }
 
-func (kp KafkaDataSourceMock) Init() {
+func (kp KafkaDataSourceMock) Init(cfgOption string) {
 	// nothing todo here
 }
 

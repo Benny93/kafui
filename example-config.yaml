@@ -1,0 +1,12 @@
+current-cluster: local
+clusteroverride: ""
+clusters:
+- name: local
+  version: ""
+  brokers:
+  - localhost:9092
+  SASL: null
+  TLS: null
+  security-protocol: ""
+  schema-registry-url: ""
+  schema-registry-credentials: null

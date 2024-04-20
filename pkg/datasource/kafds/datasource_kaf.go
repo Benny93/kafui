@@ -12,7 +12,6 @@ import (
 	"sort"
 
 	"github.com/Benny93/kafui/pkg/api"
-
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/avro"
 	"github.com/birdayz/kaf/pkg/config"
@@ -26,7 +25,10 @@ type KafkaDataSourceKaf struct {
 
 var cfgFile string
 
-func (kp KafkaDataSourceKaf) Init() {
+func (kp *KafkaDataSourceKaf) Init(cfgOption string) {
+	if cfgOption != "" {
+		cfgFile = cfgOption
+	}
 	onInit()
 }
 

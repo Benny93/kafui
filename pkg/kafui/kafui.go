@@ -8,15 +8,15 @@ import (
 	"github.com/Benny93/kafui/pkg/datasource/mock"
 )
 
-func Init(useMock bool) {
+func Init(cfgOption string, useMock bool) {
 
 	fmt.Println("Init...")
 	var dataSource api.KafkaDataSource
 
 	dataSource = mock.KafkaDataSourceMock{}
 	if !useMock {
-		dataSource = kafds.KafkaDataSourceKaf{}
+		dataSource = &kafds.KafkaDataSourceKaf{}
 	}
-	dataSource.Init()
+	dataSource.Init(cfgOption)
 	OpenUI(dataSource)
 }

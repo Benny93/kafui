@@ -47,7 +47,7 @@ type ConsumerGroup struct {
 type MessageHandlerFunc func(msg Message)
 
 type KafkaDataSource interface {
-	Init()
+	Init(cfgOption string)
 	GetTopics() (map[string]Topic, error)
 	GetContexts() ([]string, error)
 	GetContext() string

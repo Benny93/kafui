@@ -5,6 +5,21 @@ It uses the same configuration file as kaf so you can use your existing kaf conf
 
 ![asciicinema](asciicinema.gif)
 
+## Usage
+
+```bash
+$ go run main.go -h
+Explore different kafka broker in a k9s fashion with quick switches between topics, consumer groups and brokers
+
+Usage:
+  kafui [flags]
+
+Flags:
+      --config string   config file (default is $HOME/.kaf/config)
+  -h, --help            help for kafui
+      --mock            Enable mock mode: Display mock data to test various functions without a real kafka broker
+```
+
 ## Install
 
 ### Homebrew
