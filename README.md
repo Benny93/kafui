@@ -22,6 +22,14 @@ Flags:
 
 ## Install
 
+### Winget
+
+On windows you can install kafui using the following
+
+```bash
+winget install kafui
+```
+
 ### Homebrew
 
 If you're using Homebrew on macOS or Linux, you can easily install `kafui` using the following commands:
