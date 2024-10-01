@@ -1,4 +1,4 @@
-version: 1
+version: 2
 
 before:
   hooks:
@@ -107,9 +107,9 @@ brews:
     #
     # Templates: allowed
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
-
-    # Folder inside the repository to put the formula.
-    folder: Formula
+    
+    # Directory inside the repository to put the formula.
+    directory: Formula
 
     # Caveats for the user of your binary.
     caveats: "Run using kafui"

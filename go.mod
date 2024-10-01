@@ -9,7 +9,6 @@ require (
 	github.com/TylerBrock/colorjson v0.0.0-20200706003622-8a50f05110d2
 	github.com/atotto/clipboard v0.1.4
 	github.com/birdayz/kaf v0.2.7
-	github.com/fvbommel/sortorder v1.1.0
 	github.com/gdamore/tcell/v2 v2.6.1-0.20231203215052-2917c3801e73
 	github.com/golang/protobuf v1.5.3
 	github.com/hokaccha/go-prettyjson v0.0.0-20190818114111-108c894c2c0e
