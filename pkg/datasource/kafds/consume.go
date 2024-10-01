@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/Benny93/kafui/pkg/api"
-
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/avro"
 	"github.com/birdayz/kaf/pkg/proto"
@@ -69,8 +68,14 @@ var handler api.MessageHandlerFunc // todo remove global var
 
 func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) {
 	var offset int64
-	cfg := getConfig()
-	client := getClientFromConfig(cfg)
+	cfg, err := getConfig()
+	if err != nil {
+		onError(err)
+	}
+	client, err := getClientFromConfig(cfg)
+	if err != nil {
+		onError(err)
+	}
 	handler = handleMessage
 	// Allow deprecated flag to override when outputFormat is not specified, or default.
 	if outputFormat == OutputFormatDefault && raw {
@@ -90,7 +95,7 @@ func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags,
 	default:
 		o, err := strconv.ParseInt(offsetFlag, 10, 64)
 		if err != nil {
-			errorExit("Could not parse '%s' to int64: %w", offsetFlag, err)
+			onError(err)
 		}
 		offset = o
 	}
@@ -125,18 +130,17 @@ func (g *g) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGro
 	return nil
 }
 
-func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) {
+func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) error {
 	cg, err := sarama.NewConsumerGroupFromClient(group, client)
 	if err != nil {
-		errorExit("Failed to create consumer group: %v", err)
+		return fmt.Errorf("Failed to create consumer group: %v", err)
 	}
-
-	schemaCache = getSchemaCache()
 
 	err = cg.Consume(ctx, []string{topic}, &g{})
 	if err != nil {
-		errorExit("Error on consume: %v", err)
+		return fmt.Errorf("Error on consume: %v", err)
 	}
+	return nil
 }
 
 func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) {
@@ -157,8 +161,6 @@ func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic strin
 		partitions = flagPartitions
 	}
 
-	schemaCache = getSchemaCache()
-
 	wg := sync.WaitGroup{}
 	mu := sync.Mutex{} // Synchronizes stderr and stdout.
 	for _, partition := range partitions {
@@ -175,7 +177,7 @@ func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic strin
 
 			offsets, err := getOffsets(client, topic, partition)
 			if err != nil {
-				errorExit("Failed to get %s offsets for partition %d: %w", topic, partition, err)
+				onError(fmt.Errorf("Failed to get %s offsets for partition %d: %w", topic, partition, err))
 			}
 
 			if tail != 0 {
@@ -192,7 +194,7 @@ func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic strin
 
 			pc, err := consumer.ConsumePartition(topic, partition, offset)
 			if err != nil {
-				errorExit("Unable to consume partition: %v %v %v %v\n", topic, partition, offset, err)
+				onError(fmt.Errorf("Unable to consume partition: %v %v %v %v\n", topic, partition, offset, err))
 			}
 
 			var count int64 = 0

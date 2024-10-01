@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/Benny93/kafui/pkg/api"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
 )
 
 var currentTopic api.Topic
@@ -106,8 +106,7 @@ func OpenUI(dataSource api.KafkaDataSource) {
 	defer RecoverAndExit(tviewApp)
 
 	if err := tviewApp.SetRoot(pages, true).EnableMouse(false).Run(); err != nil {
-		fmt.Println("Run ended in panic")
-		panic(err)
+		fmt.Printf("Exited with error: %v\n", err)
 	}
 }
 

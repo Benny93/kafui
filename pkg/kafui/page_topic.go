@@ -11,7 +11,6 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/gdamore/tcell/v2"
-
 	"github.com/rivo/tview"
 )
 
@@ -166,6 +165,7 @@ func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, 
 	tp.ShowNotification("Consuming messages...")
 
 	tp.consumedMessages = make(map[string]api.Message)
+
 	go func() {
 		defer RecoverAndExit(tp.app)
 		tp.app.QueueUpdateDraw(func() {
@@ -174,12 +174,10 @@ func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, 
 		handlerFunc := tp.getHandler()
 		ctx, cancel := context.WithCancel(context.Background())
 		tp.cancelConsumption = cancel
-		err := tp.dataSource.ConsumeTopic(ctx, topicName, tp.consumeFlags, handlerFunc, func(err any) {
+		_ = tp.dataSource.ConsumeTopic(ctx, topicName, tp.consumeFlags, handlerFunc, func(err any) {
 			tp.ShowNotification(fmt.Sprintf("Error consuming messages: %s", err))
 		})
-		if err != nil {
-			panic("Error consume messages!")
-		}
+		// TODO: handle error on consumption
 	}()
 	ctx, c := context.WithCancel(context.Background())
 	tp.cancelRefresh = c

@@ -35,7 +35,10 @@ func (kp *KafkaDataSourceKaf) Init(cfgOption string) {
 // GetTopics retrieves a list of Kafka topics
 func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) {
 
-	admin := getClusterAdmin()
+	admin, err := getClusterAdmin()
+	if err != nil {
+		return nil, err
+	}
 	topicDetails, err := admin.ListTopics()
 	if err != nil {
 		return nil, err
@@ -113,11 +116,14 @@ func (kp KafkaDataSourceKaf) SetContext(contextName string) error {
 }
 
 func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) {
-	admin := getClusterAdmin()
+	admin, err := getClusterAdmin()
+	if err != nil {
+		return nil, err
+	}
 
 	groups, err := admin.ListConsumerGroups()
 	if err != nil {
-		errorExit("Unable to list consumer groups: %v\n", err)
+		return nil, err
 	}
 
 	groupList := make([]string, 0, len(groups))
@@ -131,7 +137,7 @@ func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 
 	groupDescs, err := admin.DescribeConsumerGroups(groupList)
 	if err != nil {
-		errorExit("Unable to describe consumer groups: %v\n", err)
+		return nil, fmt.Errorf("Unable to describe consumer groups: %v\n", err)
 	}
 
 	finalGroups := make([]api.ConsumerGroup, 0, len(groupDescs))
@@ -152,7 +158,10 @@ func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 
 func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error {
 
-	admin := getClusterAdmin()
+	admin, err := getClusterAdmin()
+	if err != nil {
+		return err
+	}
 	topicDetails, _ := admin.ListTopics()
 
 	keys := make([]string, 0, len(topicDetails))
@@ -166,7 +175,7 @@ func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string,
 	return nil
 }
 
-func getConfig() (saramaConfig *sarama.Config) {
+func getConfig() (saramaConfig *sarama.Config, e error) {
 	saramaConfig = sarama.NewConfig()
 	saramaConfig.Version = sarama.V1_1_0_0
 	saramaConfig.Producer.Return.Successes = true
@@ -175,7 +184,7 @@ func getConfig() (saramaConfig *sarama.Config) {
 	if cluster.Version != "" {
 		parsedVersion, err := sarama.ParseKafkaVersion(cluster.Version)
 		if err != nil {
-			errorExit("Unable to parse Kafka version: %v\n", err)
+			return nil, fmt.Errorf("Unable to parse Kafka version: %v\n", err)
 		}
 		saramaConfig.Version = parsedVersion
 	}
@@ -196,7 +205,7 @@ func getConfig() (saramaConfig *sarama.Config) {
 		if cluster.TLS.Cafile != "" {
 			caCert, err := ioutil.ReadFile(cluster.TLS.Cafile)
 			if err != nil {
-				errorExit("Unable to read Cafile :%v\n", err)
+				return nil, fmt.Errorf("Unable to read Cafile :%v\n", err)
 			}
 			caCertPool := x509.NewCertPool()
 			caCertPool.AppendCertsFromPEM(caCert)
@@ -206,16 +215,16 @@ func getConfig() (saramaConfig *sarama.Config) {
 		if cluster.TLS.Clientfile != "" && cluster.TLS.Clientkeyfile != "" {
 			clientCert, err := ioutil.ReadFile(cluster.TLS.Clientfile)
 			if err != nil {
-				errorExit("Unable to read Clientfile :%v\n", err)
+				return nil, fmt.Errorf("Unable to read Clientfile :%v\n", err)
 			}
 			clientKey, err := ioutil.ReadFile(cluster.TLS.Clientkeyfile)
 			if err != nil {
-				errorExit("Unable to read Clientkeyfile :%v\n", err)
+				return nil, fmt.Errorf("Unable to read Clientkeyfile :%v\n", err)
 			}
 
 			cert, err := tls.X509KeyPair([]byte(clientCert), []byte(clientKey))
 			if err != nil {
-				errorExit("Unable to create KeyPair: %v\n", err)
+				return nil, fmt.Errorf("Unable to create KeyPair: %v\n", err)
 			}
 			tlsConfig.Certificates = []tls.Certificate{cert}
 
@@ -260,7 +269,7 @@ func getConfig() (saramaConfig *sarama.Config) {
 
 		}
 	}
-	return saramaConfig
+	return saramaConfig, nil
 }
 
 var (
@@ -335,7 +344,7 @@ func onInit() {
 	var err error
 	cfg, err = config.ReadConfig(cfgFile)
 	if err != nil {
-		errorExit("Invalid config: %v", err)
+		panic(err)
 	}
 
 	cfg.ClusterOverride = clusterOverride
@@ -366,34 +375,42 @@ func onInit() {
 	}
 }
 
-func getClusterAdmin() (admin sarama.ClusterAdmin) {
-	clusterAdmin, err := sarama.NewClusterAdmin(currentCluster.Brokers, getConfig())
+func getClusterAdmin() (admin sarama.ClusterAdmin, e error) {
+	cfg, err := getConfig()
 	if err != nil {
-		errorExit("Unable to get cluster admin: %v\n", err)
+		return nil, err
+	}
+	clusterAdmin, err := sarama.NewClusterAdmin(currentCluster.Brokers, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get cluster admin: %v\n", err)
 	}
 
-	return clusterAdmin
+	return clusterAdmin, nil
 }
 
-func getClient() (client sarama.Client) {
-	client, err := sarama.NewClient(currentCluster.Brokers, getConfig())
+func getClient() (client sarama.Client, e error) {
+	cfg, err := getConfig()
 	if err != nil {
-		errorExit("Unable to get client: %v\n", err)
+		return nil, err
 	}
-	return client
+	client, err = sarama.NewClient(currentCluster.Brokers, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get client: %v\n", err)
+	}
+	return client, nil
 }
 
-func getClientFromConfig(config *sarama.Config) (client sarama.Client) {
+func getClientFromConfig(config *sarama.Config) (sarama.Client, error) {
 	client, err := sarama.NewClient(currentCluster.Brokers, config)
 	if err != nil {
-		errorExit("Unable to get client: %v\n", err)
+		return nil, fmt.Errorf("Unable to get client: %v\n", err)
 	}
-	return client
+	return client, nil
 }
 
-func getSchemaCache() (cache *avro.SchemaCache) {
+func getSchemaCache() (cache *avro.SchemaCache, er error) {
 	if currentCluster.SchemaRegistryURL == "" {
-		return nil
+		return nil, nil
 	}
 	var username, password string
 	if creds := currentCluster.SchemaRegistryCredentials; creds != nil {
@@ -402,13 +419,7 @@ func getSchemaCache() (cache *avro.SchemaCache) {
 	}
 	cache, err := avro.NewSchemaCache(currentCluster.SchemaRegistryURL, username, password)
 	if err != nil {
-		errorExit("Unable to get schema cache :%v\n", err)
+		return nil, err
 	}
-	return cache
-}
-
-func errorExit(format string, a ...interface{}) {
-
-	txt := fmt.Sprintf(format+"\n", a...)
-	panic(txt)
+	return cache, nil
 }

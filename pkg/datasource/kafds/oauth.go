@@ -2,6 +2,7 @@ package kafds
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -69,7 +70,7 @@ func newTokenProvider() *tokenProvider {
 			// get first token
 			firstToken, err := tokenProv.oauthClientCFG.Token(ctx)
 			if err != nil {
-				errorExit("Could not fetch OAUTH token: " + err.Error())
+				panic(fmt.Errorf("Could not fetch OAUTH token: " + err.Error()))
 			}
 			tokenProv.currentToken = firstToken.AccessToken
 			tokenProv.expiresAt = firstToken.Expiry
