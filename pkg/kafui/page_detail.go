@@ -16,6 +16,7 @@ type DetailPage struct {
 	pages         *tview.Pages
 	headers       api.MessageHeaders
 	value         string
+	showHeaders		bool
 	headerTable   *tview.Table
 	valueTextView *tview.TextView
 }
@@ -23,35 +24,23 @@ type DetailPage struct {
 func NewDetailPage(app *tview.Application, pages *tview.Pages, headers api.MessageHeaders, value string) *DetailPage {
 
 	headerTable := tview.NewTable().
-		SetBorders(true)
+		SetBorders(false)
 	headerTable.SetTitle("Headers")
 	headerTable.SetBorderColor(tcell.ColorWhite.TrueColor())
+	headerTable.SetBorderPadding(0,0,0,0)
 
 	for r, header := range headers {
 		key := tview.NewTableCell(header.Key)
 		key.SetText(header.Key)
-		key.SetTextColor(tcell.ColorWhite)
+		key.SetTextColor(tcell.ColorOrange)
 		value := tview.NewTableCell(header.Value)
 		value.SetText(header.Value)
 		value.SetTextColor(tcell.ColorWhite)
-
+		value.SetExpansion(1)
+	
 		headerTable.SetCell(r, 0, key)
 		headerTable.SetCell(r, 1, value)
 	}
-
-	//headerTextView := tview.NewTextView().
-	//	SetTextAlign(tview.AlignLeft).
-	//	SetDynamicColors(false).
-	//	SetWordWrap(false)
-	//headerTextView.SetTextColor(tcell.ColorWhite)
-	//headerTextView.SetBorder(true)
-	//
-	//headerText := ""
-	//for _, header := range headers {
-	//	headerText += fmt.Sprintf("%s: %s\n", header.Key, header.Value)
-	//}
-
-	//headerTextView.SetText(headerText)
 
 	valueTextView := tview.NewTextView().
 		//SetText("Placeholder :)").
@@ -79,6 +68,7 @@ func NewDetailPage(app *tview.Application, pages *tview.Pages, headers api.Messa
 		pages:         pages,
 		headers:       headers,
 		value:         value,
+		showHeaders:   false,
 		headerTable:   headerTable,
 		valueTextView: valueTextView,
 	}
@@ -91,8 +81,12 @@ func (vp *DetailPage) Show() {
 	//SetDirection(tview.FlexRow).
 	//AddItem(tview.NewTextView().SetText("Message Value").SetTextAlign(tview.AlignCenter), 1, 0, false).
 	//AddItem(tview.NewTextView(), 2, 1, false)
-	valueFlex.AddItem(vp.CreateInputLegend(), 5, 1, false)
-	valueFlex.AddItem(vp.headerTable, len(vp.headers)*3+2, 1, false)
+
+	legend := vp.CreateInputLegend()
+	valueFlex.AddItem(legend, 6, 1, false)
+	if vp.showHeaders {
+		valueFlex.AddItem(vp.headerTable, len(vp.headers), 1, false)
+	}
 	//valueFlex.AddItem(vp.headerTextView, len(vp.headers), 1, false)
 	// Add the TextView to the flex layout
 	valueFlex.AddItem(vp.valueTextView, 0, 1, true)
@@ -117,6 +111,12 @@ func (vp *DetailPage) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		clipboard.WriteAll(vp.valueTextView.GetText(true))
 		// Show a notification that the content has been copied
 		vp.showCopiedNotification()
+		return nil
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'h' && vp.valueTextView.HasFocus() {
+		vp.showHeaders = ! vp.showHeaders
+		vp.Hide()
+		vp.Show()
 		return nil
 	}
 	return event
@@ -161,6 +161,7 @@ func (vp *DetailPage) CreateInputLegend() *tview.Flex {
 	left.AddItem(CreateRunInfo("g", "Scroll to top"), 0, 1, false)
 	left.AddItem(CreateRunInfo("G", "Scroll to bottom"), 0, 1, false)
 	left.AddItem(CreateRunInfo("c", "Copy content"), 0, 1, false)
+	left.AddItem(CreateRunInfo("h", "Toggle headers") ,0, 1, false)
 	//right.AddItem(CreateRunInfo("Enter", "Show value"), 0, 1, false)
 	right.AddItem(CreateRunInfo("Esc", "Go Back"), 0, 1, false)
 
