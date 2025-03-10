@@ -270,8 +270,19 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 	//fmt.Fprintln(outWriter)
 	keySchema := getSchemaIdIfPresent(msg.Key)
 	valueSchema := getSchemaIdIfPresent(msg.Value)
+	headers := make([]api.MessageHeader, 0)
+	for _, saramaHeader := range msg.Headers {
+		header := api.MessageHeader{
+			Key:   string(saramaHeader.Key),
+			Value: string(saramaHeader.Value),
+		}
+		headers = append(headers, header)
+	}
+
 	newMessage := api.Message{
+
 		Key:           string(keyToDisplay),
+		Headers:       headers,
 		Value:         string(dataToDisplay),
 		Offset:        msg.Offset,
 		Partition:     msg.Partition,
