@@ -210,7 +210,8 @@ func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey 
 			// Display the value content in a new page
 			if row > 0 {
 				msgv := tp.consumedMessages[key].Value
-				tp.messageDetailPage = NewDetailPage(tp.app, tp.pages, msgv)
+				msgh := tp.consumedMessages[key].Headers
+				tp.messageDetailPage = NewDetailPage(tp.app, tp.pages, msgh, msgv)
 				tp.messageDetailPage.Show()
 			}
 		}

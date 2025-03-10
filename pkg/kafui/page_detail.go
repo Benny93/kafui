@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/Benny93/kafui/pkg/api"
 	"github.com/TylerBrock/colorjson"
 	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
@@ -13,11 +14,44 @@ import (
 type DetailPage struct {
 	app           *tview.Application
 	pages         *tview.Pages
+	headers       api.MessageHeaders
 	value         string
+	headerTable   *tview.Table
 	valueTextView *tview.TextView
 }
 
-func NewDetailPage(app *tview.Application, pages *tview.Pages, value string) *DetailPage {
+func NewDetailPage(app *tview.Application, pages *tview.Pages, headers api.MessageHeaders, value string) *DetailPage {
+
+	headerTable := tview.NewTable().
+		SetBorders(true)
+	headerTable.SetTitle("Headers")
+	headerTable.SetBorderColor(tcell.ColorWhite.TrueColor())
+
+	for r, header := range headers {
+		key := tview.NewTableCell(header.Key)
+		key.SetText(header.Key)
+		key.SetTextColor(tcell.ColorWhite)
+		value := tview.NewTableCell(header.Value)
+		value.SetText(header.Value)
+		value.SetTextColor(tcell.ColorWhite)
+
+		headerTable.SetCell(r, 0, key)
+		headerTable.SetCell(r, 1, value)
+	}
+
+	//headerTextView := tview.NewTextView().
+	//	SetTextAlign(tview.AlignLeft).
+	//	SetDynamicColors(false).
+	//	SetWordWrap(false)
+	//headerTextView.SetTextColor(tcell.ColorWhite)
+	//headerTextView.SetBorder(true)
+	//
+	//headerText := ""
+	//for _, header := range headers {
+	//	headerText += fmt.Sprintf("%s: %s\n", header.Key, header.Value)
+	//}
+
+	//headerTextView.SetText(headerText)
 
 	valueTextView := tview.NewTextView().
 		//SetText("Placeholder :)").
@@ -43,7 +77,9 @@ func NewDetailPage(app *tview.Application, pages *tview.Pages, value string) *De
 	return &DetailPage{
 		app:           app,
 		pages:         pages,
+		headers:       headers,
 		value:         value,
+		headerTable:   headerTable,
 		valueTextView: valueTextView,
 	}
 }
@@ -56,10 +92,13 @@ func (vp *DetailPage) Show() {
 	//AddItem(tview.NewTextView().SetText("Message Value").SetTextAlign(tview.AlignCenter), 1, 0, false).
 	//AddItem(tview.NewTextView(), 2, 1, false)
 	valueFlex.AddItem(vp.CreateInputLegend(), 5, 1, false)
+	valueFlex.AddItem(vp.headerTable, len(vp.headers)*3+2, 1, false)
+	//valueFlex.AddItem(vp.headerTextView, len(vp.headers), 1, false)
 	// Add the TextView to the flex layout
 	valueFlex.AddItem(vp.valueTextView, 0, 1, true)
 
 	// Add the value page to the pages container
+
 	vp.pages.AddPage("DetailPage", valueFlex, true, true)
 
 	vp.valueTextView.SetInputCapture(vp.handleInput)
