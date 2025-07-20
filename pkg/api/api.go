@@ -2,6 +2,12 @@ package api
 
 import "context"
 
+type MessageHeader struct {
+	Key   string
+	Value string
+}
+type MessageHeaders []MessageHeader
+
 type Message struct {
 	Key           string
 	Value         string
@@ -9,7 +15,9 @@ type Message struct {
 	Partition     int32
 	KeySchemaID   string
 	ValueSchemaID string
+	Headers       []MessageHeader
 }
+
 type Topic struct {
 	// NumPartitions contains the number of partitions to create in the topic
 	NumPartitions int32

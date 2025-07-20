@@ -6,7 +6,6 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
 )
 
 var currentTopic api.Topic
