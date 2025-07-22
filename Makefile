@@ -17,6 +17,16 @@ release:
 	goreleaser --clean
 release-snapshot:
 	goreleaser --clean --snapshot
+test:
+	go test -v -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+test-short:
+	go test -short -v ./...
+test-integration:
+	go test -v ./pkg/kafui/ -run "TestInit|TestDataSourceSwitching|TestConsumeTopicIntegration|TestConfigurationIntegration|TestUIWorkflowIntegration"
+test-benchmarks:
+	go test -bench=. -benchmem ./pkg/kafui/ -run "^$$"
 run-kafka:
 	cd example/dockercompose/ && docker compose up -d
 stop-kafka:
