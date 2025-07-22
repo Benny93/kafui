@@ -34,14 +34,23 @@ func (m *MainPage) CurrentTimeString() string {
 }
 
 func (m *MainPage) UpdateTableRoutine(app *tview.Application, table *tview.Table, timerView *tview.TextView, dataSource api.KafkaDataSource) {
-	defer RecoverAndExit(app)
+	defer func() {
+		if app != nil {
+			RecoverAndExit(app)
+		}
+	}()
 	for {
+		if app == nil {
+			return
+		}
 
 		app.QueueUpdateDraw(func() {
-
-			timerView.SetText(m.CurrentTimeString())
-			m.UpdateTable(table, dataSource)
-
+			if timerView != nil {
+				timerView.SetText(m.CurrentTimeString())
+			}
+			if table != nil && dataSource != nil {
+				m.UpdateTable(table, dataSource)
+			}
 		})
 
 		time.Sleep(refreshIntervalTable)
