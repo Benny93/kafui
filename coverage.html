@@ -1,0 +1,3056 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>kafui: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/Benny93/kafui/cmd/kafui/root.go (0.0%)</option>
+				
+				<option value="file1">github.com/Benny93/kafui/main.go (0.0%)</option>
+				
+				<option value="file2">github.com/Benny93/kafui/pkg/api/api.go (100.0%)</option>
+				
+				<option value="file3">github.com/Benny93/kafui/pkg/datasource/kafds/consume.go (0.0%)</option>
+				
+				<option value="file4">github.com/Benny93/kafui/pkg/datasource/kafds/datasource_kaf.go (3.2%)</option>
+				
+				<option value="file5">github.com/Benny93/kafui/pkg/datasource/kafds/oauth.go (0.0%)</option>
+				
+				<option value="file6">github.com/Benny93/kafui/pkg/datasource/kafds/scram_client.go (90.0%)</option>
+				
+				<option value="file7">github.com/Benny93/kafui/pkg/datasource/mock/kafka_data_source_mock.go (100.0%)</option>
+				
+				<option value="file8">github.com/Benny93/kafui/pkg/kafui/helper.go (94.4%)</option>
+				
+				<option value="file9">github.com/Benny93/kafui/pkg/kafui/kafui.go (0.0%)</option>
+				
+				<option value="file10">github.com/Benny93/kafui/pkg/kafui/page_detail.go (76.8%)</option>
+				
+				<option value="file11">github.com/Benny93/kafui/pkg/kafui/page_main.go (72.7%)</option>
+				
+				<option value="file12">github.com/Benny93/kafui/pkg/kafui/page_topic.go (8.5%)</option>
+				
+				<option value="file13">github.com/Benny93/kafui/pkg/kafui/resource_context.go (100.0%)</option>
+				
+				<option value="file14">github.com/Benny93/kafui/pkg/kafui/resource_group.go (100.0%)</option>
+				
+				<option value="file15">github.com/Benny93/kafui/pkg/kafui/resource_topic.go (100.0%)</option>
+				
+				<option value="file16">github.com/Benny93/kafui/pkg/kafui/search_bar.go (69.4%)</option>
+				
+				<option value="file17">github.com/Benny93/kafui/pkg/kafui/table_input.go (29.2%)</option>
+				
+				<option value="file18">github.com/Benny93/kafui/pkg/kafui/ui.go (17.4%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package cmd
+
+import (
+        "github.com/Benny93/kafui/pkg/kafui"
+        "github.com/spf13/cobra"
+)
+
+var cfgFile string
+
+func DoExecute() <span class="cov0" title="0">{
+        rootCmd := &amp;cobra.Command{
+                Use:   "kafui",
+                Short: "k9s style kafka explorer",
+                Long:  "Explore different kafka broker in a k9s fashion with quick switches between topics, consumer groups and brokers",
+                Run: func(cmd *cobra.Command, args []string) </span><span class="cov0" title="0">{
+                        mock, _ := cmd.Flags().GetBool("mock")
+                        kafui.Init(cfgFile, mock)
+                }</span>,
+        }
+
+        // Add flags to root command
+        <span class="cov0" title="0">rootCmd.PersistentFlags().Bool("mock", false, "Enable mock mode: Display mock data to test various functions without a real kafka broker")
+        rootCmd.PersistentFlags().StringVar(&amp;cfgFile, "config", "", "config file (default is $HOME/.kaf/config)")
+        if err := rootCmd.Execute(); err != nil </span><span class="cov0" title="0">{
+                panic(err)</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package main
+
+import (
+        "github.com/Benny93/kafui/cmd/kafui"
+)
+
+func main() <span class="cov0" title="0">{
+        cmd.DoExecute()
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package api
+
+import "context"
+
+type MessageHeader struct {
+        Key   string
+        Value string
+}
+type MessageHeaders []MessageHeader
+
+type Message struct {
+        Key           string
+        Value         string
+        Offset        int64
+        Partition     int32
+        KeySchemaID   string
+        ValueSchemaID string
+        Headers       []MessageHeader
+}
+
+type Topic struct {
+        // NumPartitions contains the number of partitions to create in the topic
+        NumPartitions int32
+        // ReplicationFactor contains the number of replicas to create for each partition
+        ReplicationFactor int16
+        // ReplicaAssignment contains the manual partition assignment, or the empty
+        // array if we are using automatic assignment.
+        ReplicaAssignment map[int32][]int32
+        // ConfigEntries contains the custom topic configurations to set.
+        ConfigEntries map[string]*string
+        // Num of messages in the topic across all partitions
+        MessageCount int64
+}
+
+type ConsumeFlags struct {
+        Follow     bool
+        Tail       int32
+        OffsetFlag string
+}
+
+func DefaultConsumeFlags() ConsumeFlags <span class="cov8" title="1">{
+        return ConsumeFlags{
+                Follow:     true,
+                Tail:       50,
+                OffsetFlag: "latest",
+        }
+}</span>
+
+type ConsumerGroup struct {
+        Name      string
+        State     string
+        Consumers int
+}
+
+type MessageHandlerFunc func(msg Message)
+
+type KafkaDataSource interface {
+        Init(cfgOption string)
+        GetTopics() (map[string]Topic, error)
+        GetContexts() ([]string, error)
+        GetContext() string
+        SetContext(contextName string) error
+        GetConsumerGroups() ([]ConsumerGroup, error)
+        ConsumeTopic(ctx context.Context, topicName string, flags ConsumeFlags, handleMessage MessageHandlerFunc, onError func(err any)) error
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package kafds
+
+import (
+        "bytes"
+        "context"
+        "encoding/binary"
+        _ "encoding/binary"
+        "encoding/json"
+        "fmt"
+        "strconv"
+        "sync"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/IBM/sarama"
+        "github.com/birdayz/kaf/pkg/avro"
+        "github.com/birdayz/kaf/pkg/proto"
+        "github.com/golang/protobuf/jsonpb"
+        prettyjson "github.com/hokaccha/go-prettyjson"
+        "github.com/spf13/cobra"
+        "github.com/vmihailenco/msgpack/v5"
+)
+
+var (
+        offsetFlag      string
+        groupFlag       string
+        groupCommitFlag bool
+        outputFormat    = OutputFormatDefault
+        // Deprecated: Use outputFormat instead.
+        raw         bool
+        follow      bool
+        tail        int32
+        schemaCache *avro.SchemaCache
+        keyfmt      *prettyjson.Formatter
+
+        protoType    string
+        keyProtoType string
+
+        flagPartitions []int32
+
+        limitMessagesFlag int64
+
+        reg *proto.DescriptorRegistry
+)
+
+type offsets struct {
+        newest int64
+        oldest int64
+}
+
+func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, error) <span class="cov0" title="0">{
+        newest, err := client.GetOffset(topic, partition, sarama.OffsetNewest)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">oldest, err := client.GetOffset(topic, partition, sarama.OffsetOldest)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">return &amp;offsets{
+                newest: newest,
+                oldest: oldest,
+        }, nil</span>
+}
+
+var handler api.MessageHandlerFunc // todo remove global var
+
+func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) <span class="cov0" title="0">{
+        var offset int64
+        cfg, err := getConfig()
+        if err != nil </span><span class="cov0" title="0">{
+                onError(err)
+        }</span>
+        <span class="cov0" title="0">client, err := getClientFromConfig(cfg)
+        if err != nil </span><span class="cov0" title="0">{
+                onError(err)
+        }</span>
+        <span class="cov0" title="0">handler = handleMessage
+        // Allow deprecated flag to override when outputFormat is not specified, or default.
+        if outputFormat == OutputFormatDefault &amp;&amp; raw </span><span class="cov0" title="0">{
+                outputFormat = OutputFormatRaw
+        }</span>
+        <span class="cov0" title="0">offsetFlag = "oldest" // TODO as parameter
+        follow = consumeFlags.Follow
+        tail = consumeFlags.Tail
+
+        switch offsetFlag </span>{
+        case "oldest":<span class="cov0" title="0">
+                offset = sarama.OffsetOldest
+                cfg.Consumer.Offsets.Initial = sarama.OffsetOldest</span>
+        case "newest":<span class="cov0" title="0">
+                offset = sarama.OffsetNewest
+                cfg.Consumer.Offsets.Initial = sarama.OffsetNewest</span>
+        default:<span class="cov0" title="0">
+                o, err := strconv.ParseInt(offsetFlag, 10, 64)
+                if err != nil </span><span class="cov0" title="0">{
+                        onError(err)
+                }</span>
+                <span class="cov0" title="0">offset = o</span>
+        }
+
+        <span class="cov0" title="0">if groupFlag != "" </span><span class="cov0" title="0">{
+                withConsumerGroup(ctx, client, topic, groupFlag)
+        }</span> else<span class="cov0" title="0"> {
+                withoutConsumerGroup(ctx, client, topic, offset, onError)
+        }</span>
+
+}
+
+type g struct{}
+
+func (g *g) Setup(s sarama.ConsumerGroupSession) error <span class="cov0" title="0">{
+        return nil
+}</span>
+
+func (g *g) Cleanup(s sarama.ConsumerGroupSession) error <span class="cov0" title="0">{
+        return nil
+}</span>
+
+func (g *g) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error <span class="cov0" title="0">{
+
+        mu := sync.Mutex{} // Synchronizes stderr and stdout.
+        for msg := range claim.Messages() </span><span class="cov0" title="0">{
+                handleMessage(msg, &amp;mu)
+                if groupCommitFlag </span><span class="cov0" title="0">{
+                        s.MarkMessage(msg, "")
+                }</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+
+func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) error <span class="cov0" title="0">{
+        cg, err := sarama.NewConsumerGroupFromClient(group, client)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("Failed to create consumer group: %v", err)
+        }</span>
+
+        <span class="cov0" title="0">err = cg.Consume(ctx, []string{topic}, &amp;g{})
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("Error on consume: %v", err)
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) <span class="cov0" title="0">{
+        consumer, err := sarama.NewConsumerFromClient(client)
+        if err != nil </span><span class="cov0" title="0">{
+                onError(fmt.Sprintf("Unable to create consumer from client: %v\n", err))
+                return
+        }</span>
+
+        <span class="cov0" title="0">var partitions []int32
+        if len(flagPartitions) == 0 </span><span class="cov0" title="0">{
+                partitions, err = consumer.Partitions(topic)
+                if err != nil </span><span class="cov0" title="0">{
+                        onError(fmt.Sprintf("Unable to get partitions: %v\n", err))
+                        return
+                }</span>
+        } else<span class="cov0" title="0"> {
+                partitions = flagPartitions
+        }</span>
+
+        <span class="cov0" title="0">wg := sync.WaitGroup{}
+        mu := sync.Mutex{} // Synchronizes stderr and stdout.
+        for _, partition := range partitions </span><span class="cov0" title="0">{
+                wg.Add(1)
+
+                go func(partition int32, offset int64) </span><span class="cov0" title="0">{
+                        defer wg.Done()
+                        defer func() </span><span class="cov0" title="0">{
+                                if r := recover(); r != nil </span><span class="cov0" title="0">{
+                                        onError(r)
+                                        return
+                                }</span>
+                        }()
+
+                        <span class="cov0" title="0">offsets, err := getOffsets(client, topic, partition)
+                        if err != nil </span><span class="cov0" title="0">{
+                                onError(fmt.Errorf("Failed to get %s offsets for partition %d: %w", topic, partition, err))
+                        }</span>
+
+                        <span class="cov0" title="0">if tail != 0 </span><span class="cov0" title="0">{
+                                offset = offsets.newest - int64(tail)
+                                if offset &lt; offsets.oldest </span><span class="cov0" title="0">{
+                                        offset = offsets.oldest
+                                }</span>
+                        }
+
+                        // Already at end of partition, return early
+                        <span class="cov0" title="0">if !follow &amp;&amp; offsets.newest == offsets.oldest </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+
+                        <span class="cov0" title="0">pc, err := consumer.ConsumePartition(topic, partition, offset)
+                        if err != nil </span><span class="cov0" title="0">{
+                                onError(fmt.Errorf("Unable to consume partition: %v %v %v %v\n", topic, partition, offset, err))
+                        }</span>
+
+                        <span class="cov0" title="0">var count int64 = 0
+                        for </span><span class="cov0" title="0">{
+                                select </span>{
+                                case &lt;-ctx.Done():<span class="cov0" title="0">
+                                        return</span>
+                                case msg := &lt;-pc.Messages():<span class="cov0" title="0">
+                                        handleMessage(msg, &amp;mu)
+                                        count++
+                                        if limitMessagesFlag &gt; 0 &amp;&amp; count &gt;= limitMessagesFlag </span><span class="cov0" title="0">{
+                                                return
+                                        }</span>
+                                        <span class="cov0" title="0">if !follow &amp;&amp; msg.Offset+1 &gt;= pc.HighWaterMarkOffset() </span><span class="cov0" title="0">{
+                                                return
+                                        }</span>
+                                }
+                        }
+                }(partition, offset)
+        }
+        <span class="cov0" title="0">wg.Wait()</span>
+}
+
+func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) <span class="cov0" title="0">{
+        var stderr bytes.Buffer
+
+        var dataToDisplay []byte
+        var keyToDisplay []byte
+        var err error
+
+        if protoType != "" </span><span class="cov0" title="0">{
+                dataToDisplay, err = protoDecode(reg, msg.Value, protoType)
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Fprintf(&amp;stderr, "failed to decode proto. falling back to binary outputla. Error: %v\n", err)
+                }</span>
+        } else<span class="cov0" title="0"> {
+                dataToDisplay, err = avroDecode(msg.Value)
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Fprintf(&amp;stderr, "could not decode Avro data: %v\n", err)
+                }</span>
+        }
+
+        <span class="cov0" title="0">if keyProtoType != "" </span><span class="cov0" title="0">{
+                keyToDisplay, err = protoDecode(reg, msg.Key, keyProtoType)
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Fprintf(&amp;stderr, "failed to decode proto key. falling back to binary outputla. Error: %v\n", err)
+                }</span>
+        } else<span class="cov0" title="0"> {
+                keyToDisplay, err = avroDecode(msg.Key)
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Fprintf(&amp;stderr, "could not decode Avro data: %v\n", err)
+                }</span>
+        }
+
+        <span class="cov0" title="0">if decodeMsgPack </span><span class="cov0" title="0">{
+                var obj interface{}
+                err = msgpack.Unmarshal(msg.Value, &amp;obj)
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Fprintf(&amp;stderr, "could not decode msgpack data: %v\n", err)
+                }</span>
+
+                <span class="cov0" title="0">dataToDisplay, err = json.Marshal(obj)
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Fprintf(&amp;stderr, "could not decode msgpack data: %v\n", err)
+                }</span>
+        }
+
+        //dataToDisplay = formatMessage(msg, dataToDisplay, keyToDisplay, &amp;stderr)
+
+        //mu.Lock()
+        //stderr.WriteTo(errWriter)
+        //_, _ = colorableOut.Write(dataToDisplay)
+        //fmt.Fprintln(outWriter)
+        <span class="cov0" title="0">keySchema := getSchemaIdIfPresent(msg.Key)
+        valueSchema := getSchemaIdIfPresent(msg.Value)
+        headers := make([]api.MessageHeader, 0)
+        for _, saramaHeader := range msg.Headers </span><span class="cov0" title="0">{
+                header := api.MessageHeader{
+                        Key:   string(saramaHeader.Key),
+                        Value: string(saramaHeader.Value),
+                }
+                headers = append(headers, header)
+        }</span>
+
+        <span class="cov0" title="0">newMessage := api.Message{
+
+                Key:           string(keyToDisplay),
+                Headers:       headers,
+                Value:         string(dataToDisplay),
+                Offset:        msg.Offset,
+                Partition:     msg.Partition,
+                KeySchemaID:   keySchema,
+                ValueSchemaID: valueSchema,
+        }
+        handler(newMessage)</span>
+        //mu.Unlock()
+}
+
+func getSchemaIdIfPresent(b []byte) string <span class="cov0" title="0">{
+        // Ensure avro header is present with the magic start-byte.
+        if len(b) &lt; 5 || b[0] != 0x00 </span><span class="cov0" title="0">{
+                // The message does not contain Avro-encoded data
+                return ""
+        }</span>
+
+        // Schema ID is stored in the 4 bytes following the magic byte.
+        <span class="cov0" title="0">schemaID := binary.BigEndian.Uint32(b[1:5])
+        return fmt.Sprint(int(schemaID))</span>
+}
+
+func formatMessage(msg *sarama.ConsumerMessage, rawMessage []byte, keyToDisplay []byte, stderr *bytes.Buffer) []byte <span class="cov0" title="0">{
+        switch outputFormat </span>{
+        case OutputFormatRaw:<span class="cov0" title="0">
+                return rawMessage</span>
+        case OutputFormatJSON:<span class="cov0" title="0">
+                jsonMessage := make(map[string]interface{})
+
+                jsonMessage["partition"] = msg.Partition
+                jsonMessage["offset"] = msg.Offset
+                jsonMessage["timestamp"] = msg.Timestamp
+
+                if len(msg.Headers) &gt; 0 </span><span class="cov0" title="0">{
+                        jsonMessage["headers"] = msg.Headers
+                }</span>
+
+                <span class="cov0" title="0">jsonMessage["key"] = formatJSON(keyToDisplay)
+                jsonMessage["payload"] = formatJSON(rawMessage)
+
+                jsonToDisplay, err := json.Marshal(jsonMessage)
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Fprintf(stderr, "could not decode JSON data: %v", err)
+                }</span>
+
+                <span class="cov0" title="0">return jsonToDisplay</span>
+        case OutputFormatDefault:<span class="cov0" title="0">
+                fallthrough</span>
+        default:<span class="cov0" title="0">
+                if isJSON(rawMessage) </span><span class="cov0" title="0">{
+                        rawMessage = formatValue(rawMessage)
+                }</span>
+
+                <span class="cov0" title="0">if isJSON(keyToDisplay) </span><span class="cov0" title="0">{
+                        keyToDisplay = formatKey(keyToDisplay)
+                }</span>
+
+                //w := tabwriter.NewWriter(stderr, tabwriterMinWidth, tabwriterWidth, tabwriterPadding, tabwriterPadChar, tabwriterFlags)
+                <span class="cov0" title="0">constructedMsg := ""
+                if len(msg.Headers) &gt; 0 </span><span class="cov0" title="0">{
+                        //fmt.Fprintf(w, "Headers:\n")
+                        constructedMsg += "Headers:\n"
+                }</span>
+
+                <span class="cov0" title="0">for _, hdr := range msg.Headers </span><span class="cov0" title="0">{
+                        var hdrValue string
+                        // Try to detect azure eventhub-specific encoding
+                        if len(hdr.Value) &gt; 0 </span><span class="cov0" title="0">{
+                                switch hdr.Value[0] </span>{
+                                case 161:<span class="cov0" title="0">
+                                        hdrValue = string(hdr.Value[2 : 2+hdr.Value[1]])</span>
+                                case 131:<span class="cov0" title="0">
+                                        hdrValue = strconv.FormatUint(binary.BigEndian.Uint64(hdr.Value[1:9]), 10)</span>
+                                default:<span class="cov0" title="0">
+                                        hdrValue = string(hdr.Value)</span>
+                                }
+                        }
+
+                        //fmt.Fprintf(w, "\tKey: %v\tValue: %v\n", string(hdr.Key), hdrValue)
+                        <span class="cov0" title="0">constructedMsg += fmt.Sprintf("\tKey: %v\tValue: %v\n", string(hdr.Key), hdrValue)</span>
+
+                }
+
+                <span class="cov0" title="0">if msg.Key != nil &amp;&amp; len(msg.Key) &gt; 0 </span><span class="cov0" title="0">{
+                        //fmt.Fprintf(w, "Key:\t%v\n", string(keyToDisplay))
+                        constructedMsg += fmt.Sprintf("Key:\t%v\n", string(keyToDisplay))
+                }</span>
+                //fmt.Fprintf(w, "Partition:\t%v\nOffset:\t%v\nTimestamp:\t%v\n", msg.Partition, msg.Offset, msg.Timestamp)
+                //w.Flush()
+                <span class="cov0" title="0">constructedMsg += fmt.Sprintf("Partition:\t%v\nOffset:\t%v\nTimestamp:\t%v\n", msg.Partition, msg.Offset, msg.Timestamp)
+                constructedMsg += string(rawMessage)
+                return []byte(constructedMsg)</span>
+        }
+}
+
+// proto to JSON
+func protoDecode(reg *proto.DescriptorRegistry, b []byte, _type string) ([]byte, error) <span class="cov0" title="0">{
+        dynamicMessage := reg.MessageForType(_type)
+        if dynamicMessage == nil </span><span class="cov0" title="0">{
+                return b, nil
+        }</span>
+
+        <span class="cov0" title="0">err := dynamicMessage.Unmarshal(b)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">var m jsonpb.Marshaler
+        var w bytes.Buffer
+
+        err = m.Marshal(&amp;w, dynamicMessage)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return w.Bytes(), nil</span>
+
+}
+
+func avroDecode(b []byte) ([]byte, error) <span class="cov0" title="0">{
+        if schemaCache != nil </span><span class="cov0" title="0">{
+                return schemaCache.DecodeMessage(b)
+        }</span>
+        <span class="cov0" title="0">return b, nil</span>
+}
+
+func formatKey(key []byte) []byte <span class="cov0" title="0">{
+        if b, err := keyfmt.Format(key); err == nil </span><span class="cov0" title="0">{
+                return b
+        }</span>
+        <span class="cov0" title="0">return key</span>
+
+}
+
+func formatValue(key []byte) []byte <span class="cov0" title="0">{
+        if b, err := prettyjson.Format(key); err == nil </span><span class="cov0" title="0">{
+                return b
+        }</span>
+        <span class="cov0" title="0">return key</span>
+}
+
+func formatJSON(data []byte) interface{} <span class="cov0" title="0">{
+        var i interface{}
+        if err := json.Unmarshal(data, &amp;i); err != nil </span><span class="cov0" title="0">{
+                return string(data)
+        }</span>
+
+        <span class="cov0" title="0">return i</span>
+}
+
+func isJSON(data []byte) bool <span class="cov0" title="0">{
+        var i interface{}
+        if err := json.Unmarshal(data, &amp;i); err == nil </span><span class="cov0" title="0">{
+                return true
+        }</span>
+        <span class="cov0" title="0">return false</span>
+}
+
+type OutputFormat string
+
+const (
+        OutputFormatDefault OutputFormat = "default"
+        OutputFormatRaw     OutputFormat = "raw"
+        OutputFormatJSON    OutputFormat = "json"
+)
+
+func (e *OutputFormat) String() string <span class="cov0" title="0">{
+        return string(*e)
+}</span>
+
+func (e *OutputFormat) Set(v string) error <span class="cov0" title="0">{
+        switch v </span>{
+        case "default", "raw", "json":<span class="cov0" title="0">
+                *e = OutputFormat(v)
+                return nil</span>
+        default:<span class="cov0" title="0">
+                return fmt.Errorf("must be one of: default, raw, json")</span>
+        }
+}
+
+func (e *OutputFormat) Type() string <span class="cov0" title="0">{
+        return "OutputFormat"
+}</span>
+
+func completeOutputFormat(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) <span class="cov0" title="0">{
+        return []string{"default", "raw", "json"}, cobra.ShellCompDirectiveNoFileComp
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package kafds
+
+import (
+        "context"
+        "crypto/tls"
+        "crypto/x509"
+        "fmt"
+        "io"
+        "io/ioutil"
+        "log"
+        "os"
+        "sort"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/IBM/sarama"
+        "github.com/birdayz/kaf/pkg/avro"
+        "github.com/birdayz/kaf/pkg/config"
+        "github.com/mattn/go-colorable"
+        "github.com/spf13/cobra"
+        //"github.com/birdayz/kaf/pkg/proto"
+)
+
+type KafkaDataSourceKaf struct {
+}
+
+var cfgFile string
+
+func (kp *KafkaDataSourceKaf) Init(cfgOption string) <span class="cov0" title="0">{
+        if cfgOption != "" </span><span class="cov0" title="0">{
+                cfgFile = cfgOption
+        }</span>
+        <span class="cov0" title="0">onInit()</span>
+}
+
+// GetTopics retrieves a list of Kafka topics
+func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) <span class="cov0" title="0">{
+
+        admin, err := getClusterAdmin()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">topicDetails, err := admin.ListTopics()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        //client := getClient()
+
+        <span class="cov0" title="0">topics := make(map[string]api.Topic)
+
+        for key, value := range topicDetails </span><span class="cov0" title="0">{
+                /*
+                        var messageCount int64 = 0
+                        // Iterate over all partitions last offset to get the overall message count
+                        for i := 0; i &lt; int(value.NumPartitions); i++ {
+                                offsets, err := getOffsets(client, key, int32(i))
+                                msgCount := offsets.newest - offsets.oldest
+                                if err == nil {
+                                        messageCount += msgCount
+                                }
+                        }*/
+
+                topics[key] = api.Topic{
+                        NumPartitions:     value.NumPartitions,
+                        ReplicationFactor: value.ReplicationFactor,
+                        ReplicaAssignment: value.ReplicaAssignment,
+                        ConfigEntries:     value.ConfigEntries,
+                        MessageCount:      -1,
+                }
+        }</span>
+
+        <span class="cov0" title="0">return topics, err</span>
+}
+
+func (kp KafkaDataSourceKaf) GetContext() string <span class="cov0" title="0">{
+        activeCluster := cfg.ActiveCluster()
+        if activeCluster == nil </span><span class="cov0" title="0">{
+                return "default localhost:9092"
+        }</span>
+        <span class="cov0" title="0">return activeCluster.Name</span>
+}
+
+// GetContexts retrieves a list of Kafka contexts
+func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) <span class="cov0" title="0">{
+        // Logic to fetch the list of contexts from Kafka
+        var contexts []string
+        for _, cluster := range cfg.Clusters </span><span class="cov0" title="0">{
+
+                contexts = append(contexts, cluster.Name)
+        }</span>
+        <span class="cov0" title="0">return contexts, nil</span>
+}
+
+func (kp KafkaDataSourceKaf) SetContext(contextName string) error <span class="cov0" title="0">{
+        cfg, err := config.ReadConfig(cfgFile)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Iterate through clusters in the config
+        <span class="cov0" title="0">for _, cluster := range cfg.Clusters </span><span class="cov0" title="0">{
+                // Check if the cluster name matches the contextName
+                if cluster.Name == contextName </span><span class="cov0" title="0">{
+                        currentCluster = cluster
+                        err := cfg.SetCurrentCluster(currentCluster.Name)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return err
+                        }</span>
+                        <span class="cov0" title="0">return nil</span>
+                }
+        }
+
+        // If no matching cluster is found, return an error
+        <span class="cov0" title="0">return fmt.Errorf("cluster with name '%s' not found", contextName)</span>
+
+}
+
+func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) <span class="cov0" title="0">{
+        admin, err := getClusterAdmin()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">groups, err := admin.ListConsumerGroups()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">groupList := make([]string, 0, len(groups))
+        for grp := range groups </span><span class="cov0" title="0">{
+                groupList = append(groupList, grp)
+        }</span>
+
+        <span class="cov0" title="0">sort.Slice(groupList, func(i int, j int) bool </span><span class="cov0" title="0">{
+                return groupList[i] &lt; groupList[j]
+        }</span>)
+
+        <span class="cov0" title="0">groupDescs, err := admin.DescribeConsumerGroups(groupList)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("Unable to describe consumer groups: %v\n", err)
+        }</span>
+
+        <span class="cov0" title="0">finalGroups := make([]api.ConsumerGroup, 0, len(groupDescs))
+        for _, detail := range groupDescs </span><span class="cov0" title="0">{
+                state := detail.State
+                consumers := len(detail.Members)
+                tmpGroup := api.ConsumerGroup{
+                        Name:      detail.GroupId,
+                        State:     state,
+                        Consumers: consumers,
+                }
+                finalGroups = append(finalGroups, tmpGroup)
+
+        }</span>
+
+        <span class="cov0" title="0">return finalGroups, nil</span>
+}
+
+func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error <span class="cov0" title="0">{
+
+        admin, err := getClusterAdmin()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">topicDetails, _ := admin.ListTopics()
+
+        keys := make([]string, 0, len(topicDetails))
+        for key := range topicDetails </span><span class="cov0" title="0">{
+                keys = append(keys, key)
+        }</span>
+
+        <span class="cov0" title="0">DoConsume(ctx, topicName, flags, handleMessage, onError)
+
+        //cgs := []string{"message1", "message2", "message3"} // Example
+        return nil</span>
+}
+
+func getConfig() (saramaConfig *sarama.Config, e error) <span class="cov0" title="0">{
+        saramaConfig = sarama.NewConfig()
+        saramaConfig.Version = sarama.V1_1_0_0
+        saramaConfig.Producer.Return.Successes = true
+
+        cluster := currentCluster
+        if cluster.Version != "" </span><span class="cov0" title="0">{
+                parsedVersion, err := sarama.ParseKafkaVersion(cluster.Version)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("Unable to parse Kafka version: %v\n", err)
+                }</span>
+                <span class="cov0" title="0">saramaConfig.Version = parsedVersion</span>
+        }
+        <span class="cov0" title="0">if cluster.SASL != nil </span><span class="cov0" title="0">{
+                saramaConfig.Net.SASL.Enable = true
+                if cluster.SASL.Mechanism != "OAUTHBEARER" </span><span class="cov0" title="0">{
+                        saramaConfig.Net.SASL.User = cluster.SASL.Username
+                        saramaConfig.Net.SASL.Password = cluster.SASL.Password
+                }</span>
+                <span class="cov0" title="0">saramaConfig.Net.SASL.Version = cluster.SASL.Version</span>
+        }
+        <span class="cov0" title="0">if cluster.TLS != nil &amp;&amp; cluster.SecurityProtocol != "SASL_SSL" </span><span class="cov0" title="0">{
+                saramaConfig.Net.TLS.Enable = true
+                tlsConfig := &amp;tls.Config{
+                        InsecureSkipVerify: cluster.TLS.Insecure,
+                }
+
+                if cluster.TLS.Cafile != "" </span><span class="cov0" title="0">{
+                        caCert, err := ioutil.ReadFile(cluster.TLS.Cafile)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, fmt.Errorf("Unable to read Cafile :%v\n", err)
+                        }</span>
+                        <span class="cov0" title="0">caCertPool := x509.NewCertPool()
+                        caCertPool.AppendCertsFromPEM(caCert)
+                        tlsConfig.RootCAs = caCertPool</span>
+                }
+
+                <span class="cov0" title="0">if cluster.TLS.Clientfile != "" &amp;&amp; cluster.TLS.Clientkeyfile != "" </span><span class="cov0" title="0">{
+                        clientCert, err := ioutil.ReadFile(cluster.TLS.Clientfile)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, fmt.Errorf("Unable to read Clientfile :%v\n", err)
+                        }</span>
+                        <span class="cov0" title="0">clientKey, err := ioutil.ReadFile(cluster.TLS.Clientkeyfile)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, fmt.Errorf("Unable to read Clientkeyfile :%v\n", err)
+                        }</span>
+
+                        <span class="cov0" title="0">cert, err := tls.X509KeyPair([]byte(clientCert), []byte(clientKey))
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, fmt.Errorf("Unable to create KeyPair: %v\n", err)
+                        }</span>
+                        <span class="cov0" title="0">tlsConfig.Certificates = []tls.Certificate{cert}
+
+                        // nolint
+                        tlsConfig.BuildNameToCertificate()</span>
+                }
+                <span class="cov0" title="0">saramaConfig.Net.TLS.Config = tlsConfig</span>
+        }
+        <span class="cov0" title="0">if cluster.SecurityProtocol == "SASL_SSL" </span><span class="cov0" title="0">{
+                saramaConfig.Net.TLS.Enable = true
+                if cluster.TLS != nil </span><span class="cov0" title="0">{
+                        tlsConfig := &amp;tls.Config{
+                                InsecureSkipVerify: cluster.TLS.Insecure,
+                        }
+                        if cluster.TLS.Cafile != "" </span><span class="cov0" title="0">{
+                                caCert, err := ioutil.ReadFile(cluster.TLS.Cafile)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        fmt.Println(err)
+                                        os.Exit(1)
+                                }</span>
+                                <span class="cov0" title="0">caCertPool := x509.NewCertPool()
+                                caCertPool.AppendCertsFromPEM(caCert)
+                                tlsConfig.RootCAs = caCertPool</span>
+                        }
+                        <span class="cov0" title="0">saramaConfig.Net.TLS.Config = tlsConfig</span>
+
+                } else<span class="cov0" title="0"> {
+                        saramaConfig.Net.TLS.Config = &amp;tls.Config{InsecureSkipVerify: false}
+                }</span>
+        }
+        <span class="cov0" title="0">if cluster.SecurityProtocol == "SASL_SSL" || cluster.SecurityProtocol == "SASL_PLAINTEXT" </span><span class="cov0" title="0">{
+                if cluster.SASL.Mechanism == "SCRAM-SHA-512" </span><span class="cov0" title="0">{
+                        saramaConfig.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient </span><span class="cov0" title="0">{ return &amp;XDGSCRAMClient{HashGeneratorFcn: SHA512} }</span>
+                        <span class="cov0" title="0">saramaConfig.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA512)</span>
+                } else<span class="cov0" title="0"> if cluster.SASL.Mechanism == "SCRAM-SHA-256" </span><span class="cov0" title="0">{
+                        saramaConfig.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient </span><span class="cov0" title="0">{ return &amp;XDGSCRAMClient{HashGeneratorFcn: SHA256} }</span>
+                        <span class="cov0" title="0">saramaConfig.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA256)</span>
+                } else<span class="cov0" title="0"> if cluster.SASL.Mechanism == "OAUTHBEARER" </span><span class="cov0" title="0">{
+                        //Here setup get token function
+                        saramaConfig.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeOAuth)
+                        saramaConfig.Net.SASL.TokenProvider = newTokenProvider()
+
+                }</span>
+        }
+        <span class="cov0" title="0">return saramaConfig, nil</span>
+}
+
+var (
+        outWriter io.Writer = os.Stdout
+        errWriter io.Writer = os.Stderr
+        inReader  io.Reader = os.Stdin
+
+        colorableOut io.Writer = colorable.NewColorableStdout()
+)
+
+// Will be replaced by GitHub action and by goreleaser
+// see https://goreleaser.com/customization/build/
+var commit string = "HEAD"
+var version string = "latest"
+
+var rootCmd = &amp;cobra.Command{
+        Use:     "kaf",
+        Short:   "Kafka Command Line utility for cluster management",
+        Version: fmt.Sprintf("%s (%s)", version, commit),
+        PersistentPreRun: func(cmd *cobra.Command, args []string) <span class="cov0" title="0">{
+                outWriter = cmd.OutOrStdout()
+                errWriter = cmd.ErrOrStderr()
+                inReader = cmd.InOrStdin()
+
+                if outWriter != os.Stdout </span><span class="cov0" title="0">{
+                        colorableOut = outWriter
+                }</span>
+        },
+}
+
+func main() <span class="cov0" title="0">{
+        if err := rootCmd.Execute(); err != nil </span><span class="cov0" title="0">{
+                fmt.Println(err)
+                os.Exit(1)
+        }</span>
+}
+
+var cfg config.Config
+var currentCluster *config.Cluster
+
+var (
+        brokersFlag       []string
+        schemaRegistryURL string
+        protoFiles        []string
+        protoExclude      []string
+        decodeMsgPack     bool
+        verbose           bool
+        clusterOverride   string
+)
+
+func init() <span class="cov8" title="1">{
+        rootCmd.PersistentFlags().StringVar(&amp;cfgFile, "config", "", "config file (default is $HOME/.kaf/config)")
+        rootCmd.PersistentFlags().StringSliceVarP(&amp;brokersFlag, "brokers", "b", nil, "Comma separated list of broker ip:port pairs")
+        rootCmd.PersistentFlags().StringVar(&amp;schemaRegistryURL, "schema-registry", "", "URL to a Confluent schema registry. Used for attempting to decode Avro-encoded messages")
+        rootCmd.PersistentFlags().BoolVarP(&amp;verbose, "verbose", "v", false, "Whether to turn on sarama logging")
+        rootCmd.PersistentFlags().StringVarP(&amp;clusterOverride, "cluster", "c", "", "set a temporary current cluster")
+        cobra.OnInitialize(onInit)
+}</span>
+
+/*
+var setupProtoDescriptorRegistry = func(cmd *cobra.Command, args []string) {
+        if protoType != "" {
+                r, err := proto.NewDescriptorRegistry(protoFiles, protoExclude)
+                if err != nil {
+                        errorExit("Failed to load protobuf files: %v\n", err)
+                }
+                reg = r
+        }
+}*/
+
+func onInit() <span class="cov0" title="0">{
+        var err error
+        cfg, err = config.ReadConfig(cfgFile)
+        if err != nil </span><span class="cov0" title="0">{
+                panic(err)</span>
+        }
+
+        <span class="cov0" title="0">cfg.ClusterOverride = clusterOverride
+
+        cluster := cfg.ActiveCluster()
+        if cluster != nil </span><span class="cov0" title="0">{
+                // Use active cluster from config
+                currentCluster = cluster
+        }</span> else<span class="cov0" title="0"> {
+                // Create sane default if not configured
+                currentCluster = &amp;config.Cluster{
+                        Brokers: []string{"localhost:9092"},
+                }
+        }</span>
+
+        // Any set flags override the configuration
+        <span class="cov0" title="0">if schemaRegistryURL != "" </span><span class="cov0" title="0">{
+                currentCluster.SchemaRegistryURL = schemaRegistryURL
+                currentCluster.SchemaRegistryCredentials = nil
+        }</span>
+
+        <span class="cov0" title="0">if brokersFlag != nil </span><span class="cov0" title="0">{
+                currentCluster.Brokers = brokersFlag
+        }</span>
+
+        <span class="cov0" title="0">if verbose </span><span class="cov0" title="0">{
+                sarama.Logger = log.New(errWriter, "[sarama] ", log.Lshortfile|log.LstdFlags)
+        }</span>
+}
+
+func getClusterAdmin() (admin sarama.ClusterAdmin, e error) <span class="cov0" title="0">{
+        cfg, err := getConfig()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">clusterAdmin, err := sarama.NewClusterAdmin(currentCluster.Brokers, cfg)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("Unable to get cluster admin: %v\n", err)
+        }</span>
+
+        <span class="cov0" title="0">return clusterAdmin, nil</span>
+}
+
+func getClient() (client sarama.Client, e error) <span class="cov0" title="0">{
+        cfg, err := getConfig()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">client, err = sarama.NewClient(currentCluster.Brokers, cfg)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("Unable to get client: %v\n", err)
+        }</span>
+        <span class="cov0" title="0">return client, nil</span>
+}
+
+func getClientFromConfig(config *sarama.Config) (sarama.Client, error) <span class="cov0" title="0">{
+        client, err := sarama.NewClient(currentCluster.Brokers, config)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("Unable to get client: %v\n", err)
+        }</span>
+        <span class="cov0" title="0">return client, nil</span>
+}
+
+func getSchemaCache() (cache *avro.SchemaCache, er error) <span class="cov0" title="0">{
+        if currentCluster.SchemaRegistryURL == "" </span><span class="cov0" title="0">{
+                return nil, nil
+        }</span>
+        <span class="cov0" title="0">var username, password string
+        if creds := currentCluster.SchemaRegistryCredentials; creds != nil </span><span class="cov0" title="0">{
+                username = creds.Username
+                password = creds.Password
+        }</span>
+        <span class="cov0" title="0">cache, err := avro.NewSchemaCache(currentCluster.SchemaRegistryURL, username, password)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return cache, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package kafds
+
+import (
+        "context"
+        "fmt"
+        "net/http"
+        "sync"
+        "time"
+
+        "github.com/IBM/sarama"
+        "golang.org/x/oauth2"
+        "golang.org/x/oauth2/clientcredentials"
+)
+
+var (
+        once              sync.Once
+        tokenProv         *tokenProvider
+        refreshBuffer     time.Duration = time.Second * 20
+        tokenFetchTimeout time.Duration = time.Second * 10
+)
+
+var _ sarama.AccessTokenProvider = &amp;tokenProvider{}
+
+type tokenProvider struct {
+        // refreshMutex is used to ensure that tokens are not refreshed concurrently.
+        refreshMutex sync.Mutex
+        // The time at which the token expires.
+        expiresAt time.Time
+        // The time at which the token should be replaced.
+        replaceAt time.Time
+        // The currently cached token value.
+        currentToken string
+        // ctx for token fetching
+        ctx context.Context
+        // cfg for token fetching from
+        oauthClientCFG *clientcredentials.Config
+        // static token
+        staticToken bool
+}
+
+// This is a singleton
+func newTokenProvider() *tokenProvider <span class="cov0" title="0">{
+        once.Do(func() </span><span class="cov0" title="0">{
+                cluster := currentCluster
+
+                //token either from tokenURL or static
+                if len(cluster.SASL.Token) != 0 </span><span class="cov0" title="0">{
+                        tokenProv = &amp;tokenProvider{
+                                oauthClientCFG: &amp;clientcredentials.Config{},
+                                staticToken:    true,
+                                currentToken:   cluster.SASL.Token,
+                        }
+                }</span> else<span class="cov0" title="0"> {
+                        tokenProv = &amp;tokenProvider{
+                                oauthClientCFG: &amp;clientcredentials.Config{
+                                        ClientID:     cluster.SASL.ClientID,
+                                        ClientSecret: cluster.SASL.ClientSecret,
+                                        TokenURL:     cluster.SASL.TokenURL,
+                                },
+                                staticToken: false,
+                        }
+                }</span>
+                <span class="cov0" title="0">if !tokenProv.staticToken </span><span class="cov0" title="0">{
+                        // create context with timeout
+                        ctx := context.Background()
+                        httpClient := &amp;http.Client{Timeout: tokenFetchTimeout}
+                        ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+                        tokenProv.ctx = ctx
+
+                        // get first token
+                        firstToken, err := tokenProv.oauthClientCFG.Token(ctx)
+                        if err != nil </span><span class="cov0" title="0">{
+                                panic(fmt.Errorf("Could not fetch OAUTH token: " + err.Error()))</span>
+                        }
+                        <span class="cov0" title="0">tokenProv.currentToken = firstToken.AccessToken
+                        tokenProv.expiresAt = firstToken.Expiry
+                        tokenProv.replaceAt = firstToken.Expiry.Add(-refreshBuffer)</span>
+                }
+        })
+        <span class="cov0" title="0">return tokenProv</span>
+}
+
+func (tp *tokenProvider) Token() (*sarama.AccessToken, error) <span class="cov0" title="0">{
+
+        if !tp.staticToken </span><span class="cov0" title="0">{
+                if time.Now().After(tp.replaceAt) </span><span class="cov0" title="0">{
+                        if err := tp.refreshToken(); err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+
+                }
+        }
+        <span class="cov0" title="0">return &amp;sarama.AccessToken{
+                Token:      tp.currentToken,
+                Extensions: nil,
+        }, nil</span>
+}
+
+func (tp *tokenProvider) refreshToken() error <span class="cov0" title="0">{
+        // Get a lock on the update
+        tp.refreshMutex.Lock()
+        defer tp.refreshMutex.Unlock()
+
+        // Check whether another call refreshed the token while waiting for the lock to be acquired here
+        if time.Now().Before(tp.replaceAt) </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+
+        <span class="cov0" title="0">token, err := tp.oauthClientCFG.Token(tp.ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        // Save the token
+        <span class="cov0" title="0">tp.currentToken = token.AccessToken
+        tp.expiresAt = token.Expiry
+        tp.replaceAt = token.Expiry.Add(-refreshBuffer)
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package kafds
+
+import (
+        "crypto/sha256"
+        "crypto/sha512"
+        "hash"
+
+        "github.com/xdg/scram"
+)
+
+var SHA256 scram.HashGeneratorFcn = func() hash.Hash <span class="cov8" title="1">{ return sha256.New() }</span>
+var SHA512 scram.HashGeneratorFcn = func() hash.Hash <span class="cov8" title="1">{ return sha512.New() }</span>
+
+type XDGSCRAMClient struct {
+        *scram.Client
+        *scram.ClientConversation
+        scram.HashGeneratorFcn
+}
+
+func (x *XDGSCRAMClient) Begin(userName, password, authzID string) (err error) <span class="cov8" title="1">{
+        x.Client, err = x.HashGeneratorFcn.NewClient(userName, password, authzID)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">x.ClientConversation = x.Client.NewConversation()
+        return nil</span>
+}
+
+func (x *XDGSCRAMClient) Step(challenge string) (response string, err error) <span class="cov8" title="1">{
+        response, err = x.ClientConversation.Step(challenge)
+        return
+}</span>
+
+func (x *XDGSCRAMClient) Done() bool <span class="cov8" title="1">{
+        return x.ClientConversation.Done()
+}</span>
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package mock
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "github.com/Benny93/kafui/pkg/api"
+)
+
+var currentContext string = "kafka-dev"
+
+type KafkaDataSourceMock struct {
+        // Additional fields can be added here if needed
+}
+
+func (kp KafkaDataSourceMock) Init(cfgOption string) {<span class="cov8" title="1">
+        // nothing todo here
+}</span>
+
+// SetContext implements api.KafkaDataSource.
+func (kp KafkaDataSourceMock) SetContext(contextName string) error <span class="cov8" title="1">{
+        currentContext = contextName
+        return nil
+}</span>
+
+// GetTopics retrieves a list of Kafka topics
+func (kp KafkaDataSourceMock) GetTopics() (map[string]api.Topic, error) <span class="cov8" title="1">{
+        // Logic to fetch the list of topics from Kafka
+        topics := make(map[string]api.Topic)
+        for i := 0; i &lt; 100; i++ </span><span class="cov8" title="1">{
+                topics[fmt.Sprintf("Topic %d", i)] = api.Topic{
+                        ReplicationFactor: 1,
+                        ReplicaAssignment: map[int32][]int32{},
+                        NumPartitions:     1,
+                        ConfigEntries:     make(map[string]*string),
+                }
+
+        }</span> // Additional topics
+
+        <span class="cov8" title="1">return topics, nil</span>
+}
+
+func (kp KafkaDataSourceMock) GetContext() string <span class="cov8" title="1">{
+        return currentContext
+}</span>
+
+// GetContexts retrieves a list of Kafka contexts
+func (kp KafkaDataSourceMock) GetContexts() ([]string, error) <span class="cov8" title="1">{
+        // Logic to fetch the list of contexts from Kafka
+        contexts := []string{"kafka-dev", "kafka-test", "kafka-prod"} // Example contexts
+        return contexts, nil
+}</span>
+
+func (kp KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) <span class="cov8" title="1">{
+        // Mocked data
+        groups := []api.ConsumerGroup{
+                {Name: "Group1", State: "Active", Consumers: 3},
+                {Name: "Group2", State: "Idle", Consumers: 2},
+                // Add more mock ConsumerGroup structs as needed
+        }
+
+        // Return mocked data
+        return groups, nil
+}</span>
+
+func (kp KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error <span class="cov8" title="1">{
+        // Simulate consuming messages from the topic
+        for i := 0; i &lt; 100; i++ </span><span class="cov8" title="1">{
+                description := "Lorem ipsum dolor sit amet con et just me incididunt ut lab inductor laris martinus"
+                // Simulate receiving a message
+                msg := api.Message{
+                        Key:       fmt.Sprintf("purchase_%s_%d", topicName, i),
+                        Value:     fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, i+1, i*2+1, time.Now().Format(time.RFC3339), description),
+                        Offset:    int64(i + 1),
+                        Partition: 0,
+                }
+
+                // Call the message handler function
+                handleMessage(msg)
+
+                // Simulate some processing time
+                //time.Sleep(100 * time.Millisecond)
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package kafui
+
+import (
+        "fmt"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/rivo/tview"
+)
+
+// https://stackoverflow.com/a/70802740
+func Contains[T comparable](s []T, e T) bool <span class="cov8" title="1">{
+        for _, v := range s </span><span class="cov8" title="1">{
+                if v == e </span><span class="cov8" title="1">{
+                        return true
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+// https://stackoverflow.com/questions/37562873/most-idiomatic-way-to-select-elements-from-an-array-in-golang
+func filter[T any](ss []T, test func(T) bool) (ret []T) <span class="cov8" title="1">{
+        for _, s := range ss </span><span class="cov8" title="1">{
+                if test(s) </span><span class="cov8" title="1">{
+                        ret = append(ret, s)
+                }</span>
+        }
+        <span class="cov8" title="1">return</span>
+}
+
+// Implement the sort.Interface
+type ByOffsetThenPartition []api.Message
+
+func (a ByOffsetThenPartition) Len() int      <span class="cov8" title="1">{ return len(a) }</span>
+func (a ByOffsetThenPartition) Swap(i, j int) <span class="cov8" title="1">{ a[i], a[j] = a[j], a[i] }</span>
+func (a ByOffsetThenPartition) Less(i, j int) bool <span class="cov8" title="1">{
+        // First, compare by Offset
+        if a[i].Offset != a[j].Offset </span><span class="cov8" title="1">{
+                return a[i].Offset &lt; a[j].Offset
+        }</span>
+        // If Offset values are equal, then compare by Partition
+        <span class="cov8" title="1">return a[i].Partition &lt; a[j].Partition</span>
+}
+
+func RecoverAndExit(app *tview.Application) <span class="cov8" title="1">{
+        if r := recover(); r != nil </span><span class="cov8" title="1">{
+                if app != nil </span><span class="cov0" title="0">{
+                        app.Stop()
+                }</span>
+                <span class="cov8" title="1">fmt.Println("An error occurred:", r)
+                //debug.PrintStack()
+                fmt.Println("Application stopped.")</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package kafui
+
+import (
+        "fmt"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/Benny93/kafui/pkg/datasource/kafds"
+        "github.com/Benny93/kafui/pkg/datasource/mock"
+)
+
+func Init(cfgOption string, useMock bool) <span class="cov0" title="0">{
+
+        fmt.Println("Init...")
+        var dataSource api.KafkaDataSource
+
+        dataSource = mock.KafkaDataSourceMock{}
+        if !useMock </span><span class="cov0" title="0">{
+                dataSource = &amp;kafds.KafkaDataSourceKaf{}
+        }</span>
+        <span class="cov0" title="0">dataSource.Init(cfgOption)
+        OpenUI(dataSource)</span>
+}
+</pre>
+		
+		<pre class="file" id="file10" style="display: none">package kafui
+
+import (
+        "encoding/json"
+        "time"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/TylerBrock/colorjson"
+        "github.com/atotto/clipboard"
+        "github.com/gdamore/tcell/v2"
+        "github.com/rivo/tview"
+)
+
+type DetailPage struct {
+        app           *tview.Application
+        pages         *tview.Pages
+        headers       api.MessageHeaders
+        value         string
+        showHeaders                bool
+        headerTable   *tview.Table
+        valueTextView *tview.TextView
+}
+
+func NewDetailPage(app *tview.Application, pages *tview.Pages, headers api.MessageHeaders, value string) *DetailPage <span class="cov8" title="1">{
+
+        headerTable := tview.NewTable().
+                SetBorders(false)
+        headerTable.SetTitle("Headers")
+        headerTable.SetBorderColor(tcell.ColorWhite.TrueColor())
+        headerTable.SetBorderPadding(0,0,0,0)
+
+        for r, header := range headers </span><span class="cov8" title="1">{
+                key := tview.NewTableCell(header.Key)
+                key.SetText(header.Key)
+                key.SetTextColor(tcell.ColorOrange)
+                value := tview.NewTableCell(header.Value)
+                value.SetText(header.Value)
+                value.SetTextColor(tcell.ColorWhite)
+                value.SetExpansion(1)
+        
+                headerTable.SetCell(r, 0, key)
+                headerTable.SetCell(r, 1, value)
+        }</span>
+
+        <span class="cov8" title="1">valueTextView := tview.NewTextView().
+                //SetText("Placeholder :)").
+                SetTextAlign(tview.AlignLeft).
+                SetDynamicColors(true).
+                SetWordWrap(false)
+        valueTextView.SetTextColor(tcell.ColorWhite)
+        valueTextView.SetBorder(true)
+
+        // Format and colorize JSON
+        var obj map[string]interface{}
+        merror := json.Unmarshal([]byte(value), &amp;obj)
+        f := colorjson.NewFormatter()
+        f.Indent = 2
+        s, err := f.Marshal(obj)
+        if merror != nil || err != nil </span><span class="cov8" title="1">{
+                valueTextView.SetText(value)
+        }</span> else<span class="cov8" title="1"> {
+                writer := tview.ANSIWriter(valueTextView)
+                writer.Write(s)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;DetailPage{
+                app:           app,
+                pages:         pages,
+                headers:       headers,
+                value:         value,
+                showHeaders:   false,
+                headerTable:   headerTable,
+                valueTextView: valueTextView,
+        }</span>
+}
+
+func (vp *DetailPage) Show() <span class="cov8" title="1">{
+        // Create a new flex layout for the value page
+        valueFlex := tview.NewFlex()
+        valueFlex.SetDirection(tview.FlexRow)
+        //SetDirection(tview.FlexRow).
+        //AddItem(tview.NewTextView().SetText("Message Value").SetTextAlign(tview.AlignCenter), 1, 0, false).
+        //AddItem(tview.NewTextView(), 2, 1, false)
+
+        legend := vp.CreateInputLegend()
+        valueFlex.AddItem(legend, 6, 1, false)
+        if vp.showHeaders </span><span class="cov0" title="0">{
+                valueFlex.AddItem(vp.headerTable, len(vp.headers), 1, false)
+        }</span>
+        //valueFlex.AddItem(vp.headerTextView, len(vp.headers), 1, false)
+        // Add the TextView to the flex layout
+        <span class="cov8" title="1">valueFlex.AddItem(vp.valueTextView, 0, 1, true)
+
+        // Add the value page to the pages container
+
+        vp.pages.AddPage("DetailPage", valueFlex, true, true)
+
+        vp.valueTextView.SetInputCapture(vp.handleInput)</span>
+
+}
+
+// Hide hides the page.
+func (vp *DetailPage) Hide() <span class="cov8" title="1">{
+        vp.pages.RemovePage("DetailPage")
+}</span>
+
+func (vp *DetailPage) handleInput(event *tcell.EventKey) *tcell.EventKey <span class="cov8" title="1">{
+        if event.Key() == tcell.KeyRune &amp;&amp; event.Rune() == 'c' &amp;&amp; vp.valueTextView.HasFocus() </span><span class="cov0" title="0">{
+                // Copy the content of valueTextView to the clipboard
+
+                clipboard.WriteAll(vp.valueTextView.GetText(true))
+                // Show a notification that the content has been copied
+                vp.showCopiedNotification()
+                return nil
+        }</span>
+        <span class="cov8" title="1">if event.Key() == tcell.KeyRune &amp;&amp; event.Rune() == 'h' &amp;&amp; vp.valueTextView.HasFocus() </span><span class="cov0" title="0">{
+                vp.showHeaders = ! vp.showHeaders
+                vp.Hide()
+                vp.Show()
+                return nil
+        }</span>
+        <span class="cov8" title="1">return event</span>
+}
+
+// TODO: HandleKey handles key events for the value page.
+//
+//        func (vp *DetailPage) HandleKey(event *tcell.EventKey) *tcell.EventKey {
+//                if event.Key() == tcell.KeyEsc {
+//                        // Switch back to the original page when Escape is pressed
+//                        //vp.pages.SwitchToPage("TopicPage")
+//                        vp.Hide()
+//                        return nil
+//                }
+//                return event
+//        }
+func (vp *DetailPage) showCopiedNotification() <span class="cov0" title="0">{
+        go func() </span><span class="cov0" title="0">{
+                _, page := vp.pages.GetFrontPage()
+                item := tview.NewTextView().SetText("😎 Content copied to clipboard ...").SetTextAlign(tview.AlignCenter)
+                vp.app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+
+                        page.(*tview.Flex).AddItem(item, 1, 0, false)
+                }</span>)
+                // Hide the notification after 2 seconds
+                <span class="cov0" title="0">time.Sleep(2 * time.Second)
+                vp.app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                        page.(*tview.Flex).RemoveItem(item)
+                }</span>)
+        }()
+}
+
+func (vp *DetailPage) CreateInputLegend() *tview.Flex <span class="cov8" title="1">{
+        flex := tview.NewFlex()
+        flex.SetBorderPadding(0, 0, 1, 0)
+        left := tview.NewFlex().SetDirection(tview.FlexRow)
+        right := tview.NewFlex().SetDirection(tview.FlexRow)
+        //right.SetBorderPadding(0, 0, 0, 0)
+
+        left.AddItem(CreateRunInfo("↑", "Move up"), 0, 1, false)
+        left.AddItem(CreateRunInfo("↓", "Move down"), 0, 1, false)
+        left.AddItem(CreateRunInfo("g", "Scroll to top"), 0, 1, false)
+        left.AddItem(CreateRunInfo("G", "Scroll to bottom"), 0, 1, false)
+        left.AddItem(CreateRunInfo("c", "Copy content"), 0, 1, false)
+        left.AddItem(CreateRunInfo("h", "Toggle headers") ,0, 1, false)
+        //right.AddItem(CreateRunInfo("Enter", "Show value"), 0, 1, false)
+        right.AddItem(CreateRunInfo("Esc", "Go Back"), 0, 1, false)
+
+        flex.AddItem(left, 0, 1, false)
+        flex.AddItem(right, 0, 1, false)
+
+        return flex
+}</span>
+</pre>
+		
+		<pre class="file" id="file11" style="display: none">package kafui
+
+import (
+        "fmt"
+        "time"
+
+        "github.com/Benny93/kafui/pkg/api"
+
+        "github.com/rivo/tview"
+)
+
+const refreshInterval = 5000 * time.Millisecond
+const refreshIntervalTable = 500 * time.Millisecond
+
+type MainPage struct {
+        CurrentContextName   string
+        NotificationTextView *tview.TextView
+        MidFlex              *tview.Flex
+        ContextInfo          *tview.InputField
+        CurrentSearchString  string
+        CurrentResource      *Resource
+        SearchBar            *SearchBar
+}
+
+func NewMainPage() *MainPage <span class="cov8" title="1">{
+        return &amp;MainPage{
+                CurrentContextName: "",
+        }
+}</span>
+
+func (m *MainPage) CurrentTimeString() string <span class="cov8" title="1">{
+        t := time.Now()
+        return fmt.Sprintf(t.Format("Current time is 15:04"))
+}</span>
+
+func (m *MainPage) UpdateTableRoutine(app *tview.Application, table *tview.Table, timerView *tview.TextView, dataSource api.KafkaDataSource) <span class="cov8" title="1">{
+        defer func() </span><span class="cov8" title="1">{
+                if app != nil </span><span class="cov0" title="0">{
+                        RecoverAndExit(app)
+                }</span>
+        }()
+        <span class="cov8" title="1">for </span><span class="cov8" title="1">{
+                if app == nil </span><span class="cov8" title="1">{
+                        return
+                }</span>
+
+                <span class="cov8" title="1">app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                        if timerView != nil </span><span class="cov0" title="0">{
+                                timerView.SetText(m.CurrentTimeString())
+                        }</span>
+                        <span class="cov0" title="0">if table != nil &amp;&amp; dataSource != nil </span><span class="cov0" title="0">{
+                                m.UpdateTable(table, dataSource)
+                        }</span>
+                })
+
+                <span class="cov0" title="0">time.Sleep(refreshIntervalTable)</span>
+        }
+}
+
+func (m *MainPage) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource) <span class="cov8" title="1">{
+        //m.ShowNotification("Update Table..")
+        if m.CurrentResource == nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+        
+        <span class="cov8" title="1">resource := *m.CurrentResource
+        searchString := ""
+        if m.SearchBar != nil </span><span class="cov8" title="1">{
+                searchString = m.SearchBar.CurrentString
+        }</span>
+        
+        <span class="cov8" title="1">resource.UpdateTable(table, dataSource, searchString)
+        
+        if m.SearchBar != nil &amp;&amp; m.SearchBar.CurrentResource != nil </span><span class="cov8" title="1">{
+                m.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount())
+        }</span>
+}
+
+func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, msgChannel chan UIEvent) *tview.Flex <span class="cov8" title="1">{
+
+        timerView := tview.NewTextView().SetText("00:00")
+        timerView.SetBorder(false)
+
+        table := tview.NewTable().SetBorders(false)
+        table.SetSelectable(true, false)
+        table.SetFixed(1, 1)
+
+        m.SetupTableInput(table, app, pages, dataSource, msgChannel)
+
+        errorFunc := func(err error) </span><span class="cov0" title="0">{
+                m.ShowNotification("Error: " + err.Error())
+        }</span>
+        <span class="cov8" title="1">onSearchBarEnterFunc := func(newResouce Resource, searchText string) </span><span class="cov0" title="0">{
+                m.CurrentSearchString = searchText
+                (*m.CurrentResource).StopFetching()
+                m.CurrentResource = &amp;newResouce
+                //startUpdatingData(m, app, dataSource)
+                (*m.CurrentResource).StartFetchingData()
+                m.UpdateTable(table, dataSource)
+        }</span>
+
+        <span class="cov8" title="1">m.SearchBar = NewSearchBar(table, dataSource, pages, app, modal, onSearchBarEnterFunc, errorFunc)
+        searchInput := m.SearchBar.CreateSearchInput(msgChannel)
+        m.ContextInfo = createContextInfo()
+        //topics := m.FetchTopics(dataSource)
+
+        //m.ShowTopicsInTable(table, topics)
+
+        searchFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+                AddItem(searchInput, 0, 1, true)
+
+        infoFlex := tview.NewFlex()
+        infoFlex.AddItem(m.ContextInfo, 0, 1, false)
+        infoFlex.AddItem(CreateMainInputLegend(), 0, 1, false)
+        topFlex := tview.NewFlex().
+                AddItem(infoFlex, 0, 2, false).
+                AddItem(searchFlex, 3, 1, true).SetDirection(tview.FlexRow)
+
+        //topFlex.SetBorder(false).SetTitle("Top")
+
+        m.MidFlex = tview.NewFlex().
+                AddItem(table, 0, 3, true)
+        m.MidFlex.SetBorder(true)
+
+        m.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount())
+
+        m.NotificationTextView = createNotificationTextView()
+
+        bottomFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+                AddItem(m.NotificationTextView, 0, 3, false).
+                AddItem(timerView, 0, 1, false)
+
+        centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+                AddItem(topFlex, 8, 1, false).
+                AddItem(m.MidFlex, 0, 3, true).
+                AddItem(bottomFlex, 5, 1, false)
+
+        flex := tview.NewFlex().
+                AddItem(centralFlex, 0, 2, true)
+
+        go m.UpdateTableRoutine(app, table, timerView, dataSource)
+        // Create a context with cancellation
+        //startUpdatingData(m, app, dataSource)
+        var tr Resource
+        tr = NewResouceTopic(dataSource, errorFunc, func() </span><span class="cov0" title="0">{ RecoverAndExit(app) }</span>)
+        <span class="cov8" title="1">m.CurrentResource = &amp;tr
+        (*m.CurrentResource).StartFetchingData()
+
+        m.CurrentContextName = dataSource.GetContext()
+        go func() </span><span class="cov8" title="1">{
+                defer RecoverAndExit(app)
+                app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                        m.ContextInfo.SetText(m.CurrentContextName)
+                }</span>)
+        }()
+
+        <span class="cov8" title="1">return flex</span>
+}
+
+/*
+func startUpdatingData(m *MainPage, app *tview.Application, dataSource api.KafkaDataSource) {
+        m.FetchedConsumerGroups = make(map[string]api.ConsumerGroup)
+        m.FetchedContexts = make(map[string]string)
+        m.LastFetchedTopics = make(map[string]api.Topic)
+
+        ctx, cancel := context.WithCancel(context.Background())
+        //defer cancel()
+        m.cancelFetch = cancel
+        go m.UpdateTableDataRoutine(ctx, app, dataSource)
+
+}*/
+
+func (m *MainPage) ShowNotification(message string) <span class="cov8" title="1">{
+        if m.NotificationTextView == nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+        
+        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                defer RecoverAndExit(tviewApp)
+                tviewApp.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                        if m.NotificationTextView != nil </span><span class="cov0" title="0">{
+                                m.NotificationTextView.SetText(message)
+                        }</span>
+                })
+                // Schedule hiding TextView after 2 seconds
+
+                <span class="cov0" title="0">time.Sleep(2 * time.Second)
+                tviewApp.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                        if m.NotificationTextView != nil </span><span class="cov0" title="0">{
+                                m.NotificationTextView.SetText("")
+                        }</span>
+                })
+
+        }()
+}
+
+func createNotificationTextView() *tview.TextView <span class="cov8" title="1">{
+        textView := tview.NewTextView().SetText("")
+        textView.SetBorder(false)
+        return textView
+}</span>
+
+func createContextInfo() *tview.InputField <span class="cov8" title="1">{
+        inputField := tview.NewInputField().
+                SetLabel("Current Context: ").
+                SetFieldWidth(0).
+                SetText("n/a")
+
+        inputField.SetDisabled(true)
+        return inputField
+}</span>
+
+func (m *MainPage) UpdateMidFlexTitle(currentResouce string, amount int) <span class="cov8" title="1">{
+        if m.MidFlex != nil </span><span class="cov8" title="1">{
+                m.MidFlex.SetTitle(fmt.Sprintf("&lt;%s (%d)&gt;", currentResouce, amount-1))
+        }</span>
+}
+
+func (m *MainPage) FetchConsumerGroups(dataSource api.KafkaDataSource) []api.ConsumerGroup <span class="cov0" title="0">{
+        cgs, err := dataSource.GetConsumerGroups()
+        if err != nil </span><span class="cov0" title="0">{
+                m.ShowNotification(fmt.Sprintf("Error fetching GetConsumerGroups: %v", err))
+                return []api.ConsumerGroup{}
+        }</span>
+        <span class="cov0" title="0">return cgs</span>
+}
+
+func (m *MainPage) FetchContexts(dataSource api.KafkaDataSource) []string <span class="cov0" title="0">{
+        contexts, err := dataSource.GetContexts()
+        if err != nil </span><span class="cov0" title="0">{
+                m.ShowNotification(fmt.Sprintf("Error fetching contexts: %v", err))
+                return []string{}
+        }</span>
+        <span class="cov0" title="0">return contexts</span>
+}
+
+func CreateMainInputLegend() *tview.Flex <span class="cov8" title="1">{
+        flex := tview.NewFlex()
+        flex.SetBorderPadding(0, 0, 1, 0)
+        left := tview.NewFlex().SetDirection(tview.FlexRow)
+        right := tview.NewFlex().SetDirection(tview.FlexRow)
+        right.SetBorderPadding(0, 1, 0, 0)
+
+        left.AddItem(CreateRunInfo("↑", "Move up"), 0, 1, false)
+        left.AddItem(CreateRunInfo("↓", "Move down"), 0, 1, false)
+        left.AddItem(CreateRunInfo(":", "Search resource"), 0, 1, false)
+        left.AddItem(CreateRunInfo("/", "Search in table"), 0, 1, false)
+        right.AddItem(CreateRunInfo("g", "Scroll to top"), 0, 1, false)
+        right.AddItem(CreateRunInfo("G", "Scroll to bottom"), 0, 1, false)
+        right.AddItem(CreateRunInfo("c", "Copy current line"), 0, 1, false)
+        right.AddItem(CreateRunInfo("Enter", "Show details"), 0, 1, false)
+
+        flex.AddItem(left, 0, 1, false)
+        flex.AddItem(right, 0, 1, false)
+
+        return flex
+}</span>
+</pre>
+		
+		<pre class="file" id="file12" style="display: none">package kafui
+
+import (
+        "container/list"
+        "context"
+        "fmt"
+        "sort"
+        "strconv"
+        "strings"
+        "time"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/gdamore/tcell/v2"
+        "github.com/rivo/tview"
+)
+
+type TopicPage struct {
+        app                *tview.Application
+        dataSource         api.KafkaDataSource
+        pages              *tview.Pages
+        msgChannel         chan UIEvent
+        messagesFlex       *tview.Flex
+        topFlex            *tview.Flex
+        topFlexElements    *list.List
+        consumerTable      *tview.Table
+        cancelConsumption  context.CancelFunc
+        cancelRefresh      context.CancelFunc
+        messageDetailPage  *DetailPage
+        consumedMessages   map[string]api.Message
+        newMessageConsumed bool
+        notifyView         *tview.TextView
+        topicName          string
+        topicDetails       api.Topic
+        consumeFlags       api.ConsumeFlags
+        searchText         string
+        tableSearch        *tview.Flex
+        bottomFlex         *tview.Flex
+        requireRefresh     bool
+}
+
+func NewTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, msgChannel chan UIEvent) *TopicPage <span class="cov8" title="1">{
+        return &amp;TopicPage{
+                app:             app,
+                dataSource:      dataSource,
+                pages:           pages,
+                msgChannel:      msgChannel,
+                topFlexElements: list.New(),
+        }
+}</span>
+
+func (tp *TopicPage) getHandler() api.MessageHandlerFunc <span class="cov0" title="0">{
+
+        tp.consumedMessages = make(map[string]api.Message)
+        return func(msg api.Message) </span><span class="cov0" title="0">{
+                key := tp.getMessageKey(fmt.Sprint(msg.Partition), fmt.Sprint(msg.Offset))
+                tp.consumedMessages[key] = msg
+                tp.newMessageConsumed = true
+        }</span>
+}
+
+func (tp *TopicPage) getMessageKey(partition string, offset string) string <span class="cov0" title="0">{
+        return fmt.Sprintf("%s:%s", partition, offset)
+}</span>
+
+func (tp *TopicPage) refreshTopicTable(ctx context.Context) <span class="cov0" title="0">{
+        defer RecoverAndExit(tp.app)
+        refreshTicker := time.NewTicker(100 * time.Millisecond)
+        defer refreshTicker.Stop()
+
+        for </span><span class="cov0" title="0">{
+                select </span>{
+                case &lt;-ctx.Done():<span class="cov0" title="0">
+                        // Exit the function if the context is done
+                        return</span>
+                case &lt;-refreshTicker.C:<span class="cov0" title="0">
+                        if !tp.newMessageConsumed &amp;&amp; !tp.requireRefresh </span><span class="cov0" title="0">{
+                                continue</span>
+                        }
+                        <span class="cov0" title="0">tp.requireRefresh = false
+                        tp.newMessageConsumed = false
+                        //tp.ShowNotification(fmt.Sprintf("Consumed messages %d", len(tp.consumedMessages)))
+                        tp.app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                                // Clear the table before updating it
+                                tp.consumerTable.Clear()
+                                tp.createFirstRowTopicTable(tp.topicName)
+
+                                values := make([]api.Message, 0)
+                                for _, value := range tp.consumedMessages </span><span class="cov0" title="0">{
+                                        values = append(values, value)
+                                }</span>
+                                <span class="cov0" title="0">sort.Sort(ByOffsetThenPartition(values))
+
+                                // Iterate over the consumedMessages slice using range
+                                for _, msg := range values </span><span class="cov0" title="0">{
+                                        if tp.searchText != "" </span><span class="cov0" title="0">{
+                                                // skip message if none field fuzzy matches search text
+                                                if !fieldFuzzyMatchesSearchText(msg, tp.searchText) </span><span class="cov0" title="0">{
+                                                        continue</span> // Skip this message
+                                                }
+                                        }
+                                        <span class="cov0" title="0">rowIndex := tp.consumerTable.GetRowCount() // Get the current row index
+                                        tp.consumerTable.SetCell(rowIndex, 0, tview.NewTableCell(strconv.FormatInt(msg.Offset, 10)))
+                                        tp.consumerTable.SetCell(rowIndex, 1, tview.NewTableCell(fmt.Sprint(msg.Partition)))
+                                        tp.consumerTable.SetCell(rowIndex, 2, tview.NewTableCell(fmt.Sprint(msg.KeySchemaID)))
+                                        tp.consumerTable.SetCell(rowIndex, 3, tview.NewTableCell(fmt.Sprint(msg.ValueSchemaID)))
+                                        tp.consumerTable.SetCell(rowIndex, 4, tview.NewTableCell(msg.Key))
+                                        shortenedText := tp.shortValue(msg)
+                                        cell := tview.NewTableCell(shortenedText)
+                                        cell.SetExpansion(1)
+                                        tp.consumerTable.SetCell(rowIndex, 5, cell)</span>
+                                }
+                                <span class="cov0" title="0">tp.consumerTable.ScrollToEnd()
+                                tp.consumerTable.Select(tp.consumerTable.GetRowCount()-1, 0)</span> // Select the last row
+                        })
+                }
+        }
+}
+
+func fieldFuzzyMatchesSearchText(msg api.Message, searchText string) bool <span class="cov0" title="0">{
+
+        // Convert all fields to lowercase for case-insensitive comparison
+        searchText = strings.ToLower(searchText)
+
+        // Check if any field contains the search text in a fuzzy manner
+        if strings.Contains(strings.ToLower(strconv.FormatInt(msg.Offset, 10)), searchText) ||
+                strings.Contains(strings.ToLower(fmt.Sprint(msg.Partition)), searchText) ||
+                strings.Contains(strings.ToLower(fmt.Sprint(msg.KeySchemaID)), searchText) ||
+                strings.Contains(strings.ToLower(fmt.Sprint(msg.ValueSchemaID)), searchText) ||
+                strings.Contains(strings.ToLower(msg.Key), searchText) ||
+                strings.Contains(strings.ToLower(msg.Value), searchText) </span><span class="cov0" title="0">{
+                return true
+        }</span>
+
+        <span class="cov0" title="0">return false</span>
+}
+
+func (*TopicPage) shortValue(msg api.Message) string <span class="cov0" title="0">{
+        if len(msg.Value) &lt;= 100 </span><span class="cov0" title="0">{
+                return msg.Value
+        }</span>
+        <span class="cov0" title="0">shortenedText := msg.Value[:100]
+        if len(shortenedText) &lt; len(msg.Value) </span><span class="cov0" title="0">{
+                shortenedText = shortenedText + "..."
+        }</span>
+        <span class="cov0" title="0">return shortenedText</span>
+}
+
+func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, flags api.ConsumeFlags) <span class="cov0" title="0">{
+        tp.topicName = topicName
+        tp.topicDetails = currentTopic
+        tp.consumeFlags = flags
+        // topic info
+        topicInfoFlex := tp.CreateTopicInfoSection(topicName, currentTopic)
+        tp.topFlexElements.PushBack(topicInfoFlex)
+        tp.topFlex.AddItem(topicInfoFlex, 0, 1, false)
+        // consumer flags
+        consumerFlagsFlex := tp.CreateConsumeFlagsSection()
+        tp.topFlexElements.PushBack(consumerFlagsFlex)
+        tp.topFlex.AddItem(consumerFlagsFlex, 0, 1, false)
+        // input legend
+        inputLegend := tp.CreateInputLegend()
+        tp.topFlexElements.PushBack(inputLegend)
+        tp.topFlex.AddItem(inputLegend, 0, 1, false)
+
+        tp.ShowNotification("Consuming messages...")
+
+        tp.consumedMessages = make(map[string]api.Message)
+
+        go func() </span><span class="cov0" title="0">{
+                defer RecoverAndExit(tp.app)
+                tp.app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                        tp.createFirstRowTopicTable(topicName)
+                }</span>)
+                <span class="cov0" title="0">handlerFunc := tp.getHandler()
+                ctx, cancel := context.WithCancel(context.Background())
+                tp.cancelConsumption = cancel
+                _ = tp.dataSource.ConsumeTopic(ctx, topicName, tp.consumeFlags, handlerFunc, func(err any) </span><span class="cov0" title="0">{
+                        tp.ShowNotification(fmt.Sprintf("Error consuming messages: %s", err))
+                }</span>)
+                // TODO: handle error on consumption
+        }()
+        <span class="cov0" title="0">ctx, c := context.WithCancel(context.Background())
+        tp.cancelRefresh = c
+        go tp.refreshTopicTable(ctx)</span>
+}
+
+func (tp *TopicPage) createFirstRowTopicTable(topicName string) <span class="cov0" title="0">{
+        title := fmt.Sprintf("&lt;%s&gt;", topicName)
+        if tp.searchText != "" </span><span class="cov0" title="0">{
+                title = fmt.Sprintf("&lt;%s/%s&gt;", topicName, tp.searchText)
+        }</span>
+        <span class="cov0" title="0">tp.messagesFlex.SetBorder(true).SetTitle(title)
+        tp.consumerTable.SetCell(0, 0, tview.NewTableCell("Offset").SetTextColor(tview.Styles.SecondaryTextColor))
+        tp.consumerTable.SetCell(0, 1, tview.NewTableCell("Partition").SetTextColor(tview.Styles.SecondaryTextColor))
+        tp.consumerTable.SetCell(0, 2, tview.NewTableCell("KeySID").SetTextColor(tview.Styles.SecondaryTextColor))
+        tp.consumerTable.SetCell(0, 3, tview.NewTableCell("ValueSID").SetTextColor(tview.Styles.SecondaryTextColor))
+        tp.consumerTable.SetCell(0, 4, tview.NewTableCell("Key").SetTextColor(tview.Styles.SecondaryTextColor))
+        tp.consumerTable.SetCell(0, 5, tview.NewTableCell("Value").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))</span>
+
+}
+
+func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey <span class="cov8" title="1">{
+        return func(event *tcell.EventKey) *tcell.EventKey </span><span class="cov0" title="0">{
+                if event.Key() == tcell.KeyEnter </span><span class="cov0" title="0">{
+                        // Get the selected row index
+                        row, _ := tp.consumerTable.GetSelection()
+                        off := tp.consumerTable.GetCell(row, 0)
+                        part := tp.consumerTable.GetCell(row, 1)
+                        key := tp.getMessageKey(part.Text, off.Text)
+                        // Display the value content in a new page
+                        if row &gt; 0 </span><span class="cov0" title="0">{
+                                msgv := tp.consumedMessages[key].Value
+                                msgh := tp.consumedMessages[key].Headers
+                                tp.messageDetailPage = NewDetailPage(tp.app, tp.pages, msgh, msgv)
+                                tp.messageDetailPage.Show()
+                        }</span>
+                }
+                <span class="cov0" title="0">if event.Rune() == 'g' </span><span class="cov0" title="0">{
+                        // Handle 'g' key event
+                        tp.consumerTable.ScrollToBeginning()
+                }</span>
+                <span class="cov0" title="0">if event.Rune() == 'G' </span><span class="cov0" title="0">{
+                        tp.consumerTable.ScrollToEnd()
+                }</span>
+                <span class="cov0" title="0">if event.Rune() == '/' </span><span class="cov0" title="0">{
+                        if tp.tableSearch == nil </span><span class="cov0" title="0">{
+                                tp.tableSearch = tp.CreateInputSearch(func() </span><span class="cov0" title="0">{
+                                        tp.bottomFlex.RemoveItem(tp.tableSearch)
+                                        tp.app.SetFocus(tp.consumerTable)
+                                        tp.tableSearch = nil
+                                }</span>)
+                                <span class="cov0" title="0">tp.bottomFlex.AddItem(tp.tableSearch, 0, 1, false)</span>
+                        }
+                        <span class="cov0" title="0">tp.app.SetFocus(tp.tableSearch)</span>
+                }
+                <span class="cov0" title="0">if event.Rune() == 'o' </span><span class="cov0" title="0">{
+                        // Toggle between "newest" and "oldest" values
+                        if tp.consumeFlags.OffsetFlag == "latest" </span><span class="cov0" title="0">{
+                                tp.consumeFlags.OffsetFlag = "oldest"
+                                tp.consumeFlags.Tail = 0
+                        }</span> else<span class="cov0" title="0"> {
+                                tp.consumeFlags.OffsetFlag = "latest"
+                                tp.consumeFlags.Tail = 50
+                        }</span>
+                        <span class="cov0" title="0">tp.RestartConsumer()</span>
+                }
+                <span class="cov0" title="0">if event.Key() == tcell.KeyRune </span><span class="cov0" title="0">{
+                        switch event.Rune() </span>{
+                        case 'c':<span class="cov0" title="0">
+                                CopySelectedRowToClipboard(tp.consumerTable, tp.ShowNotification)</span>
+                        }
+                }
+                <span class="cov0" title="0">return event</span>
+        }
+}
+
+func (tp *TopicPage) RestartConsumer() <span class="cov0" title="0">{
+        tp.clearConsumedData()
+        tp.PageConsumeTopic(tp.topicName, tp.topicDetails, tp.consumeFlags)
+}</span>
+
+func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex <span class="cov8" title="1">{
+        tp.consumerTable = tview.NewTable()
+        tp.consumerTable.SetSelectable(true, false)
+        tp.consumerTable.SetFixed(1, 1)
+        tp.consumerTable.SetInputCapture(tp.inputCapture())
+
+        tp.topFlex = tview.NewFlex()
+        tp.topFlex.SetBorder(false)
+
+        tp.messagesFlex = tview.NewFlex().
+                AddItem(tp.consumerTable, 0, 3, true)
+        tp.messagesFlex.SetBorder(true).SetTitle("Messages")
+
+        tp.bottomFlex = tview.NewFlex().SetDirection(tview.FlexRow)
+        tp.notifyView = tview.NewTextView().SetText("Notification...")
+        tp.notifyView.SetBorder(false)
+        tp.bottomFlex.AddItem(tp.notifyView, 0, 1, false)
+
+        centralFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+                AddItem(tp.topFlex, 5, 1, false).
+                AddItem(tp.messagesFlex, 0, 5, true).
+                AddItem(tp.bottomFlex, 5, 1, false)
+
+        flex := tview.NewFlex().
+                AddItem(centralFlex, 0, 2, true)
+
+        return flex
+}</span>
+
+func (tp *TopicPage) CreateTopicInfoSection(topicName string, topicDetail api.Topic) *tview.Flex <span class="cov0" title="0">{
+        flex := tview.NewFlex().SetDirection(tview.FlexRow)
+        flex.SetBorderPadding(0, 0, 1, 0)
+        msgCount := "n.a."
+        if topicDetail.MessageCount &gt; 0 </span><span class="cov0" title="0">{
+                msgCount = fmt.Sprintf("%d", topicDetail.MessageCount)
+        }</span>
+        //flex.SetBorder(true)
+        <span class="cov0" title="0">flex.
+                AddItem(CreatePropertyInfo("Topic Name", topicName), 0, 1, false).
+                AddItem(CreatePropertyInfo("Number of Messages", msgCount), 0, 1, false).
+                AddItem(CreatePropertyInfo("Number of Partitions", fmt.Sprint(topicDetail.NumPartitions)), 0, 1, false).
+                AddItem(CreatePropertyInfo("Replication Factor", fmt.Sprint(topicDetail.ReplicationFactor)), 0, 1, false)
+
+        return flex</span>
+}
+
+func (tp *TopicPage) CreateConsumeFlagsSection() *tview.Flex <span class="cov0" title="0">{
+        flex := tview.NewFlex().SetDirection(tview.FlexRow)
+        flex.SetBorderPadding(0, 0, 1, 0)
+        //flex.SetBorder(true)
+        flex.
+                AddItem(CreatePropertyInfo("From Offset", tp.consumeFlags.OffsetFlag), 0, 1, false).
+                AddItem(CreatePropertyInfo("Follow", fmt.Sprint(tp.consumeFlags.Follow)), 0, 1, false).
+                AddItem(CreatePropertyInfo("Tail", fmt.Sprint(tp.consumeFlags.Tail)), 0, 1, false)
+
+        return flex
+}</span>
+
+func (tp *TopicPage) CloseTopicPage() <span class="cov0" title="0">{
+        go func() </span><span class="cov0" title="0">{
+                defer RecoverAndExit(tp.app)
+                tp.clearConsumedData()
+
+        }</span>()
+}
+
+func (tp *TopicPage) clearConsumedData() <span class="cov0" title="0">{
+        tp.consumerTable.Clear()
+        tp.searchText = ""
+        if tp.tableSearch != nil </span><span class="cov0" title="0">{
+                tp.bottomFlex.RemoveItem(tp.tableSearch)
+                tp.tableSearch = nil
+        }</span>
+
+        <span class="cov0" title="0">tp.cancelConsumption()
+        tp.cancelRefresh()
+
+        for e := tp.topFlexElements.Front(); e != nil; e = e.Next() </span><span class="cov0" title="0">{
+                if value, ok := e.Value.(tview.Primitive); ok </span><span class="cov0" title="0">{
+                        tp.topFlex.RemoveItem(value)
+                }</span>
+        }
+}
+
+func (tp *TopicPage) ShowNotification(message string) <span class="cov0" title="0">{
+        go func() </span><span class="cov0" title="0">{
+                defer RecoverAndExit(tp.app)
+                tp.app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                        tp.notifyView.SetText(message)
+                }</span>)
+                // Schedule hiding TextView after 2 seconds
+
+                <span class="cov0" title="0">time.Sleep(2 * time.Second)
+                tp.app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                        tp.notifyView.SetText("")
+                }</span>)
+        }()
+}
+
+func (tp *TopicPage) CreateInputLegend() *tview.Flex <span class="cov0" title="0">{
+        flex := tview.NewFlex()
+        flex.SetBorderPadding(0, 0, 1, 0)
+        left := tview.NewFlex().SetDirection(tview.FlexRow)
+        right := tview.NewFlex().SetDirection(tview.FlexRow)
+        right.SetBorderPadding(0, 1, 0, 0)
+
+        left.AddItem(CreateRunInfo("↑", "Move up"), 0, 1, false)
+        left.AddItem(CreateRunInfo("↓", "Move down"), 0, 1, false)
+        left.AddItem(CreateRunInfo("g", "Scroll to top"), 0, 1, false)
+        left.AddItem(CreateRunInfo("G", "Scroll to bottom"), 0, 1, false)
+        left.AddItem(CreateRunInfo("c", "Copy current line"), 0, 1, false)
+        right.AddItem(CreateRunInfo("Enter", "Show value"), 0, 1, false)
+        right.AddItem(CreateRunInfo("Esc", "Go Back"), 0, 1, false)
+        right.AddItem(CreateRunInfo("o", "Toggle start offset"), 0, 1, false)
+        right.AddItem(CreateRunInfo("/", "Search Table"), 0, 1, false)
+
+        flex.AddItem(left, 0, 1, false)
+        flex.AddItem(right, 0, 1, false)
+
+        return flex
+}</span>
+
+func (tp *TopicPage) CreateInputSearch(onDone func()) *tview.Flex <span class="cov0" title="0">{
+        i := tview.NewInputField().
+                SetLabel("💡?").
+                SetFieldWidth(0)
+        i.SetText(tp.searchText)
+        i.SetBorder(true).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
+        i.SetDoneFunc(func(key tcell.Key) </span><span class="cov0" title="0">{
+                if key == tcell.KeyEnter </span><span class="cov0" title="0">{
+                        tp.searchText = i.GetText()
+                        tp.requireRefresh = true
+                        onDone()
+                }</span>
+        })
+
+        <span class="cov0" title="0">i.SetChangedFunc(func(text string) </span><span class="cov0" title="0">{
+                tp.searchText = text
+                tp.requireRefresh = true
+        }</span>)
+
+        <span class="cov0" title="0">f := tview.NewFlex()
+        f.SetBorder(false)
+        f.AddItem(i, 0, 1, true)
+        return f</span>
+}
+</pre>
+		
+		<pre class="file" id="file13" style="display: none">package kafui
+
+import (
+        "context"
+        "sort"
+        "strings"
+        "time"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/maruel/natural"
+        "github.com/rivo/tview"
+)
+
+type ResourceContext struct {
+        onError         func(err error)
+        FetchedContexts map[string]string
+        Name            string
+        dataSource      api.KafkaDataSource
+        cancelFetch     func()
+        recoverFunc     func()
+}
+
+func NewResourceContext(dataSource api.KafkaDataSource, onError func(err error), recoverFunc func()) *ResourceContext <span class="cov8" title="1">{
+        return &amp;ResourceContext{
+                onError:     onError,
+                Name:        "Context",
+                dataSource:  dataSource,
+                recoverFunc: recoverFunc,
+        }
+}</span>
+
+func (c *ResourceContext) FetchContextRoutine(ctx context.Context, dataSource api.KafkaDataSource) <span class="cov8" title="1">{
+
+        go func() </span><span class="cov8" title="1">{
+                defer c.recoverFunc()
+                for </span><span class="cov8" title="1">{
+
+                        f := c.FetchContexts(dataSource) //TODO create struct for context holding more information
+                        result := make(map[string]string)
+                        for _, str := range f </span><span class="cov8" title="1">{
+                                result[str] = str
+                        }</span>
+                        <span class="cov8" title="1">c.FetchedContexts = result
+
+                        // Check if the context has been canceled
+                        select </span>{
+                        case &lt;-ctx.Done():<span class="cov8" title="1">
+                                return</span>
+                        default:<span class="cov8" title="1">
+                                time.Sleep(refreshInterval)</span>
+                        }
+
+                }
+        }()
+}
+
+func (rc *ResourceContext) FetchContexts(dataSource api.KafkaDataSource) []string <span class="cov8" title="1">{
+        contexts, err := dataSource.GetContexts()
+        if err != nil </span><span class="cov8" title="1">{
+                //rc.ShowNotification(fmt.Sprintf("Error fetching contexts:", err))
+                rc.onError(err)
+                return []string{}
+        }</span>
+        <span class="cov8" title="1">return contexts</span>
+}
+func (r *ResourceContext) StartFetchingData() <span class="cov8" title="1">{
+        ctx, cancel := context.WithCancel(context.Background())
+        //defer cancel()
+        r.cancelFetch = cancel
+        r.FetchContextRoutine(ctx, r.dataSource)
+
+}</span>
+func (r *ResourceContext) StopFetching() <span class="cov8" title="1">{
+        if r.cancelFetch != nil </span><span class="cov8" title="1">{
+                r.cancelFetch()
+        }</span>
+}
+func (r *ResourceContext) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) <span class="cov8" title="1">{
+
+        r.ShowContextsInTable(table, r.FetchedContexts, search)
+        //m.ShowNotification("Fetched Contexts ...")
+        //r.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount())
+
+}</span>
+
+func (r ResourceContext) ShowContextsInTable(table *tview.Table, contexts map[string]string, search string) <span class="cov8" title="1">{
+        table.Clear()
+
+        table.SetCell(0, 0, tview.NewTableCell("Context").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
+
+        keys := make([]string, 0, len(contexts))
+        for key := range contexts </span><span class="cov8" title="1">{
+                if search == "" || strings.Contains(strings.ToLower(key), strings.ToLower(search)) </span><span class="cov8" title="1">{
+                        keys = append(keys, key)
+                }</span>
+        }
+
+        <span class="cov8" title="1">sort.Sort(natural.StringSlice(keys))
+
+        for i, key := range keys </span><span class="cov8" title="1">{
+                context := contexts[key]
+                cell := tview.NewTableCell(context)
+                cell.SetExpansion(1)
+                table.SetCell(i+1, 0, cell)
+        }</span>
+        //table.SetTitle(m.SearchBar.CurrentResource.GetName())
+}
+
+func (r ResourceContext) GetName() string <span class="cov8" title="1">{
+        return r.Name
+}</span>
+</pre>
+		
+		<pre class="file" id="file14" style="display: none">package kafui
+
+import (
+        "context"
+        "sort"
+        "strconv"
+        "strings"
+        "time"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/maruel/natural"
+        "github.com/rivo/tview"
+)
+
+type ResourceGroup struct {
+        onError               func(err error)
+        FetchedConsumerGroups map[string]api.ConsumerGroup
+        dataSource            api.KafkaDataSource
+        cancelFetch           func()
+        recoverFunc           func()
+}
+
+func NewResourceGroup(onError func(err error), dataSource api.KafkaDataSource, recoverFunc func()) *ResourceGroup <span class="cov8" title="1">{
+        return &amp;ResourceGroup{
+                onError:               onError,
+                FetchedConsumerGroups: make(map[string]api.ConsumerGroup),
+                dataSource:            dataSource,
+                recoverFunc:           recoverFunc,
+        }
+}</span>
+
+func (g *ResourceGroup) FetchGroupsRoutine(ctx context.Context, dataSource api.KafkaDataSource) <span class="cov8" title="1">{
+
+        go func() </span><span class="cov8" title="1">{
+                defer g.recoverFunc()
+                for </span><span class="cov8" title="1">{
+
+                        groups := g.FetchConsumerGroups(dataSource)
+                        result := make(map[string]api.ConsumerGroup)
+                        for _, g := range groups </span><span class="cov8" title="1">{
+                                result[g.Name] = g
+                        }</span>
+                        <span class="cov8" title="1">g.FetchedConsumerGroups = result
+
+                        // Check if the context has been canceled
+                        select </span>{
+                        case &lt;-ctx.Done():<span class="cov8" title="1">
+                                return</span>
+                        default:<span class="cov8" title="1">
+                                time.Sleep(refreshInterval)</span>
+                        }
+
+                }
+        }()
+}
+
+func (g *ResourceGroup) FetchConsumerGroups(dataSource api.KafkaDataSource) []api.ConsumerGroup <span class="cov8" title="1">{
+        cgs, err := dataSource.GetConsumerGroups()
+        if err != nil </span><span class="cov8" title="1">{
+                //g.ShowNotification(fmt.Sprintf("Error fetching GetConsumerGroups:", err))
+                g.onError(err)
+                return []api.ConsumerGroup{}
+        }</span>
+        <span class="cov8" title="1">return cgs</span>
+}
+func (r *ResourceGroup) StartFetchingData() <span class="cov8" title="1">{
+        ctx, cancel := context.WithCancel(context.Background())
+        //defer cancel()
+        r.cancelFetch = cancel
+        r.FetchGroupsRoutine(ctx, r.dataSource)
+
+}</span>
+func (r *ResourceGroup) StopFetching() <span class="cov8" title="1">{
+        if r.cancelFetch != nil </span><span class="cov8" title="1">{
+                r.cancelFetch()
+        }</span>
+}
+func (r *ResourceGroup) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) <span class="cov8" title="1">{
+
+        r.ShowConsumerGroups(table, r.FetchedConsumerGroups, search)
+        //m.ShowNotification("Fetched Consumer Groups ...")
+
+}</span>
+
+func (r ResourceGroup) ShowConsumerGroups(table *tview.Table, cgs map[string]api.ConsumerGroup, search string) <span class="cov8" title="1">{
+        table.Clear()
+        // Define table headers
+        table.SetCell(0, 0, tview.NewTableCell("Name").SetTextColor(tview.Styles.SecondaryTextColor))
+        table.SetCell(0, 1, tview.NewTableCell("State").SetTextColor(tview.Styles.SecondaryTextColor))
+        table.SetCell(0, 2, tview.NewTableCell("Consumers").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
+
+        keys := make([]string, 0, len(cgs))
+        for key := range cgs </span><span class="cov8" title="1">{
+                if search == "" || strings.Contains(strings.ToLower(key), strings.ToLower(search)) </span><span class="cov8" title="1">{
+                        keys = append(keys, key)
+                }</span>
+        }
+
+        <span class="cov8" title="1">sort.Sort(natural.StringSlice(keys))
+
+        for i, key := range keys </span><span class="cov8" title="1">{
+                cg := cgs[key]
+                // Add data to the table
+                cell := tview.NewTableCell(cg.Name)
+                table.SetCell(i+1, 0, cell)
+                table.SetCell(i+1, 1, tview.NewTableCell(cg.State))
+                table.SetCell(i+1, 2, tview.NewTableCell(strconv.Itoa(cg.Consumers)).SetExpansion(1))
+        }</span>
+}
+
+func (r ResourceGroup) GetName() string <span class="cov8" title="1">{
+        return "ConsumerGroup"
+}</span>
+</pre>
+		
+		<pre class="file" id="file15" style="display: none">package kafui
+
+import (
+        "context"
+        "fmt"
+        "sort"
+        "strings"
+        "time"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/maruel/natural"
+        "github.com/rivo/tview"
+)
+
+type ResouceTopic struct {
+        LastFetchedTopics map[string]api.Topic
+        dataSource        api.KafkaDataSource
+        onError           func(err error)
+        cancelFetch       func()
+        recoverFunc       func()
+}
+
+func NewResouceTopic(dataSource api.KafkaDataSource, onError func(err error), recoverFunc func()) *ResouceTopic <span class="cov8" title="1">{
+        return &amp;ResouceTopic{
+                dataSource:  dataSource,
+                onError:     onError,
+                recoverFunc: recoverFunc,
+        }
+}</span>
+
+func (r *ResouceTopic) UpdateTableDataRoutine(ctx context.Context, dataSource api.KafkaDataSource) <span class="cov8" title="1">{
+        go func() </span><span class="cov8" title="1">{
+                defer r.recoverFunc()
+                for </span><span class="cov8" title="1">{
+
+                        r.LastFetchedTopics = r.FetchTopics(r.dataSource)
+
+                        // Check if the context has been canceled
+                        select </span>{
+                        case &lt;-ctx.Done():<span class="cov8" title="1">
+                                return</span>
+                        default:<span class="cov8" title="1">
+                                time.Sleep(refreshInterval)</span>
+                        }
+
+                }
+        }()
+}
+
+func (r *ResouceTopic) FetchTopics(dataSource api.KafkaDataSource) map[string]api.Topic <span class="cov8" title="1">{
+        //time.Sleep(20 * time.Second) //TODO: remove
+        topics, err := dataSource.GetTopics()
+        if err != nil </span><span class="cov8" title="1">{
+                //m.ShowNotification(fmt.Sprintf("Error reading topics:", err))
+                r.onError(err)
+                return make(map[string]api.Topic)
+        }</span>
+        //r.LastFetchedTopics = topics
+
+        <span class="cov8" title="1">return topics</span>
+}
+
+func (r *ResouceTopic) StartFetchingData() <span class="cov8" title="1">{
+        ctx, cancel := context.WithCancel(context.Background())
+        //defer cancel()
+        r.cancelFetch = cancel
+        r.UpdateTableDataRoutine(ctx, r.dataSource)
+
+}</span>
+func (r *ResouceTopic) StopFetching() <span class="cov8" title="1">{
+        if r.cancelFetch != nil </span><span class="cov8" title="1">{
+                r.cancelFetch()
+        }</span>
+}
+
+func (r *ResouceTopic) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource, search string) <span class="cov8" title="1">{
+
+        r.ShowTopicsInTable(table, r.LastFetchedTopics, search)
+        //r.ShowNotification(fmt.Sprintf("Fetched Topics ... %d", len(r.LastFetchedTopics)))
+
+}</span>
+
+func (r *ResouceTopic) ShowTopicsInTable(table *tview.Table, topics map[string]api.Topic, search string) <span class="cov8" title="1">{
+        table.Clear()
+        table.SetCell(0, 0, tview.NewTableCell("Topic").SetTextColor(tview.Styles.SecondaryTextColor))
+        //table.SetCell(0, 1, tview.NewTableCell("Num Messages").SetTextColor(tview.Styles.SecondaryTextColor))
+        table.SetCell(0, 1, tview.NewTableCell("Num Partitions").SetTextColor(tview.Styles.SecondaryTextColor))
+        table.SetCell(0, 2, tview.NewTableCell("Replication Factor").SetTextColor(tview.Styles.SecondaryTextColor).SetExpansion(1))
+
+        keys := make([]string, 0, len(topics))
+        for key := range topics </span><span class="cov8" title="1">{
+                if search == "" || strings.Contains(strings.ToLower(key), strings.ToLower(search)) </span><span class="cov8" title="1">{
+                        keys = append(keys, key)
+                }</span>
+        }
+
+        <span class="cov8" title="1">sort.Sort(natural.StringSlice(keys))
+
+        for i, key := range keys </span><span class="cov8" title="1">{
+                value := topics[key]
+
+                cell := tview.NewTableCell(key)
+                cell.SetExpansion(1)
+                table.SetCell(i+1, 0, cell)
+                //table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprint(value.MessageCount)))
+                table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprint(value.NumPartitions)))
+                table.SetCell(i+1, 2, tview.NewTableCell(fmt.Sprint(value.ReplicationFactor)))
+
+        }</span>
+        //table.SetTitle(m.SearchBar.CurrentResource.GetName())
+}
+
+func (r ResouceTopic) GetName() string <span class="cov8" title="1">{
+        return "Topic"
+}</span>
+</pre>
+		
+		<pre class="file" id="file16" style="display: none">package kafui
+
+import (
+        "fmt"
+        "strings"
+
+        "github.com/Benny93/kafui/pkg/api"
+
+        "github.com/gdamore/tcell/v2"
+        "github.com/rivo/tview"
+)
+
+type SearchBar struct {
+        Table           *tview.Table
+        DataSource      api.KafkaDataSource
+        Pages           *tview.Pages
+        App             *tview.Application
+        Modal           *tview.Modal
+        DefaultLabel    string
+        SearchInput     *tview.InputField
+        CurrentMode     SearchMode
+        CurrentString   string
+        CurrentResource Resource
+        UpdateTable     func(newResource Resource, searchText string)
+        onError         func(err error)
+}
+
+func NewSearchBar(table *tview.Table, dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, updateTable func(newResource Resource, searchText string), onError func(err error)) *SearchBar <span class="cov8" title="1">{
+        return &amp;SearchBar{
+                Table:           table,
+                DataSource:      dataSource,
+                Pages:           pages,
+                App:             app,
+                Modal:           modal,
+                DefaultLabel:    "😎|",
+                SearchInput:     nil,
+                CurrentMode:     ResouceSearch,
+                CurrentString:   "",
+                CurrentResource: NewResouceTopic(dataSource, onError, func() </span><span class="cov0" title="0">{ RecoverAndExit(app) }</span>),
+                UpdateTable:     updateTable,
+                onError:         onError,
+        }
+}
+
+func (s *SearchBar) CreateSearchInput(msgChannel chan UIEvent) *tview.InputField <span class="cov8" title="1">{
+        s.SearchInput = tview.NewInputField().
+                SetLabel(s.DefaultLabel).
+                SetFieldWidth(0)
+        s.SearchInput.SetBorder(true).SetBorderColor(tcell.ColorDarkCyan.TrueColor())
+        //searchInput.SetFieldBackgroundColor(tcell.ColorBlack)
+        selectedStyle := tcell.Style{}
+
+        s.SearchInput.SetAutocompleteStyles(tcell.ColorBlue, tcell.Style{}, selectedStyle)
+        searchText := ""
+
+        s.SearchInput.SetDoneFunc(func(key tcell.Key) </span><span class="cov0" title="0">{
+                if key == tcell.KeyEnter </span><span class="cov0" title="0">{
+                        searchText = s.SearchInput.GetText()
+                        // Check if search text is "q" or "exit"
+                        if searchText == "q" || searchText == "exit" </span><span class="cov0" title="0">{
+                                s.App.Stop()
+                                fmt.Println("Goodbye!")
+                                return
+                        }</span>
+                        <span class="cov0" title="0">if s.CurrentMode == ResouceSearch </span><span class="cov0" title="0">{
+                                s.handleResouceSearch(searchText)
+                        }</span> else<span class="cov0" title="0"> {
+                                s.handleTableSearch(searchText)
+                        }</span>
+
+                }
+        })
+
+        <span class="cov8" title="1">s.SearchInput.SetChangedFunc(func(text string) </span><span class="cov8" title="1">{
+                if s.CurrentMode == TableSearch </span><span class="cov0" title="0">{
+                        s.CurrentString = text
+                        s.UpdateTable(s.CurrentResource, s.CurrentString)
+                }</span>
+        })
+
+        <span class="cov8" title="1">s.SearchInput.SetAutocompleteFunc(func(currentText string) (entries []string) </span><span class="cov8" title="1">{
+                if len(currentText) == 0 </span><span class="cov8" title="1">{
+                        return
+                }</span>
+                <span class="cov0" title="0">words := append(append(Context, Topic...), ConsumerGroup...)
+                for _, word := range words </span><span class="cov0" title="0">{
+                        if strings.HasPrefix(strings.ToLower(word), strings.ToLower(currentText)) </span><span class="cov0" title="0">{
+                                entries = append(entries, word)
+                        }</span>
+                }
+                <span class="cov0" title="0">if len(entries) &lt;= 1 </span><span class="cov0" title="0">{
+                        entries = nil
+                }</span>
+                <span class="cov0" title="0">return</span>
+        })
+
+        <span class="cov8" title="1">go s.ReceivingMessage(s.App, s.Table, s.SearchInput, msgChannel)
+
+        return s.SearchInput</span>
+}
+
+func (s *SearchBar) handleTableSearch(searchText string) <span class="cov8" title="1">{
+        // filter table by given searchText
+        s.CurrentString = searchText
+        s.UpdateTable(s.CurrentResource, s.CurrentString)
+        s.App.SetFocus(s.Table)
+}</span>
+
+func (s *SearchBar) handleResouceSearch(searchText string) <span class="cov8" title="1">{
+        match := false
+        if Contains(Context, searchText) </span><span class="cov8" title="1">{
+                match = true
+                s.CurrentResource = NewResourceContext(s.DataSource, s.onError, func() </span><span class="cov0" title="0">{ RecoverAndExit(s.App) }</span>)
+        }
+
+        <span class="cov8" title="1">if Contains(Topic, searchText) </span><span class="cov8" title="1">{
+                s.CurrentResource = NewResouceTopic(s.DataSource, s.onError, func() </span><span class="cov0" title="0">{ RecoverAndExit(s.App) }</span>)
+                <span class="cov8" title="1">match = true</span>
+        }
+
+        <span class="cov8" title="1">if Contains(ConsumerGroup, searchText) </span><span class="cov8" title="1">{
+                s.CurrentResource = NewResourceGroup(s.onError, s.DataSource, func() </span><span class="cov0" title="0">{ RecoverAndExit(s.App) }</span>)
+                <span class="cov8" title="1">match = true</span>
+        }
+        <span class="cov8" title="1">if !match </span><span class="cov8" title="1">{
+                s.Pages.ShowPage("modal")
+                s.App.SetFocus(s.Modal)
+        }</span> else<span class="cov8" title="1"> {
+                s.UpdateTable(s.CurrentResource, s.CurrentString)
+                s.App.SetFocus(s.Table)
+        }</span>
+        <span class="cov8" title="1">s.SearchInput.SetLabel(s.DefaultLabel)
+        s.SearchInput.SetText("")</span>
+}
+
+func (s *SearchBar) ReceivingMessage(app *tview.Application, table *tview.Table, searchInput *tview.InputField, msgChannel chan UIEvent) <span class="cov8" title="1">{
+        defer RecoverAndExit(s.App)
+        for </span><span class="cov8" title="1">{
+                msg := &lt;-msgChannel
+                if msg == OnModalClose </span><span class="cov8" title="1">{
+                        app.SetFocus(table)
+                }</span>
+                <span class="cov8" title="1">if msg == OnFocusSearch </span><span class="cov8" title="1">{
+                        searchInput.SetLabel("🧐&gt;")
+                        searchInput.SetText("")
+                        app.SetFocus(searchInput)
+                        s.CurrentMode = ResouceSearch
+                        s.CurrentString = ""
+                }</span>
+                <span class="cov8" title="1">if msg == OnStartTableSearch </span><span class="cov8" title="1">{
+                        searchInput.SetLabel("💡?")
+                        app.SetFocus(searchInput)
+                        s.CurrentMode = TableSearch
+                        s.CurrentString = ""
+                }</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file17" style="display: none">package kafui
+
+import (
+        "fmt"
+        "strings"
+
+        "github.com/Benny93/kafui/pkg/api"
+
+        "github.com/atotto/clipboard"
+        "github.com/gdamore/tcell/v2"
+        "github.com/rivo/tview"
+)
+
+func (m *MainPage) SetupTableInput(table *tview.Table, app *tview.Application, pages *tview.Pages, dataSource api.KafkaDataSource, msgChannel chan UIEvent) <span class="cov8" title="1">{
+
+        table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey </span><span class="cov0" title="0">{
+                if event.Key() == tcell.KeyEnter </span><span class="cov0" title="0">{
+                        frontPage, _ := pages.GetFrontPage()
+                        if frontPage != "main" </span><span class="cov0" title="0">{
+                                return event
+                        }</span>
+                        // Check if the table has focus
+                        <span class="cov0" title="0">if app.GetFocus() == table </span><span class="cov0" title="0">{
+                                r, _ := table.GetSelection()
+                                if r == 0 </span><span class="cov0" title="0">{
+                                        return event
+                                }</span>
+
+                                <span class="cov0" title="0">switch r := (m.SearchBar.CurrentResource).(type) </span>{
+                                case *ResouceTopic:<span class="cov0" title="0">
+                                        row, _ := table.GetSelection()
+                                        topicName := table.GetCell(row, 0).Text
+
+                                        currentTopic = r.LastFetchedTopics[topicName]
+                                        msgChannel &lt;- OnPageChange
+                                        pages.SwitchToPage("topicPage")
+                                        consumeFlags := api.DefaultConsumeFlags()
+                                        topicPage.PageConsumeTopic(topicName, currentTopic, consumeFlags)</span>
+                                case *ResourceContext:<span class="cov0" title="0">
+                                        row, _ := table.GetSelection()
+                                        text := table.GetCell(row, 0).Text
+                                        m.CurrentContextName = text
+                                        err := dataSource.SetContext(m.CurrentContextName)
+                                        if err != nil </span><span class="cov0" title="0">{
+                                                m.ShowNotification(fmt.Sprintf("Failed to swtich context '%s' in row '%d' : %v", text, row, err))
+                                                return event
+                                        }</span>
+                                        <span class="cov0" title="0">m.ShowNotification(fmt.Sprintf("Switched to context %s", m.CurrentContextName))
+                                        go app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
+                                                defer RecoverAndExit(app)
+                                                m.ContextInfo.SetText(m.CurrentContextName)
+                                        }</span>)
+                                        <span class="cov0" title="0">m.SearchBar.handleResouceSearch(Topic[0])</span>
+                                        //m.switchToTopicTable(table, dataSource, app)
+
+                                }
+
+                        }
+                }
+                <span class="cov0" title="0">if event.Key() == tcell.KeyRune </span><span class="cov0" title="0">{
+                        switch event.Rune() </span>{
+                        case 'c':<span class="cov0" title="0">
+                                CopySelectedRowToClipboard(table, m.ShowNotification)</span>
+                        }
+                }
+                <span class="cov0" title="0">return event</span>
+        })
+}
+
+// Function to copy the selected row of the table to the clipboard in CSV format
+func CopySelectedRowToClipboard(table *tview.Table, ConsumeMessage func(message string)) <span class="cov8" title="1">{
+        // Get the selected row index
+        row, _ := table.GetSelection()
+
+        // Check if the row index is valid
+        if row &lt; 1 || row &gt;= table.GetRowCount() </span><span class="cov8" title="1">{
+                ConsumeMessage("Copy: Invalid row selection")
+                return
+        }</span>
+
+        // Initialize a slice to hold column values
+        <span class="cov8" title="1">var rowValues []string
+
+        // Iterate over each column in the selected row
+        for column := 0; column &lt; table.GetColumnCount(); column++ </span><span class="cov8" title="1">{
+                cell := table.GetCell(row, column)
+                if cell != nil </span><span class="cov8" title="1">{
+                        // Append the cell text to the rowValues slice
+                        rowValues = append(rowValues, cell.Text)
+                }</span>
+        }
+
+        // Create a CSV string by joining rowValues with commas
+        <span class="cov8" title="1">csvString := strings.Join(rowValues, ",")
+
+        // Copy the CSV string to the clipboard
+        err := clipboard.WriteAll(csvString)
+        if err != nil </span><span class="cov0" title="0">{
+                // Handle error
+                ConsumeMessage("Copy: Error copying CSV string to clipboard")
+                return
+        }</span>
+
+        // Show notification
+        <span class="cov8" title="1">ConsumeMessage("😎 Copied selection to clipboard ...")</span>
+}
+</pre>
+		
+		<pre class="file" id="file18" style="display: none">package kafui
+
+import (
+        "fmt"
+
+        "github.com/Benny93/kafui/pkg/api"
+        "github.com/gdamore/tcell/v2"
+        "github.com/rivo/tview"
+)
+
+var currentTopic api.Topic
+var tviewApp *tview.Application
+var topicPage *TopicPage
+
+func OpenUI(dataSource api.KafkaDataSource) <span class="cov0" title="0">{
+        tview.Styles = tview.Theme{
+                PrimitiveBackgroundColor:    tcell.ColorBlack.TrueColor(),
+                ContrastBackgroundColor:     tcell.ColorBlack.TrueColor(),
+                MoreContrastBackgroundColor: tcell.ColorGreen.TrueColor(),
+                BorderColor:                 tcell.ColorWhite.TrueColor(),
+                TitleColor:                  tcell.ColorWhite.TrueColor(),
+                GraphicsColor:               tcell.ColorBlack.TrueColor(),
+                PrimaryTextColor:            tcell.ColorDarkCyan.TrueColor(),
+                SecondaryTextColor:          tcell.ColorWhite.TrueColor(),
+                TertiaryTextColor:           tcell.ColorGreen.TrueColor(),
+                InverseTextColor:            tcell.ColorGreen.TrueColor(),
+                ContrastSecondaryTextColor:  tcell.ColorWhite.TrueColor(),
+        }
+
+        // Create the application
+        tviewApp = tview.NewApplication()
+
+        pages := tview.NewPages()
+        modal := tview.NewModal().
+                SetText("Resource Not Found").
+                AddButtons([]string{"OK"})
+
+        // channel to publish messages to
+        msgChannel := make(chan UIEvent)
+
+        mainPage := NewMainPage()
+        flex := mainPage.CreateMainPage(dataSource, pages, tviewApp, modal, msgChannel)
+
+        modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) </span><span class="cov0" title="0">{
+                pages.HidePage("modal")
+                msgChannel &lt;- OnModalClose
+        }</span>)
+
+        <span class="cov0" title="0">modal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey </span><span class="cov0" title="0">{
+                // Hide the modal when any key is pressed
+                pages.HidePage("modal")
+                return event // Return the event to continue processing other key events
+        }</span>)
+        // input
+
+        // Set the input capture to capture key events
+        <span class="cov0" title="0">tviewApp.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey </span><span class="cov0" title="0">{
+                frontPage, _ := pages.GetFrontPage()
+                // Check if the pressed key is Shift + :
+                if event.Rune() == ':' </span><span class="cov0" title="0">{
+                        // Handle the Shift + : key combination
+                        msgChannel &lt;- OnFocusSearch
+                        return nil // Return nil to indicate that the event has been handled
+                }</span>
+
+                <span class="cov0" title="0">if event.Rune() == '/' &amp;&amp; frontPage == "main" </span><span class="cov0" title="0">{
+                        // Handle the Shift + : key combination
+                        msgChannel &lt;- OnStartTableSearch
+                        return nil // Return nil to indicate that the event has been handled
+                }</span>
+
+                <span class="cov0" title="0">if event.Key() == tcell.KeyEsc </span><span class="cov0" title="0">{
+
+                        if frontPage == "topicPage" </span><span class="cov0" title="0">{
+                                topicPage.CloseTopicPage()
+                        }</span>
+                        <span class="cov0" title="0">if frontPage == "DetailPage" </span><span class="cov0" title="0">{
+                                topicPage.messageDetailPage.Hide()
+                                //pages.SwitchToPage("topicPage")
+                                return event
+                        }</span>
+
+                        <span class="cov0" title="0">if frontPage != "main" </span><span class="cov0" title="0">{
+                                pages.SwitchToPage("main")
+                        }</span>
+                }
+
+                // Return the event to continue processing other key events
+                <span class="cov0" title="0">return event</span>
+        })
+
+        <span class="cov0" title="0">topicPage = NewTopicPage(dataSource, pages, tviewApp, msgChannel)
+        topicPageFlex := topicPage.CreateTopicPage("Current Topic")
+
+        pages.
+                AddPage("main", flex, true, true).
+                AddPage("modal", modal, true, false).
+                AddPage("topicPage", topicPageFlex, true, false)
+
+        pages.SetChangedFunc(func() </span><span class="cov0" title="0">{
+                msgChannel &lt;- OnPageChange
+        }</span>)
+
+        // Recover from panics and handle gracefully
+        <span class="cov0" title="0">defer RecoverAndExit(tviewApp)
+
+        if err := tviewApp.SetRoot(pages, true).EnableMouse(false).Run(); err != nil </span><span class="cov0" title="0">{
+                fmt.Printf("Exited with error: %v\n", err)
+        }</span>
+}
+
+func CreatePropertyInfo(propertyName string, propertyValue string) *tview.InputField <span class="cov8" title="1">{
+        inputField := tview.NewInputField().
+                SetLabel(fmt.Sprintf("%s: ", propertyName)).
+                SetFieldWidth(0).
+                SetText(propertyValue)
+        inputField.SetDisabled(true)
+        return inputField
+}</span>
+
+func CreateRunInfo(runeName string, info string) *tview.InputField <span class="cov8" title="1">{
+        inputField := tview.NewInputField().
+                SetLabel(fmt.Sprintf("&lt;%s&gt;: ", runeName)).
+                SetFieldWidth(0).
+                SetText(info)
+        inputField.SetDisabled(true)
+        inputField.SetLabelColor(tcell.ColorBlue)
+        inputField.SetFieldTextColor(tcell.ColorBlue)
+        return inputField
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

@@ -5,6 +5,8 @@ DOCKER_NAME ?= kafui
 DOCKER_TAG ?= latest
 BUILD_TAG ?= latest
 
+.PHONY: build install run run-mock release release-snapshot test test-short test-integration test-benchmarks run-kafka stop-kafka docker-build
+
 build:
 	go build -ldflags "-w -s" .
 install:
