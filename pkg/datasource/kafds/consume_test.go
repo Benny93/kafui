@@ -1,13 +1,17 @@
 package kafds
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/IBM/sarama"
+	"github.com/spf13/cobra"
 	prettyjson "github.com/hokaccha/go-prettyjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -280,15 +284,17 @@ func TestConsumeErrorHandling(t *testing.T) {
 	})
 	
 	t.Run("timeout_handling", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 		
 		// Wait for timeout
-		time.Sleep(2 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		
 		select {
 		case <-ctx.Done():
-			assert.Equal(t, context.DeadlineExceeded, ctx.Err(), "Context should timeout")
+			if ctx.Err() != context.DeadlineExceeded {
+				t.Errorf("Expected DeadlineExceeded, got %v", ctx.Err())
+			}
 		default:
 			t.Error("Context should have timed out")
 		}
@@ -1041,5 +1047,334 @@ func TestOutputFormat(t *testing.T) {
 	t.Run("output_format_type", func(t *testing.T) {
 		var format OutputFormat
 		assert.Equal(t, "OutputFormat", format.Type())
+	})
+}
+
+// TestDoConsume tests the main DoConsume function
+func TestDoConsume(t *testing.T) {
+	// Save original global variables
+	originalOffsetFlag := offsetFlag
+	originalFollow := follow
+	originalTail := tail
+	originalHandler := handler
+	
+	defer func() {
+		// Restore original values
+		offsetFlag = originalOffsetFlag
+		follow = originalFollow
+		tail = originalTail
+		handler = originalHandler
+	}()
+	
+	t.Run("consume_with_oldest_offset", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		
+		topic := "test-topic"
+		flags := api.ConsumeFlags{
+			Follow: false,
+			Tail:   0,
+			OffsetFlag: "oldest",
+		}
+		
+		var receivedMessages []api.Message
+		handleMessage := func(msg api.Message) {
+			receivedMessages = append(receivedMessages, msg)
+			// Cancel after first message to avoid infinite loop
+			cancel()
+		}
+		
+		var capturedErrors []interface{}
+		onError := func(err interface{}) {
+			capturedErrors = append(capturedErrors, err)
+			cancel()
+		}
+		
+		// This will fail due to missing config, but we can test the setup
+		DoConsume(ctx, topic, flags, handleMessage, onError)
+		
+		// Verify that error handling was called (expected due to missing config)
+		if len(capturedErrors) == 0 {
+			t.Error("Expected error due to missing config, but no errors captured")
+		}
+	})
+	
+	t.Run("consume_with_newest_offset", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		
+		topic := "test-topic"
+		flags := api.ConsumeFlags{
+			Follow: true,
+			Tail:   10,
+			OffsetFlag: "newest",
+		}
+		
+		var receivedMessages []api.Message
+		handleMessage := func(msg api.Message) {
+			receivedMessages = append(receivedMessages, msg)
+			cancel()
+		}
+		
+		var capturedErrors []interface{}
+		onError := func(err interface{}) {
+			capturedErrors = append(capturedErrors, err)
+			cancel()
+		}
+		
+		DoConsume(ctx, topic, flags, handleMessage, onError)
+		
+		// Verify that error handling was called (expected due to missing config)
+		if len(capturedErrors) == 0 {
+			t.Error("Expected error due to missing config, but no errors captured")
+		}
+	})
+	
+	t.Run("consume_with_numeric_offset", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		
+		topic := "test-topic"
+		flags := api.ConsumeFlags{
+			Follow: false,
+			Tail:   0,
+			OffsetFlag: "100",
+		}
+		
+		var receivedMessages []api.Message
+		handleMessage := func(msg api.Message) {
+			receivedMessages = append(receivedMessages, msg)
+			cancel()
+		}
+		
+		var capturedErrors []interface{}
+		onError := func(err interface{}) {
+			capturedErrors = append(capturedErrors, err)
+			cancel()
+		}
+		
+		DoConsume(ctx, topic, flags, handleMessage, onError)
+		
+		// Verify that error handling was called (expected due to missing config)
+		if len(capturedErrors) == 0 {
+			t.Error("Expected error due to missing config, but no errors captured")
+		}
+	})
+	
+	t.Run("consume_with_invalid_offset", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		
+		topic := "test-topic"
+		flags := api.ConsumeFlags{
+			Follow: false,
+			Tail:   0,
+			OffsetFlag: "invalid-offset",
+		}
+		
+		var receivedMessages []api.Message
+		handleMessage := func(msg api.Message) {
+			receivedMessages = append(receivedMessages, msg)
+			cancel()
+		}
+		
+		var capturedErrors []interface{}
+		onError := func(err interface{}) {
+			capturedErrors = append(capturedErrors, err)
+			cancel()
+		}
+		
+		DoConsume(ctx, topic, flags, handleMessage, onError)
+		
+		// Should capture error due to invalid offset parsing
+		if len(capturedErrors) == 0 {
+			t.Error("Expected error due to invalid offset, but no errors captured")
+		}
+	})
+}
+
+// TestWithConsumerGroup tests the consumer group functionality
+func TestWithConsumerGroupFunction(t *testing.T) {
+	t.Run("consumer_group_creation_error", func(t *testing.T) {
+		ctx := context.Background()
+		
+		// This will fail because we don't have a real client
+		// but we can test that the function handles the error
+		err := withConsumerGroup(ctx, nil, "test-topic", "test-group")
+		
+		if err == nil {
+			t.Error("Expected error when creating consumer group with nil client")
+		}
+		
+		if !strings.Contains(err.Error(), "Failed to create consumer group") {
+			t.Errorf("Expected 'Failed to create consumer group' error, got: %v", err)
+		}
+	})
+}
+
+// TestWithoutConsumerGroupFunction tests the partition consumer functionality
+func TestWithoutConsumerGroupDirectly(t *testing.T) {
+	t.Run("nil_client_error", func(t *testing.T) {
+		ctx := context.Background()
+		
+		var capturedErrors []interface{}
+		onError := func(err interface{}) {
+			capturedErrors = append(capturedErrors, err)
+		}
+		
+		withoutConsumerGroup(ctx, nil, "test-topic", 0, onError)
+		
+		if len(capturedErrors) == 0 {
+			t.Error("Expected error when using nil client")
+		}
+		
+		// Check that the error message contains expected text
+		errorStr := fmt.Sprintf("%v", capturedErrors[0])
+		if !strings.Contains(errorStr, "Unable to create consumer from client") {
+			t.Errorf("Expected 'Unable to create consumer from client' error, got: %v", errorStr)
+		}
+	})
+}
+
+// TestProtoDecode tests the protobuf decoding functionality
+func TestProtoDecodeFunction(t *testing.T) {
+	t.Run("nil_registry", func(t *testing.T) {
+		data := []byte("test data")
+		result, err := protoDecode(nil, data, "test.Message")
+		
+		if err != nil {
+			t.Errorf("Expected no error with nil registry, got: %v", err)
+		}
+		
+		if !bytes.Equal(result, data) {
+			t.Error("Expected original data to be returned when registry is nil")
+		}
+	})
+	
+	t.Run("empty_data", func(t *testing.T) {
+		data := []byte{}
+		result, err := protoDecode(nil, data, "test.Message")
+		
+		if err != nil {
+			t.Errorf("Expected no error with empty data, got: %v", err)
+		}
+		
+		if !bytes.Equal(result, data) {
+			t.Error("Expected original data to be returned")
+		}
+	})
+}
+
+// TestAvroDecodeFunction tests the Avro decoding functionality
+func TestAvroDecodeFunction(t *testing.T) {
+	t.Run("nil_schema_cache", func(t *testing.T) {
+		// Save original schemaCache
+		originalSchemaCache := schemaCache
+		defer func() {
+			schemaCache = originalSchemaCache
+		}()
+		
+		schemaCache = nil
+		
+		data := []byte("test avro data")
+		result, err := avroDecode(data)
+		
+		if err != nil {
+			t.Errorf("Expected no error with nil schema cache, got: %v", err)
+		}
+		
+		if !bytes.Equal(result, data) {
+			t.Error("Expected original data to be returned when schema cache is nil")
+		}
+	})
+}
+
+// TestFormatFunctions tests the formatting helper functions
+func TestFormatHelperFunctions(t *testing.T) {
+	t.Run("format_key", func(t *testing.T) {
+		// Save original keyfmt
+		originalKeyfmt := keyfmt
+		defer func() {
+			keyfmt = originalKeyfmt
+		}()
+		
+		// Test with nil formatter
+		keyfmt = nil
+		key := []byte(`{"key": "value"}`)
+		result := formatKey(key)
+		
+		if !bytes.Equal(result, key) {
+			t.Error("Expected original key when formatter is nil")
+		}
+	})
+	
+	t.Run("format_value", func(t *testing.T) {
+		validJSON := []byte(`{"test": "value"}`)
+		result := formatValue(validJSON)
+		
+		// Should return formatted JSON or original if formatting fails
+		if len(result) == 0 {
+			t.Error("Expected non-empty result from formatValue")
+		}
+	})
+	
+	t.Run("format_json_valid", func(t *testing.T) {
+		validJSON := []byte(`{"test": "value"}`)
+		result := formatJSON(validJSON)
+		
+		// Should return parsed JSON object
+		if result == nil {
+			t.Error("Expected non-nil result for valid JSON")
+		}
+	})
+	
+	t.Run("format_json_invalid", func(t *testing.T) {
+		invalidJSON := []byte(`invalid json`)
+		result := formatJSON(invalidJSON)
+		
+		// Should return original string
+		if result != string(invalidJSON) {
+			t.Errorf("Expected original string for invalid JSON, got: %v", result)
+		}
+	})
+	
+	t.Run("is_json_valid", func(t *testing.T) {
+		validJSON := []byte(`{"test": "value"}`)
+		if !isJSON(validJSON) {
+			t.Error("Expected true for valid JSON")
+		}
+	})
+	
+	t.Run("is_json_invalid", func(t *testing.T) {
+		invalidJSON := []byte(`invalid json`)
+		if isJSON(invalidJSON) {
+			t.Error("Expected false for invalid JSON")
+		}
+	})
+}
+
+// TestCompleteOutputFormat tests the shell completion function
+func TestCompleteOutputFormatFunction(t *testing.T) {
+	t.Run("completion_options", func(t *testing.T) {
+		cmd := &cobra.Command{}
+		args := []string{}
+		toComplete := ""
+		
+		options, directive := completeOutputFormat(cmd, args, toComplete)
+		
+		expectedOptions := []string{"default", "raw", "json"}
+		if len(options) != len(expectedOptions) {
+			t.Errorf("Expected %d options, got %d", len(expectedOptions), len(options))
+		}
+		
+		for i, expected := range expectedOptions {
+			if i < len(options) && options[i] != expected {
+				t.Errorf("Expected option %d to be %s, got %s", i, expected, options[i])
+			}
+		}
+		
+		if directive != cobra.ShellCompDirectiveNoFileComp {
+			t.Errorf("Expected NoFileComp directive, got %v", directive)
+		}
 	})
 }
