@@ -127,7 +127,14 @@ func TestHandleResourceSearch(t *testing.T) {
 			_ = searchBar.CreateSearchInput(msgChannel)
 			
 			if tt.expectedMatch {
-				mockUpdateTable.On("Call", mock.Anything, "").Return()
+				// The resource type depends on what the search matches
+				if tt.expectedType == "ResourceContext" {
+					mockUpdateTable.On("Call", mock.AnythingOfType("*kafui.ResourceContext"), "").Return()
+				} else if tt.expectedType == "ResouceTopic" {
+					mockUpdateTable.On("Call", mock.AnythingOfType("*kafui.ResouceTopic"), "").Return()
+				} else if tt.expectedType == "ResourceGroup" {
+					mockUpdateTable.On("Call", mock.AnythingOfType("*kafui.ResourceGroup"), "").Return()
+				}
 			}
 			
 			searchBar.handleResouceSearch(tt.searchText)
@@ -186,14 +193,23 @@ func TestSearchInputDoneFunc(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			searchBar.CurrentMode = tt.mode
-			input.SetText(tt.inputText)
 			
 			if !tt.shouldExit {
 				if tt.mode == ResouceSearch && Contains(Topic, tt.inputText) {
-					mockUpdateTable.On("Call", mock.Anything, "").Return()
+					mockUpdateTable.On("Call", mock.AnythingOfType("*kafui.ResouceTopic"), "").Return()
 				} else if tt.mode == TableSearch {
-					mockUpdateTable.On("Call", mock.Anything, tt.inputText).Return()
+					// For table search, we expect the ChangedFunc to be called with the input text
+					mockUpdateTable.On("Call", mock.AnythingOfType("*kafui.ResouceTopic"), tt.inputText).Return()
 				}
+			}
+			
+			// Set the text which will trigger ChangedFunc for TableSearch mode
+			input.SetText(tt.inputText)
+			
+			// For resource search mode, we need to simulate the DoneFunc behavior
+			if tt.mode == ResouceSearch && !tt.shouldExit {
+				// Manually call the resource search handler to simulate Enter key press
+				searchBar.handleResouceSearch(tt.inputText)
 			}
 			
 			// Note: tview doesn't expose GetDoneFunc(), so we test the behavior indirectly
@@ -375,7 +391,7 @@ func TestSearchBarWithSpecialCharacters(t *testing.T) {
 	
 	for _, char := range specialChars {
 		t.Run("special_char_"+char, func(t *testing.T) {
-			mockUpdateTable.On("Call", mock.Anything, char).Return()
+			mockUpdateTable.On("Call", mock.AnythingOfType("*kafui.ResouceTopic"), char).Return()
 			
 			searchBar.handleTableSearch(char)
 			
@@ -400,7 +416,7 @@ func TestSearchBarWithUnicodeCharacters(t *testing.T) {
 	
 	for _, unicode := range unicodeStrings {
 		t.Run("unicode_"+unicode, func(t *testing.T) {
-			mockUpdateTable.On("Call", mock.Anything, unicode).Return()
+			mockUpdateTable.On("Call", mock.AnythingOfType("*kafui.ResouceTopic"), unicode).Return()
 			
 			searchBar.handleTableSearch(unicode)
 			
