@@ -5,7 +5,17 @@ DOCKER_NAME ?= kafui
 DOCKER_TAG ?= latest
 BUILD_TAG ?= latest
 
+GOBIN ?= $$(go env GOPATH)/bin
+
 .PHONY: build install run run-mock release release-snapshot test test-short test-integration test-benchmarks run-kafka stop-kafka docker-build
+
+
+install-go-test-coverage:
+	go install github.com/vladopajic/go-test-coverage/v2@latest
+
+check-coverage: install-go-test-coverage
+	go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
+	${GOBIN}/go-test-coverage --config=./.testcoverage.yml
 
 build:
 	go build -ldflags "-w -s" .

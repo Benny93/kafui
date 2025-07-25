@@ -57,13 +57,13 @@
 				
 				<option value="file0">github.com/Benny93/kafui/cmd/kafui/root.go (0.0%)</option>
 				
-				<option value="file1">github.com/Benny93/kafui/main.go (0.0%)</option>
+				<option value="file1">github.com/Benny93/kafui/main.go (100.0%)</option>
 				
 				<option value="file2">github.com/Benny93/kafui/pkg/api/api.go (100.0%)</option>
 				
-				<option value="file3">github.com/Benny93/kafui/pkg/datasource/kafds/consume.go (42.0%)</option>
+				<option value="file3">github.com/Benny93/kafui/pkg/datasource/kafds/consume.go (48.3%)</option>
 				
-				<option value="file4">github.com/Benny93/kafui/pkg/datasource/kafds/datasource_kaf.go (3.2%)</option>
+				<option value="file4">github.com/Benny93/kafui/pkg/datasource/kafds/datasource_kaf.go (10.3%)</option>
 				
 				<option value="file5">github.com/Benny93/kafui/pkg/datasource/kafds/oauth.go (0.0%)</option>
 				
@@ -73,13 +73,13 @@
 				
 				<option value="file8">github.com/Benny93/kafui/pkg/kafui/helper.go (94.4%)</option>
 				
-				<option value="file9">github.com/Benny93/kafui/pkg/kafui/kafui.go (0.0%)</option>
+				<option value="file9">github.com/Benny93/kafui/pkg/kafui/kafui.go (100.0%)</option>
 				
 				<option value="file10">github.com/Benny93/kafui/pkg/kafui/page_detail.go (76.8%)</option>
 				
 				<option value="file11">github.com/Benny93/kafui/pkg/kafui/page_main.go (72.7%)</option>
 				
-				<option value="file12">github.com/Benny93/kafui/pkg/kafui/page_topic.go (8.5%)</option>
+				<option value="file12">github.com/Benny93/kafui/pkg/kafui/page_topic.go (55.0%)</option>
 				
 				<option value="file13">github.com/Benny93/kafui/pkg/kafui/resource_context.go (100.0%)</option>
 				
@@ -87,7 +87,7 @@
 				
 				<option value="file15">github.com/Benny93/kafui/pkg/kafui/resource_topic.go (100.0%)</option>
 				
-				<option value="file16">github.com/Benny93/kafui/pkg/kafui/search_bar.go (69.4%)</option>
+				<option value="file16">github.com/Benny93/kafui/pkg/kafui/search_bar.go (72.2%)</option>
 				
 				<option value="file17">github.com/Benny93/kafui/pkg/kafui/table_input.go (29.2%)</option>
 				
@@ -140,7 +140,7 @@ import (
         "github.com/Benny93/kafui/cmd/kafui"
 )
 
-func main() <span class="cov0" title="0">{
+func main() <span class="cov8" title="1">{
         cmd.DoExecute()
 }</span>
 </pre>
@@ -280,15 +280,17 @@ func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, 
 
 var handler api.MessageHandlerFunc // todo remove global var
 
-func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) <span class="cov0" title="0">{
+func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) <span class="cov8" title="1">{
         var offset int64
         cfg, err := getConfig()
         if err != nil </span><span class="cov0" title="0">{
                 onError(err)
+                return
         }</span>
-        <span class="cov0" title="0">client, err := getClientFromConfig(cfg)
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">client, err := getClientFromConfig(cfg)
+        if err != nil </span><span class="cov8" title="1">{
                 onError(err)
+                return
         }</span>
         <span class="cov0" title="0">handler = handleMessage
         // Allow deprecated flag to override when outputFormat is not specified, or default.
@@ -310,6 +312,7 @@ func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags,
                 o, err := strconv.ParseInt(offsetFlag, 10, 64)
                 if err != nil </span><span class="cov0" title="0">{
                         onError(err)
+                        return
                 }</span>
                 <span class="cov0" title="0">offset = o</span>
         }
@@ -344,9 +347,9 @@ func (g *g) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGro
         <span class="cov8" title="1">return nil</span>
 }
 
-func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) error <span class="cov0" title="0">{
+func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) error <span class="cov8" title="1">{
         cg, err := sarama.NewConsumerGroupFromClient(group, client)
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
                 return fmt.Errorf("Failed to create consumer group: %v", err)
         }</span>
 
@@ -357,8 +360,12 @@ func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group s
         <span class="cov0" title="0">return nil</span>
 }
 
-func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) <span class="cov0" title="0">{
-        consumer, err := sarama.NewConsumerFromClient(client)
+func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) <span class="cov8" title="1">{
+        if client == nil </span><span class="cov8" title="1">{
+                onError(fmt.Sprintf("Unable to create consumer from client: client is nil\n"))
+                return
+        }</span>
+        <span class="cov0" title="0">consumer, err := sarama.NewConsumerFromClient(client)
         if err != nil </span><span class="cov0" title="0">{
                 onError(fmt.Sprintf("Unable to create consumer from client: %v\n", err))
                 return
@@ -593,8 +600,11 @@ func formatMessage(msg *sarama.ConsumerMessage, rawMessage []byte, keyToDisplay 
 }
 
 // proto to JSON
-func protoDecode(reg *proto.DescriptorRegistry, b []byte, _type string) ([]byte, error) <span class="cov0" title="0">{
-        dynamicMessage := reg.MessageForType(_type)
+func protoDecode(reg *proto.DescriptorRegistry, b []byte, _type string) ([]byte, error) <span class="cov8" title="1">{
+        if reg == nil </span><span class="cov8" title="1">{
+                return b, nil
+        }</span>
+        <span class="cov0" title="0">dynamicMessage := reg.MessageForType(_type)
         if dynamicMessage == nil </span><span class="cov0" title="0">{
                 return b, nil
         }</span>
@@ -623,9 +633,11 @@ func avroDecode(b []byte) ([]byte, error) <span class="cov8" title="1">{
 }
 
 func formatKey(key []byte) []byte <span class="cov8" title="1">{
-        if b, err := keyfmt.Format(key); err == nil </span><span class="cov8" title="1">{
-                return b
-        }</span>
+        if keyfmt != nil </span><span class="cov8" title="1">{
+                if b, err := keyfmt.Format(key); err == nil </span><span class="cov8" title="1">{
+                        return b
+                }</span>
+        }
         <span class="cov8" title="1">return key</span>
 
 }
@@ -680,7 +692,7 @@ func (e *OutputFormat) Type() string <span class="cov8" title="1">{
         return "OutputFormat"
 }</span>
 
-func completeOutputFormat(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) <span class="cov0" title="0">{
+func completeOutputFormat(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) <span class="cov8" title="1">{
         return []string{"default", "raw", "json"}, cobra.ShellCompDirectiveNoFileComp
 }</span>
 </pre>
@@ -862,7 +874,7 @@ func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string,
         return nil</span>
 }
 
-func getConfig() (saramaConfig *sarama.Config, e error) <span class="cov0" title="0">{
+func getConfig() (saramaConfig *sarama.Config, e error) <span class="cov8" title="1">{
         saramaConfig = sarama.NewConfig()
         saramaConfig.Version = sarama.V1_1_0_0
         saramaConfig.Producer.Return.Successes = true
@@ -875,7 +887,7 @@ func getConfig() (saramaConfig *sarama.Config, e error) <span class="cov0" title
                 }</span>
                 <span class="cov0" title="0">saramaConfig.Version = parsedVersion</span>
         }
-        <span class="cov0" title="0">if cluster.SASL != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if cluster.SASL != nil </span><span class="cov0" title="0">{
                 saramaConfig.Net.SASL.Enable = true
                 if cluster.SASL.Mechanism != "OAUTHBEARER" </span><span class="cov0" title="0">{
                         saramaConfig.Net.SASL.User = cluster.SASL.Username
@@ -883,7 +895,7 @@ func getConfig() (saramaConfig *sarama.Config, e error) <span class="cov0" title
                 }</span>
                 <span class="cov0" title="0">saramaConfig.Net.SASL.Version = cluster.SASL.Version</span>
         }
-        <span class="cov0" title="0">if cluster.TLS != nil &amp;&amp; cluster.SecurityProtocol != "SASL_SSL" </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if cluster.TLS != nil &amp;&amp; cluster.SecurityProtocol != "SASL_SSL" </span><span class="cov0" title="0">{
                 saramaConfig.Net.TLS.Enable = true
                 tlsConfig := &amp;tls.Config{
                         InsecureSkipVerify: cluster.TLS.Insecure,
@@ -920,7 +932,7 @@ func getConfig() (saramaConfig *sarama.Config, e error) <span class="cov0" title
                 }
                 <span class="cov0" title="0">saramaConfig.Net.TLS.Config = tlsConfig</span>
         }
-        <span class="cov0" title="0">if cluster.SecurityProtocol == "SASL_SSL" </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if cluster.SecurityProtocol == "SASL_SSL" </span><span class="cov0" title="0">{
                 saramaConfig.Net.TLS.Enable = true
                 if cluster.TLS != nil </span><span class="cov0" title="0">{
                         tlsConfig := &amp;tls.Config{
@@ -942,7 +954,7 @@ func getConfig() (saramaConfig *sarama.Config, e error) <span class="cov0" title
                         saramaConfig.Net.TLS.Config = &amp;tls.Config{InsecureSkipVerify: false}
                 }</span>
         }
-        <span class="cov0" title="0">if cluster.SecurityProtocol == "SASL_SSL" || cluster.SecurityProtocol == "SASL_PLAINTEXT" </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if cluster.SecurityProtocol == "SASL_SSL" || cluster.SecurityProtocol == "SASL_PLAINTEXT" </span><span class="cov0" title="0">{
                 if cluster.SASL.Mechanism == "SCRAM-SHA-512" </span><span class="cov0" title="0">{
                         saramaConfig.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient </span><span class="cov0" title="0">{ return &amp;XDGSCRAMClient{HashGeneratorFcn: SHA512} }</span>
                         <span class="cov0" title="0">saramaConfig.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA512)</span>
@@ -956,7 +968,7 @@ func getConfig() (saramaConfig *sarama.Config, e error) <span class="cov0" title
 
                 }</span>
         }
-        <span class="cov0" title="0">return saramaConfig, nil</span>
+        <span class="cov8" title="1">return saramaConfig, nil</span>
 }
 
 var (
@@ -1087,9 +1099,9 @@ func getClient() (client sarama.Client, e error) <span class="cov0" title="0">{
         <span class="cov0" title="0">return client, nil</span>
 }
 
-func getClientFromConfig(config *sarama.Config) (sarama.Client, error) <span class="cov0" title="0">{
+func getClientFromConfig(config *sarama.Config) (sarama.Client, error) <span class="cov8" title="1">{
         client, err := sarama.NewClient(currentCluster.Brokers, config)
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("Unable to get client: %v\n", err)
         }</span>
         <span class="cov0" title="0">return client, nil</span>
@@ -1424,17 +1436,20 @@ import (
         "github.com/Benny93/kafui/pkg/datasource/mock"
 )
 
-func Init(cfgOption string, useMock bool) <span class="cov0" title="0">{
+// openUIFunc is a variable that holds the OpenUI function, allowing it to be mocked in tests
+var openUIFunc = OpenUI
+
+func Init(cfgOption string, useMock bool) <span class="cov8" title="1">{
 
         fmt.Println("Init...")
         var dataSource api.KafkaDataSource
 
         dataSource = mock.KafkaDataSourceMock{}
-        if !useMock </span><span class="cov0" title="0">{
+        if !useMock </span><span class="cov8" title="1">{
                 dataSource = &amp;kafds.KafkaDataSourceKaf{}
         }</span>
-        <span class="cov0" title="0">dataSource.Init(cfgOption)
-        OpenUI(dataSource)</span>
+        <span class="cov8" title="1">dataSource.Init(cfgOption)
+        openUIFunc(dataSource)</span>
 }
 </pre>
 		
@@ -1921,35 +1936,35 @@ func NewTopicPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview
         }
 }</span>
 
-func (tp *TopicPage) getHandler() api.MessageHandlerFunc <span class="cov0" title="0">{
+func (tp *TopicPage) getHandler() api.MessageHandlerFunc <span class="cov8" title="1">{
 
         tp.consumedMessages = make(map[string]api.Message)
-        return func(msg api.Message) </span><span class="cov0" title="0">{
+        return func(msg api.Message) </span><span class="cov8" title="1">{
                 key := tp.getMessageKey(fmt.Sprint(msg.Partition), fmt.Sprint(msg.Offset))
                 tp.consumedMessages[key] = msg
                 tp.newMessageConsumed = true
         }</span>
 }
 
-func (tp *TopicPage) getMessageKey(partition string, offset string) string <span class="cov0" title="0">{
+func (tp *TopicPage) getMessageKey(partition string, offset string) string <span class="cov8" title="1">{
         return fmt.Sprintf("%s:%s", partition, offset)
 }</span>
 
-func (tp *TopicPage) refreshTopicTable(ctx context.Context) <span class="cov0" title="0">{
+func (tp *TopicPage) refreshTopicTable(ctx context.Context) <span class="cov8" title="1">{
         defer RecoverAndExit(tp.app)
         refreshTicker := time.NewTicker(100 * time.Millisecond)
         defer refreshTicker.Stop()
 
-        for </span><span class="cov0" title="0">{
+        for </span><span class="cov8" title="1">{
                 select </span>{
                 case &lt;-ctx.Done():<span class="cov0" title="0">
                         // Exit the function if the context is done
                         return</span>
-                case &lt;-refreshTicker.C:<span class="cov0" title="0">
+                case &lt;-refreshTicker.C:<span class="cov8" title="1">
                         if !tp.newMessageConsumed &amp;&amp; !tp.requireRefresh </span><span class="cov0" title="0">{
                                 continue</span>
                         }
-                        <span class="cov0" title="0">tp.requireRefresh = false
+                        <span class="cov8" title="1">tp.requireRefresh = false
                         tp.newMessageConsumed = false
                         //tp.ShowNotification(fmt.Sprintf("Consumed messages %d", len(tp.consumedMessages)))
                         tp.app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
@@ -1989,7 +2004,7 @@ func (tp *TopicPage) refreshTopicTable(ctx context.Context) <span class="cov0" t
         }
 }
 
-func fieldFuzzyMatchesSearchText(msg api.Message, searchText string) bool <span class="cov0" title="0">{
+func fieldFuzzyMatchesSearchText(msg api.Message, searchText string) bool <span class="cov8" title="1">{
 
         // Convert all fields to lowercase for case-insensitive comparison
         searchText = strings.ToLower(searchText)
@@ -2000,22 +2015,22 @@ func fieldFuzzyMatchesSearchText(msg api.Message, searchText string) bool <span 
                 strings.Contains(strings.ToLower(fmt.Sprint(msg.KeySchemaID)), searchText) ||
                 strings.Contains(strings.ToLower(fmt.Sprint(msg.ValueSchemaID)), searchText) ||
                 strings.Contains(strings.ToLower(msg.Key), searchText) ||
-                strings.Contains(strings.ToLower(msg.Value), searchText) </span><span class="cov0" title="0">{
+                strings.Contains(strings.ToLower(msg.Value), searchText) </span><span class="cov8" title="1">{
                 return true
         }</span>
 
-        <span class="cov0" title="0">return false</span>
+        <span class="cov8" title="1">return false</span>
 }
 
-func (*TopicPage) shortValue(msg api.Message) string <span class="cov0" title="0">{
-        if len(msg.Value) &lt;= 100 </span><span class="cov0" title="0">{
+func (*TopicPage) shortValue(msg api.Message) string <span class="cov8" title="1">{
+        if len(msg.Value) &lt;= 100 </span><span class="cov8" title="1">{
                 return msg.Value
         }</span>
-        <span class="cov0" title="0">shortenedText := msg.Value[:100]
-        if len(shortenedText) &lt; len(msg.Value) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">shortenedText := msg.Value[:100]
+        if len(shortenedText) &lt; len(msg.Value) </span><span class="cov8" title="1">{
                 shortenedText = shortenedText + "..."
         }</span>
-        <span class="cov0" title="0">return shortenedText</span>
+        <span class="cov8" title="1">return shortenedText</span>
 }
 
 func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, flags api.ConsumeFlags) <span class="cov0" title="0">{
@@ -2057,12 +2072,12 @@ func (tp *TopicPage) PageConsumeTopic(topicName string, currentTopic api.Topic, 
         go tp.refreshTopicTable(ctx)</span>
 }
 
-func (tp *TopicPage) createFirstRowTopicTable(topicName string) <span class="cov0" title="0">{
+func (tp *TopicPage) createFirstRowTopicTable(topicName string) <span class="cov8" title="1">{
         title := fmt.Sprintf("&lt;%s&gt;", topicName)
-        if tp.searchText != "" </span><span class="cov0" title="0">{
+        if tp.searchText != "" </span><span class="cov8" title="1">{
                 title = fmt.Sprintf("&lt;%s/%s&gt;", topicName, tp.searchText)
         }</span>
-        <span class="cov0" title="0">tp.messagesFlex.SetBorder(true).SetTitle(title)
+        <span class="cov8" title="1">tp.messagesFlex.SetBorder(true).SetTitle(title)
         tp.consumerTable.SetCell(0, 0, tview.NewTableCell("Offset").SetTextColor(tview.Styles.SecondaryTextColor))
         tp.consumerTable.SetCell(0, 1, tview.NewTableCell("Partition").SetTextColor(tview.Styles.SecondaryTextColor))
         tp.consumerTable.SetCell(0, 2, tview.NewTableCell("KeySID").SetTextColor(tview.Styles.SecondaryTextColor))
@@ -2073,7 +2088,7 @@ func (tp *TopicPage) createFirstRowTopicTable(topicName string) <span class="cov
 }
 
 func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey <span class="cov8" title="1">{
-        return func(event *tcell.EventKey) *tcell.EventKey </span><span class="cov0" title="0">{
+        return func(event *tcell.EventKey) *tcell.EventKey </span><span class="cov8" title="1">{
                 if event.Key() == tcell.KeyEnter </span><span class="cov0" title="0">{
                         // Get the selected row index
                         row, _ := tp.consumerTable.GetSelection()
@@ -2088,25 +2103,25 @@ func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey 
                                 tp.messageDetailPage.Show()
                         }</span>
                 }
-                <span class="cov0" title="0">if event.Rune() == 'g' </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">if event.Rune() == 'g' </span><span class="cov0" title="0">{
                         // Handle 'g' key event
                         tp.consumerTable.ScrollToBeginning()
                 }</span>
-                <span class="cov0" title="0">if event.Rune() == 'G' </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">if event.Rune() == 'G' </span><span class="cov0" title="0">{
                         tp.consumerTable.ScrollToEnd()
                 }</span>
-                <span class="cov0" title="0">if event.Rune() == '/' </span><span class="cov0" title="0">{
-                        if tp.tableSearch == nil </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">if event.Rune() == '/' </span><span class="cov8" title="1">{
+                        if tp.tableSearch == nil </span><span class="cov8" title="1">{
                                 tp.tableSearch = tp.CreateInputSearch(func() </span><span class="cov0" title="0">{
                                         tp.bottomFlex.RemoveItem(tp.tableSearch)
                                         tp.app.SetFocus(tp.consumerTable)
                                         tp.tableSearch = nil
                                 }</span>)
-                                <span class="cov0" title="0">tp.bottomFlex.AddItem(tp.tableSearch, 0, 1, false)</span>
+                                <span class="cov8" title="1">tp.bottomFlex.AddItem(tp.tableSearch, 0, 1, false)</span>
                         }
-                        <span class="cov0" title="0">tp.app.SetFocus(tp.tableSearch)</span>
+                        <span class="cov8" title="1">tp.app.SetFocus(tp.tableSearch)</span>
                 }
-                <span class="cov0" title="0">if event.Rune() == 'o' </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">if event.Rune() == 'o' </span><span class="cov0" title="0">{
                         // Toggle between "newest" and "oldest" values
                         if tp.consumeFlags.OffsetFlag == "latest" </span><span class="cov0" title="0">{
                                 tp.consumeFlags.OffsetFlag = "oldest"
@@ -2117,13 +2132,13 @@ func (tp *TopicPage) inputCapture() func(event *tcell.EventKey) *tcell.EventKey 
                         }</span>
                         <span class="cov0" title="0">tp.RestartConsumer()</span>
                 }
-                <span class="cov0" title="0">if event.Key() == tcell.KeyRune </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">if event.Key() == tcell.KeyRune </span><span class="cov8" title="1">{
                         switch event.Rune() </span>{
                         case 'c':<span class="cov0" title="0">
                                 CopySelectedRowToClipboard(tp.consumerTable, tp.ShowNotification)</span>
                         }
                 }
-                <span class="cov0" title="0">return event</span>
+                <span class="cov8" title="1">return event</span>
         }
 }
 
@@ -2161,15 +2176,15 @@ func (tp *TopicPage) CreateTopicPage(currentTopic string) *tview.Flex <span clas
         return flex
 }</span>
 
-func (tp *TopicPage) CreateTopicInfoSection(topicName string, topicDetail api.Topic) *tview.Flex <span class="cov0" title="0">{
+func (tp *TopicPage) CreateTopicInfoSection(topicName string, topicDetail api.Topic) *tview.Flex <span class="cov8" title="1">{
         flex := tview.NewFlex().SetDirection(tview.FlexRow)
         flex.SetBorderPadding(0, 0, 1, 0)
         msgCount := "n.a."
-        if topicDetail.MessageCount &gt; 0 </span><span class="cov0" title="0">{
+        if topicDetail.MessageCount &gt; 0 </span><span class="cov8" title="1">{
                 msgCount = fmt.Sprintf("%d", topicDetail.MessageCount)
         }</span>
         //flex.SetBorder(true)
-        <span class="cov0" title="0">flex.
+        <span class="cov8" title="1">flex.
                 AddItem(CreatePropertyInfo("Topic Name", topicName), 0, 1, false).
                 AddItem(CreatePropertyInfo("Number of Messages", msgCount), 0, 1, false).
                 AddItem(CreatePropertyInfo("Number of Partitions", fmt.Sprint(topicDetail.NumPartitions)), 0, 1, false).
@@ -2178,7 +2193,7 @@ func (tp *TopicPage) CreateTopicInfoSection(topicName string, topicDetail api.To
         return flex</span>
 }
 
-func (tp *TopicPage) CreateConsumeFlagsSection() *tview.Flex <span class="cov0" title="0">{
+func (tp *TopicPage) CreateConsumeFlagsSection() *tview.Flex <span class="cov8" title="1">{
         flex := tview.NewFlex().SetDirection(tview.FlexRow)
         flex.SetBorderPadding(0, 0, 1, 0)
         //flex.SetBorder(true)
@@ -2190,15 +2205,15 @@ func (tp *TopicPage) CreateConsumeFlagsSection() *tview.Flex <span class="cov0" 
         return flex
 }</span>
 
-func (tp *TopicPage) CloseTopicPage() <span class="cov0" title="0">{
-        go func() </span><span class="cov0" title="0">{
+func (tp *TopicPage) CloseTopicPage() <span class="cov8" title="1">{
+        go func() </span><span class="cov8" title="1">{
                 defer RecoverAndExit(tp.app)
                 tp.clearConsumedData()
 
         }</span>()
 }
 
-func (tp *TopicPage) clearConsumedData() <span class="cov0" title="0">{
+func (tp *TopicPage) clearConsumedData() <span class="cov8" title="1">{
         tp.consumerTable.Clear()
         tp.searchText = ""
         if tp.tableSearch != nil </span><span class="cov0" title="0">{
@@ -2206,7 +2221,7 @@ func (tp *TopicPage) clearConsumedData() <span class="cov0" title="0">{
                 tp.tableSearch = nil
         }</span>
 
-        <span class="cov0" title="0">tp.cancelConsumption()
+        <span class="cov8" title="1">tp.cancelConsumption()
         tp.cancelRefresh()
 
         for e := tp.topFlexElements.Front(); e != nil; e = e.Next() </span><span class="cov0" title="0">{
@@ -2231,7 +2246,7 @@ func (tp *TopicPage) ShowNotification(message string) <span class="cov0" title="
         }()
 }
 
-func (tp *TopicPage) CreateInputLegend() *tview.Flex <span class="cov0" title="0">{
+func (tp *TopicPage) CreateInputLegend() *tview.Flex <span class="cov8" title="1">{
         flex := tview.NewFlex()
         flex.SetBorderPadding(0, 0, 1, 0)
         left := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -2254,7 +2269,7 @@ func (tp *TopicPage) CreateInputLegend() *tview.Flex <span class="cov0" title="0
         return flex
 }</span>
 
-func (tp *TopicPage) CreateInputSearch(onDone func()) *tview.Flex <span class="cov0" title="0">{
+func (tp *TopicPage) CreateInputSearch(onDone func()) *tview.Flex <span class="cov8" title="1">{
         i := tview.NewInputField().
                 SetLabel("💡?").
                 SetFieldWidth(0)
@@ -2268,12 +2283,12 @@ func (tp *TopicPage) CreateInputSearch(onDone func()) *tview.Flex <span class="c
                 }</span>
         })
 
-        <span class="cov0" title="0">i.SetChangedFunc(func(text string) </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">i.SetChangedFunc(func(text string) </span><span class="cov0" title="0">{
                 tp.searchText = text
                 tp.requireRefresh = true
         }</span>)
 
-        <span class="cov0" title="0">f := tview.NewFlex()
+        <span class="cov8" title="1">f := tview.NewFlex()
         f.SetBorder(false)
         f.AddItem(i, 0, 1, true)
         return f</span>
@@ -2699,7 +2714,7 @@ func (s *SearchBar) CreateSearchInput(msgChannel chan UIEvent) *tview.InputField
         })
 
         <span class="cov8" title="1">s.SearchInput.SetChangedFunc(func(text string) </span><span class="cov8" title="1">{
-                if s.CurrentMode == TableSearch </span><span class="cov0" title="0">{
+                if s.CurrentMode == TableSearch </span><span class="cov8" title="1">{
                         s.CurrentString = text
                         s.UpdateTable(s.CurrentResource, s.CurrentString)
                 }</span>
