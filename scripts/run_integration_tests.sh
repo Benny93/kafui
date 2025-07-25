@@ -3,6 +3,9 @@
 # Integration Test Runner Script for Kafui
 # Agent Beta - Integration Test Specialist
 
+# ensure execution in correct directory
+cd "$(dirname "$0")/.." 
+
 set -e
 
 echo "🧪 Kafui Integration Test Suite - Agent Beta"
@@ -90,6 +93,7 @@ if [ "$DOCKER_AVAILABLE" = true ]; then
     print_status "4. Setting up Docker environment for E2E tests..."
     
     # Start test environment
+    cd "$(dirname "$0")/.." 
     cd test/docker
     docker-compose -f docker-compose.test.yml up -d
     
@@ -106,6 +110,7 @@ if [ "$DOCKER_AVAILABLE" = true ]; then
         print_status "Running E2E integration tests..."
         KAFUI_E2E_TEST=true go test -v ./test/integration/ || {
             print_error "E2E tests failed"
+            cd "$(dirname "$0")/.." 
             cd test/docker
             docker-compose -f docker-compose.test.yml down
             exit 1
@@ -114,11 +119,13 @@ if [ "$DOCKER_AVAILABLE" = true ]; then
         print_success "E2E integration tests passed"
         
         # Clean up
+        cd "$(dirname "$0")/.." 
         cd test/docker
         docker-compose -f docker-compose.test.yml down
         print_status "Docker test environment cleaned up"
     else
         print_warning "Kafka test environment not responding - skipping E2E tests"
+        cd "$(dirname "$0")/.." 
         cd test/docker
         docker-compose -f docker-compose.test.yml down
     fi
@@ -128,6 +135,7 @@ fi
 
 # Test 5: Mock mode validation
 print_status "5. Running mock mode validation..."
+cd "$(dirname "$0")/.." 
 print_status "Testing mock mode execution..."
 timeout 5s go run . --mock || {
     if [ $? -eq 124 ]; then
