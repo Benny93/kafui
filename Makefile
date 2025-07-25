@@ -26,7 +26,7 @@ test:
 test-short:
 	go test -short -v ./...
 test-integration:
-	go test -v ./pkg/kafui/ -run "TestInit|TestDataSourceSwitching|TestConsumeTopicIntegration|TestConfigurationIntegration|TestUIWorkflowIntegration"
+	./scripts/run_integration_tests.sh
 test-benchmarks:
 	go test -bench=. -benchmem ./pkg/kafui/ -run "^$$"
 run-kafka:
