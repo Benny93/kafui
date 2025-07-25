@@ -11,6 +11,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/IBM/sarama"
+	"github.com/birdayz/kaf/pkg/config"
 	"github.com/spf13/cobra"
 	prettyjson "github.com/hokaccha/go-prettyjson"
 	"github.com/stretchr/testify/assert"
@@ -1053,21 +1054,20 @@ func TestOutputFormat(t *testing.T) {
 // TestDoConsume tests the main DoConsume function
 func TestDoConsume(t *testing.T) {
 	// Save original global variables
-	originalOffsetFlag := offsetFlag
-	originalFollow := follow
-	originalTail := tail
-	originalHandler := handler
+	originalCurrentCluster := currentCluster
 	
 	defer func() {
 		// Restore original values
-		offsetFlag = originalOffsetFlag
-		follow = originalFollow
-		tail = originalTail
-		handler = originalHandler
+		currentCluster = originalCurrentCluster
 	}()
 	
+	// Set up a minimal test cluster configuration to avoid nil pointer panics
+	currentCluster = &config.Cluster{
+		Brokers: []string{"localhost:9092"},
+	}
+	
 	t.Run("consume_with_oldest_offset", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 		
 		topic := "test-topic"
@@ -1090,13 +1090,11 @@ func TestDoConsume(t *testing.T) {
 			cancel()
 		}
 		
-		// This will fail due to missing config, but we can test the setup
+		// This will fail due to missing Kafka broker, but we can test the setup
 		DoConsume(ctx, topic, flags, handleMessage, onError)
 		
-		// Verify that error handling was called (expected due to missing config)
-		if len(capturedErrors) == 0 {
-			t.Error("Expected error due to missing config, but no errors captured")
-		}
+		// Verify that error handling was called (expected due to missing broker)
+		assert.True(t, len(capturedErrors) > 0, "Expected error due to missing broker connection")
 	})
 	
 	t.Run("consume_with_newest_offset", func(t *testing.T) {
@@ -1124,10 +1122,8 @@ func TestDoConsume(t *testing.T) {
 		
 		DoConsume(ctx, topic, flags, handleMessage, onError)
 		
-		// Verify that error handling was called (expected due to missing config)
-		if len(capturedErrors) == 0 {
-			t.Error("Expected error due to missing config, but no errors captured")
-		}
+		// Verify that error handling was called (expected due to missing broker)
+		assert.True(t, len(capturedErrors) > 0, "Expected error due to missing broker connection")
 	})
 	
 	t.Run("consume_with_numeric_offset", func(t *testing.T) {
@@ -1155,10 +1151,8 @@ func TestDoConsume(t *testing.T) {
 		
 		DoConsume(ctx, topic, flags, handleMessage, onError)
 		
-		// Verify that error handling was called (expected due to missing config)
-		if len(capturedErrors) == 0 {
-			t.Error("Expected error due to missing config, but no errors captured")
-		}
+		// Verify that error handling was called (expected due to missing broker)
+		assert.True(t, len(capturedErrors) > 0, "Expected error due to missing broker connection")
 	})
 	
 	t.Run("consume_with_invalid_offset", func(t *testing.T) {
@@ -1187,9 +1181,7 @@ func TestDoConsume(t *testing.T) {
 		DoConsume(ctx, topic, flags, handleMessage, onError)
 		
 		// Should capture error due to invalid offset parsing
-		if len(capturedErrors) == 0 {
-			t.Error("Expected error due to invalid offset, but no errors captured")
-		}
+		assert.True(t, len(capturedErrors) > 0, "Expected error due to invalid offset or missing broker")
 	})
 }
 
@@ -1215,14 +1207,20 @@ func TestWithConsumerGroupFunction(t *testing.T) {
 // TestWithoutConsumerGroupFunction tests the partition consumer functionality
 func TestWithoutConsumerGroupDirectly(t *testing.T) {
 	t.Run("nil_client_error", func(t *testing.T) {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
 		
 		var capturedErrors []interface{}
 		onError := func(err interface{}) {
 			capturedErrors = append(capturedErrors, err)
+			cancel() // Cancel to avoid hanging
 		}
 		
-		withoutConsumerGroup(ctx, nil, "test-topic", 0, onError)
+		// Use a goroutine to avoid blocking the test
+		go withoutConsumerGroup(ctx, nil, "test-topic", 0, onError)
+		
+		// Wait for either error or timeout
+		<-ctx.Done()
 		
 		if len(capturedErrors) == 0 {
 			t.Error("Expected error when using nil client")

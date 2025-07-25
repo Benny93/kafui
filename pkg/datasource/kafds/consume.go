@@ -71,10 +71,12 @@ func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags,
 	cfg, err := getConfig()
 	if err != nil {
 		onError(err)
+		return
 	}
 	client, err := getClientFromConfig(cfg)
 	if err != nil {
 		onError(err)
+		return
 	}
 	handler = handleMessage
 	// Allow deprecated flag to override when outputFormat is not specified, or default.
@@ -96,6 +98,7 @@ func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags,
 		o, err := strconv.ParseInt(offsetFlag, 10, 64)
 		if err != nil {
 			onError(err)
+			return
 		}
 		offset = o
 	}
@@ -144,6 +147,10 @@ func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group s
 }
 
 func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) {
+	if client == nil {
+		onError(fmt.Sprintf("Unable to create consumer from client: client is nil\n"))
+		return
+	}
 	consumer, err := sarama.NewConsumerFromClient(client)
 	if err != nil {
 		onError(fmt.Sprintf("Unable to create consumer from client: %v\n", err))
@@ -380,6 +387,9 @@ func formatMessage(msg *sarama.ConsumerMessage, rawMessage []byte, keyToDisplay 
 
 // proto to JSON
 func protoDecode(reg *proto.DescriptorRegistry, b []byte, _type string) ([]byte, error) {
+	if reg == nil {
+		return b, nil
+	}
 	dynamicMessage := reg.MessageForType(_type)
 	if dynamicMessage == nil {
 		return b, nil
@@ -409,8 +419,10 @@ func avroDecode(b []byte) ([]byte, error) {
 }
 
 func formatKey(key []byte) []byte {
-	if b, err := keyfmt.Format(key); err == nil {
-		return b
+	if keyfmt != nil {
+		if b, err := keyfmt.Format(key); err == nil {
+			return b
+		}
 	}
 	return key
 
