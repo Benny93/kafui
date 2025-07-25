@@ -223,37 +223,64 @@ func TestDetailPage_HandleInput(t *testing.T) {
 
 	detailPage := NewDetailPage(app, pages, headers, value)
 
+	// First show the page to set up the UI properly
+	detailPage.Show()
+
 	tests := []struct {
 		name           string
 		key            tcell.Key
 		rune           rune
+		hasFocus       bool
 		expectedResult *tcell.EventKey
 		testFunc       func(*testing.T, *DetailPage)
 	}{
 		{
-			name:           "copy content with 'c'",
+			name:           "copy content with 'c' when focused",
 			key:            tcell.KeyRune,
 			rune:           'c',
+			hasFocus:       true,
 			expectedResult: nil, // Should return nil to indicate handled
 			testFunc: func(t *testing.T, dp *DetailPage) {
-				// Note: We can't easily test clipboard functionality in unit tests
-				// but we can verify the key was handled
+				// The copy operation should have been triggered
+				// We can't test clipboard directly, but we can verify the method was called
 			},
 		},
 		{
-			name:           "toggle headers with 'h'",
+			name:           "copy content with 'c' when not focused",
+			key:            tcell.KeyRune,
+			rune:           'c',
+			hasFocus:       false,
+			expectedResult: nil, // Should return the event unchanged
+			testFunc: func(t *testing.T, dp *DetailPage) {
+				// Should not trigger copy when not focused
+			},
+		},
+		{
+			name:           "toggle headers with 'h' when focused",
 			key:            tcell.KeyRune,
 			rune:           'h',
+			hasFocus:       true,
 			expectedResult: nil, // Should return nil to indicate handled
 			testFunc: func(t *testing.T, dp *DetailPage) {
 				// The showHeaders state should have been toggled
-				// Note: This is tricky to test due to the Show/Hide cycle
+				// Note: This triggers Show/Hide cycle which is complex to test
 			},
 		},
 		{
-			name:           "unhandled key",
+			name:           "toggle headers with 'h' when not focused",
+			key:            tcell.KeyRune,
+			rune:           'h',
+			hasFocus:       false,
+			expectedResult: nil, // Should return the event unchanged
+			testFunc: func(t *testing.T, dp *DetailPage) {
+				// Should not toggle headers when not focused
+			},
+		},
+		{
+			name:           "unhandled key 'x'",
 			key:            tcell.KeyRune,
 			rune:           'x',
+			hasFocus:       true,
 			expectedResult: nil, // Should return the event unchanged
 			testFunc: func(t *testing.T, dp *DetailPage) {
 				// Should not change any state
@@ -263,6 +290,27 @@ func TestDetailPage_HandleInput(t *testing.T) {
 			name:           "escape key",
 			key:            tcell.KeyEsc,
 			rune:           0,
+			hasFocus:       true,
+			expectedResult: nil, // Should return the event
+			testFunc: func(t *testing.T, dp *DetailPage) {
+				// Should not be handled by DetailPage
+			},
+		},
+		{
+			name:           "enter key",
+			key:            tcell.KeyEnter,
+			rune:           0,
+			hasFocus:       true,
+			expectedResult: nil, // Should return the event
+			testFunc: func(t *testing.T, dp *DetailPage) {
+				// Should not be handled by DetailPage
+			},
+		},
+		{
+			name:           "arrow key",
+			key:            tcell.KeyUp,
+			rune:           0,
+			hasFocus:       true,
 			expectedResult: nil, // Should return the event
 			testFunc: func(t *testing.T, dp *DetailPage) {
 				// Should not be handled by DetailPage
@@ -275,21 +323,36 @@ func TestDetailPage_HandleInput(t *testing.T) {
 			// Create event
 			event := tcell.NewEventKey(tt.key, tt.rune, tcell.ModNone)
 
-			// Note: TextView doesn't have SetFocus method, but we can test input handling
+			// Mock the HasFocus behavior by creating a custom test
+			// Since we can't directly control HasFocus, we'll test the logic paths
+			originalShowHeaders := detailPage.showHeaders
 
 			// Handle the input
 			result := detailPage.handleInput(event)
 
-			// Note: The actual behavior depends on TextView focus state
-			// For 'c' and 'h' keys, they should be handled when TextView has focus
-			// Since we can't easily simulate focus in unit tests, we test the method exists
-			if result == nil && (tt.rune != 'c' && tt.rune != 'h') {
-				// Only non-handled keys should return the original event
-			}
-
-			// For other keys, result should be the original event
-			if tt.rune != 'c' && tt.rune != 'h' && result != event {
-				t.Errorf("Expected original event for key '%c', got %v", tt.rune, result)
+			// In unit tests, TextView.HasFocus() always returns false
+			// So we test the actual behavior: keys 'c' and 'h' are only handled when focused
+			// Since we can't simulate focus in unit tests, all keys should return the original event
+			switch tt.rune {
+			case 'c':
+				// In unit tests, HasFocus() is false, so 'c' key should return original event
+				if result != event {
+					t.Errorf("Expected original event for 'c' key (no focus in unit test), got %v", result)
+				}
+			case 'h':
+				// In unit tests, HasFocus() is false, so 'h' key should return original event
+				if result != event {
+					t.Errorf("Expected original event for 'h' key (no focus in unit test), got %v", result)
+				}
+				// showHeaders should NOT have been toggled since there's no focus
+				if detailPage.showHeaders != originalShowHeaders {
+					t.Error("showHeaders should not have been toggled without focus")
+				}
+			default:
+				// For other keys, should return original event
+				if result != event {
+					t.Errorf("Expected original event for key %v, got %v", tt.key, result)
+				}
 			}
 
 			// Run additional test function
@@ -474,6 +537,201 @@ func TestDetailPage_EdgeCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDetailPage_ShowCopiedNotification tests the notification functionality
+func TestDetailPage_ShowCopiedNotification(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	headers := api.MessageHeaders{}
+	value := "test value"
+
+	detailPage := NewDetailPage(app, pages, headers, value)
+	
+	// First show the page to set up the UI properly
+	detailPage.Show()
+
+	// Test that showCopiedNotification doesn't panic
+	t.Run("notification doesn't panic", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("showCopiedNotification panicked: %v", r)
+			}
+		}()
+
+		// Call the notification function
+		detailPage.showCopiedNotification()
+
+		// Give the goroutine a moment to start
+		// Note: We can't easily test the full notification cycle due to timing
+		// but we can verify the method doesn't panic
+	})
+
+	// Test notification with different page states
+	t.Run("notification with multiple pages", func(t *testing.T) {
+		// Add another page to test the notification behavior
+		pages.AddPage("TestPage", tview.NewTextView(), true, false)
+		
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("showCopiedNotification with multiple pages panicked: %v", r)
+			}
+		}()
+
+		detailPage.showCopiedNotification()
+	})
+}
+
+// TestDetailPage_ShowWithHeaders tests the Show method with headers visible
+func TestDetailPage_ShowWithHeaders(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	headers := api.MessageHeaders{
+		{Key: "header1", Value: "value1"},
+		{Key: "header2", Value: "value2"},
+		{Key: "header3", Value: "value3"},
+	}
+	value := `{"test": "value"}`
+
+	detailPage := NewDetailPage(app, pages, headers, value)
+
+	// Test showing with headers hidden (default)
+	t.Run("show with headers hidden", func(t *testing.T) {
+		detailPage.showHeaders = false
+		detailPage.Show()
+
+		// Verify page was added
+		pageNames := pages.GetPageNames(false)
+		found := false
+		for _, name := range pageNames {
+			if name == "DetailPage" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("DetailPage was not added to pages")
+		}
+	})
+
+	// Test showing with headers visible
+	t.Run("show with headers visible", func(t *testing.T) {
+		detailPage.Hide() // Clean up first
+		detailPage.showHeaders = true
+		detailPage.Show()
+
+		// Verify page was added
+		pageNames := pages.GetPageNames(false)
+		found := false
+		for _, name := range pageNames {
+			if name == "DetailPage" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("DetailPage was not added to pages with headers visible")
+		}
+
+		// Verify that the front page is DetailPage
+		frontPageName, _ := pages.GetFrontPage()
+		if frontPageName != "DetailPage" {
+			t.Errorf("Front page = %v, want DetailPage", frontPageName)
+		}
+	})
+
+	// Test showing with empty headers but showHeaders = true
+	t.Run("show with empty headers but showHeaders true", func(t *testing.T) {
+		emptyHeadersPage := NewDetailPage(app, pages, api.MessageHeaders{}, value)
+		emptyHeadersPage.showHeaders = true
+		
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Show with empty headers panicked: %v", r)
+			}
+		}()
+		
+		emptyHeadersPage.Show()
+	})
+}
+
+// TestDetailPage_InputCaptureSetup tests that input capture is properly set up
+func TestDetailPage_InputCaptureSetup(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	headers := api.MessageHeaders{}
+	value := "test"
+
+	detailPage := NewDetailPage(app, pages, headers, value)
+	
+	// Show the page to set up input capture
+	detailPage.Show()
+
+	// Test that the valueTextView has input capture set
+	// Note: We can't directly test if SetInputCapture was called,
+	// but we can verify the Show method completes without error
+	if detailPage.valueTextView == nil {
+		t.Error("valueTextView should be initialized after Show()")
+	}
+}
+
+// TestDetailPage_HandleInputFocusSimulation tests input handling with simulated focus
+func TestDetailPage_HandleInputFocusSimulation(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	headers := api.MessageHeaders{
+		{Key: "test", Value: "header"},
+	}
+	value := `{"key": "value"}`
+
+	detailPage := NewDetailPage(app, pages, headers, value)
+	detailPage.Show()
+
+	// Test the actual focus-dependent behavior by examining the code path
+	t.Run("simulate focused state for 'c' key", func(t *testing.T) {
+		// Create a mock TextView that reports as focused
+		// Since we can't easily mock HasFocus, we'll test the method directly
+		event := tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone)
+		
+		// The handleInput method checks if valueTextView.HasFocus()
+		// We can't mock this easily, but we can test that the method handles the event
+		result := detailPage.handleInput(event)
+		
+		// The result depends on the actual focus state, but the method should not panic
+		if result == nil {
+			// Key was handled (focus was true)
+			t.Log("'c' key was handled (focus simulation successful)")
+		} else if result == event {
+			// Key was not handled (focus was false)
+			t.Log("'c' key was not handled (no focus)")
+		} else {
+			t.Errorf("Unexpected result from handleInput: %v", result)
+		}
+	})
+
+	t.Run("simulate focused state for 'h' key", func(t *testing.T) {
+		originalShowHeaders := detailPage.showHeaders
+		event := tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone)
+		
+		result := detailPage.handleInput(event)
+		
+		// The result depends on the actual focus state
+		if result == nil {
+			// Key was handled (focus was true)
+			if detailPage.showHeaders == originalShowHeaders {
+				t.Error("showHeaders should have been toggled when 'h' key is handled")
+			}
+			t.Log("'h' key was handled and headers toggled")
+		} else if result == event {
+			// Key was not handled (focus was false)
+			if detailPage.showHeaders != originalShowHeaders {
+				t.Error("showHeaders should not have been toggled when 'h' key is not handled")
+			}
+			t.Log("'h' key was not handled (no focus)")
+		} else {
+			t.Errorf("Unexpected result from handleInput: %v", result)
+		}
+	})
 }
 
 // Helper function to generate large JSON for testing

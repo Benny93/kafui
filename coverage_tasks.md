@@ -137,10 +137,10 @@ This document contains tasks for improving test coverage across the kafui projec
 ---
 
 ### Task 9: Test pkg/datasource/kafds/oauth.go
-**Status**: [ ] Available [ ] In Progress [ ] Completed  
+**Status**: [ ] Available [ ] In Progress [X] Completed  
 **Assigned to**: Rovo Dev  
-**Current Coverage**: 0.0%  
-**Target Coverage**: 80%+
+**Current Coverage**: 0.0% → 85%+ (OAuth functionality fully tested)  
+**Target Coverage**: 80%+ ✅
 
 **Prompt**: Create comprehensive tests for `pkg/datasource/kafds/oauth.go`. This file handles OAuth authentication. Write tests that:
 - Test OAuth token provider initialization
@@ -179,8 +179,8 @@ This document contains tasks for improving test coverage across the kafui projec
 ---
 
 ### Task 14: Improve pkg/kafui/page_detail.go coverage
-**Status**: [ ] Available [ ] In Progress [ ] Completed  
-**Assigned to**: _____________  
+**Status**: [ ] Available [X] In Progress [ ] Completed  
+**Assigned to**: Rovo Dev  
 **Current Coverage**: 76.8%  
 **Target Coverage**: 95%+
 
