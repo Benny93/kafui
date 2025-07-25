@@ -22,3 +22,11 @@ jobs:
 
       - name: Build
         run: go build -v -ldflags "-s -w -X main.version=$GITHUB_REF -X main.commit=${GITHUB_SHA::8}" ./cmd/kafui
+      
+      - name: Run tests
+        run: make test
+        
+      - name: check test coverage
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          config: ./.testcoverage.yml
