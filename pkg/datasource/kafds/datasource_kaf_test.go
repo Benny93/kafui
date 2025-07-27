@@ -1,111 +1,169 @@
 package kafds
 
 import (
+	"context"
+	"os"
 	"testing"
+	"time"
 
-	//"github.com/Shopify/sarama"
-	"github.com/IBM/sarama"
+	"github.com/Benny93/kafui/pkg/api"
+	"github.com/birdayz/kaf/pkg/config"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
-// MockClusterAdmin is a mock implementation of sarama.ClusterAdmin
-type MockClusterAdmin struct {
-	mock.Mock
-}
+// Simple tests that focus on basic functionality without complex mocking
 
-func (m *MockClusterAdmin) ListTopics() (map[string]sarama.TopicMetadata, error) {
-	args := m.Called()
-	return args.Get(0).(map[string]sarama.TopicMetadata), args.Error(1)
-}
-
-func (m *MockClusterAdmin) DescribeTopics(topics []string) ([]*sarama.TopicMetadata, error) {
-	args := m.Called(topics)
-	return args.Get(0).([]*sarama.TopicMetadata), args.Error(1)
-}
-
-func (m *MockClusterAdmin) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func TestGetTopics(t *testing.T) {
-	mockAdmin := new(MockClusterAdmin)
-	expectedTopics := map[string]sarama.TopicMetadata{
-		"test-topic": {
-			Name: "test-topic",
-		},
-	}
-
-	mockAdmin.On("ListTopics").Return(expectedTopics, nil)
-
-	// Test implementation would go here
-	assert.NotNil(t, mockAdmin)
-}
-
-func TestGetContexts(t *testing.T) {
+func TestKafkaDataSourceKaf_Init(t *testing.T) {
 	tests := []struct {
-		name    string
-		wantErr bool
+		name      string
+		cfgOption string
 	}{
-		{"valid contexts", false},
-		{"no contexts", false},
+		{"init with empty config", ""},
+		{"init with config file", "/path/to/config"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test implementation
-			assert.True(t, true)
+			kds := &KafkaDataSourceKaf{}
+			// This should not panic
+			kds.Init(tt.cfgOption)
+			if tt.cfgOption != "" {
+				assert.Equal(t, tt.cfgOption, cfgFile)
+			}
 		})
 	}
 }
 
-func TestSetContext(t *testing.T) {
+func TestKafkaDataSourceKaf_GetTopics_Integration(t *testing.T) {
+	// This is an integration test that would require a real Kafka connection
+	// For now, we'll just test that the method exists and can be called
+	kds := &KafkaDataSourceKaf{}
+	
+	// This will likely fail due to no Kafka connection, but tests the method signature
+	_, err := kds.GetTopics()
+	// We expect an error since there's no real Kafka cluster
+	assert.Error(t, err)
+}
+
+func TestKafkaDataSourceKaf_GetContexts(t *testing.T) {
+	// Save original cfg and restore after test
+	originalCfg := cfg
+	defer func() { cfg = originalCfg }()
+
+	// Test with empty clusters
+	cfg.Clusters = []*config.Cluster{}
+	kds := &KafkaDataSourceKaf{}
+	contexts, err := kds.GetContexts()
+	assert.NoError(t, err)
+	assert.Empty(t, contexts)
+	
+	// Test with some clusters
+	cfg.Clusters = []*config.Cluster{
+		{Name: "cluster1"},
+		{Name: "cluster2"},
+	}
+	contexts, err = kds.GetContexts()
+	assert.NoError(t, err)
+	assert.Len(t, contexts, 2)
+	assert.Contains(t, contexts, "cluster1")
+	assert.Contains(t, contexts, "cluster2")
+}
+
+func TestKafkaDataSourceKaf_GetContext(t *testing.T) {
+	// Save original cfg and restore after test
+	originalCfg := cfg
+	defer func() { cfg = originalCfg }()
+
+	kds := &KafkaDataSourceKaf{}
+	
+	// Test when no active cluster
+	cfg = config.Config{}
+	context := kds.GetContext()
+	assert.Equal(t, "default localhost:9092", context)
+	
+	// Test when active cluster exists
+	cfg.CurrentCluster = "test-cluster"
+	cfg.Clusters = []*config.Cluster{
+		{Name: "test-cluster"},
+	}
+	context = kds.GetContext()
+	assert.Equal(t, "test-cluster", context)
+}
+
+func TestKafkaDataSourceKaf_SetContext(t *testing.T) {
+	// Create a temporary config file for testing
+	tempConfig := `
+clusters:
+  - name: test-cluster
+    brokers: ["localhost:9092"]
+  - name: prod-cluster
+    brokers: ["prod:9092"]
+currentCluster: test-cluster
+`
+	
 	tests := []struct {
 		name        string
 		contextName string
-		wantErr     bool
+		expectError bool
 	}{
-		{"valid context", "test-context", false},
-		{"invalid context", "invalid", true},
+		{"valid context", "test-cluster", false},
+		{"another valid context", "prod-cluster", false},
+		{"invalid context", "nonexistent-cluster", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test implementation
-			assert.True(t, true)
+			// Create temporary config file
+			tmpFile := "tmp_rovodev_test_config.yaml"
+			err := createTempConfigFile(tmpFile, tempConfig)
+			assert.NoError(t, err)
+			defer deleteFile(tmpFile)
+
+			cfgFile = tmpFile
+			kds := &KafkaDataSourceKaf{}
+			err = kds.SetContext(tt.contextName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "not found")
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
 
-func TestGetConsumerGroups(t *testing.T) {
-	mockAdmin := new(MockClusterAdmin)
-	//expectedGroups := []string{"test-group-1", "test-group-2"}
-
-	mockAdmin.On("ListConsumerGroups").Return(map[string]string{
-		"test-group-1": "",
-		"test-group-2": "",
-	}, nil)
-
-	// Test implementation would go here
-	assert.NotNil(t, mockAdmin)
+func TestKafkaDataSourceKaf_GetConsumerGroups_Integration(t *testing.T) {
+	// Integration test - will fail without real Kafka but tests method signature
+	kds := &KafkaDataSourceKaf{}
+	_, err := kds.GetConsumerGroups()
+	// We expect an error since there's no real Kafka cluster
+	assert.Error(t, err)
 }
 
-func TestConsumeTopic(t *testing.T) {
-	tests := []struct {
-		name    string
-		topic   string
-		wantErr bool
-	}{
-		{"valid topic", "test-topic", false},
-		{"invalid topic", "nonexistent", true},
-	}
+func TestKafkaDataSourceKaf_ConsumeTopic_Integration(t *testing.T) {
+	// Integration test - will fail without real Kafka but tests method signature
+	kds := &KafkaDataSourceKaf{}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			//ctx := context.Background()
-			// Test implementation
-			assert.True(t, true)
-		})
+	err := kds.ConsumeTopic(ctx, "test-topic", api.DefaultConsumeFlags(), func(msg api.Message) {}, func(err any) {})
+	// We expect an error since there's no real Kafka cluster
+	assert.Error(t, err)
+}
+
+// Helper functions for testing
+func createTempConfigFile(filename, content string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
 	}
+	defer file.Close()
+	
+	_, err = file.WriteString(content)
+	return err
+}
+
+func deleteFile(filename string) {
+	os.Remove(filename)
 }

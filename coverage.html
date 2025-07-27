@@ -63,9 +63,9 @@
 				
 				<option value="file3">github.com/Benny93/kafui/pkg/datasource/kafds/consume.go (48.3%)</option>
 				
-				<option value="file4">github.com/Benny93/kafui/pkg/datasource/kafds/datasource_kaf.go (10.3%)</option>
+				<option value="file4">github.com/Benny93/kafui/pkg/datasource/kafds/datasource_kaf.go (34.1%)</option>
 				
-				<option value="file5">github.com/Benny93/kafui/pkg/datasource/kafds/oauth.go (0.0%)</option>
+				<option value="file5">github.com/Benny93/kafui/pkg/datasource/kafds/oauth.go (93.9%)</option>
 				
 				<option value="file6">github.com/Benny93/kafui/pkg/datasource/kafds/scram_client.go (90.0%)</option>
 				
@@ -75,9 +75,9 @@
 				
 				<option value="file9">github.com/Benny93/kafui/pkg/kafui/kafui.go (100.0%)</option>
 				
-				<option value="file10">github.com/Benny93/kafui/pkg/kafui/page_detail.go (76.8%)</option>
+				<option value="file10">github.com/Benny93/kafui/pkg/kafui/page_detail.go (84.1%)</option>
 				
-				<option value="file11">github.com/Benny93/kafui/pkg/kafui/page_main.go (72.7%)</option>
+				<option value="file11">github.com/Benny93/kafui/pkg/kafui/page_main.go (78.2%)</option>
 				
 				<option value="file12">github.com/Benny93/kafui/pkg/kafui/page_topic.go (55.0%)</option>
 				
@@ -85,11 +85,11 @@
 				
 				<option value="file14">github.com/Benny93/kafui/pkg/kafui/resource_group.go (100.0%)</option>
 				
-				<option value="file15">github.com/Benny93/kafui/pkg/kafui/resource_topic.go (100.0%)</option>
+				<option value="file15">github.com/Benny93/kafui/pkg/kafui/resource_topic.go (97.2%)</option>
 				
 				<option value="file16">github.com/Benny93/kafui/pkg/kafui/search_bar.go (72.2%)</option>
 				
-				<option value="file17">github.com/Benny93/kafui/pkg/kafui/table_input.go (29.2%)</option>
+				<option value="file17">github.com/Benny93/kafui/pkg/kafui/table_input.go (10.4%)</option>
 				
 				<option value="file18">github.com/Benny93/kafui/pkg/kafui/ui.go (17.4%)</option>
 				
@@ -724,18 +724,18 @@ type KafkaDataSourceKaf struct {
 
 var cfgFile string
 
-func (kp *KafkaDataSourceKaf) Init(cfgOption string) <span class="cov0" title="0">{
-        if cfgOption != "" </span><span class="cov0" title="0">{
+func (kp *KafkaDataSourceKaf) Init(cfgOption string) <span class="cov8" title="1">{
+        if cfgOption != "" </span><span class="cov8" title="1">{
                 cfgFile = cfgOption
         }</span>
-        <span class="cov0" title="0">onInit()</span>
+        <span class="cov8" title="1">onInit()</span>
 }
 
 // GetTopics retrieves a list of Kafka topics
-func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) <span class="cov0" title="0">{
+func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) <span class="cov8" title="1">{
 
         admin, err := getClusterAdmin()
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
                 return nil, err
         }</span>
         <span class="cov0" title="0">topicDetails, err := admin.ListTopics()
@@ -771,52 +771,52 @@ func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) <span cla
         <span class="cov0" title="0">return topics, err</span>
 }
 
-func (kp KafkaDataSourceKaf) GetContext() string <span class="cov0" title="0">{
+func (kp KafkaDataSourceKaf) GetContext() string <span class="cov8" title="1">{
         activeCluster := cfg.ActiveCluster()
-        if activeCluster == nil </span><span class="cov0" title="0">{
+        if activeCluster == nil </span><span class="cov8" title="1">{
                 return "default localhost:9092"
         }</span>
-        <span class="cov0" title="0">return activeCluster.Name</span>
+        <span class="cov8" title="1">return activeCluster.Name</span>
 }
 
 // GetContexts retrieves a list of Kafka contexts
-func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) <span class="cov0" title="0">{
+func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) <span class="cov8" title="1">{
         // Logic to fetch the list of contexts from Kafka
         var contexts []string
-        for _, cluster := range cfg.Clusters </span><span class="cov0" title="0">{
+        for _, cluster := range cfg.Clusters </span><span class="cov8" title="1">{
 
                 contexts = append(contexts, cluster.Name)
         }</span>
-        <span class="cov0" title="0">return contexts, nil</span>
+        <span class="cov8" title="1">return contexts, nil</span>
 }
 
-func (kp KafkaDataSourceKaf) SetContext(contextName string) error <span class="cov0" title="0">{
+func (kp KafkaDataSourceKaf) SetContext(contextName string) error <span class="cov8" title="1">{
         cfg, err := config.ReadConfig(cfgFile)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
 
         // Iterate through clusters in the config
-        <span class="cov0" title="0">for _, cluster := range cfg.Clusters </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">for _, cluster := range cfg.Clusters </span><span class="cov8" title="1">{
                 // Check if the cluster name matches the contextName
-                if cluster.Name == contextName </span><span class="cov0" title="0">{
+                if cluster.Name == contextName </span><span class="cov8" title="1">{
                         currentCluster = cluster
                         err := cfg.SetCurrentCluster(currentCluster.Name)
                         if err != nil </span><span class="cov0" title="0">{
                                 return err
                         }</span>
-                        <span class="cov0" title="0">return nil</span>
+                        <span class="cov8" title="1">return nil</span>
                 }
         }
 
         // If no matching cluster is found, return an error
-        <span class="cov0" title="0">return fmt.Errorf("cluster with name '%s' not found", contextName)</span>
+        <span class="cov8" title="1">return fmt.Errorf("cluster with name '%s' not found", contextName)</span>
 
 }
 
-func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) <span class="cov0" title="0">{
+func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) <span class="cov8" title="1">{
         admin, err := getClusterAdmin()
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
                 return nil, err
         }</span>
 
@@ -855,10 +855,10 @@ func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) <s
         <span class="cov0" title="0">return finalGroups, nil</span>
 }
 
-func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error <span class="cov0" title="0">{
+func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error <span class="cov8" title="1">{
 
         admin, err := getClusterAdmin()
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
                 return err
         }</span>
         <span class="cov0" title="0">topicDetails, _ := admin.ListTopics()
@@ -1039,17 +1039,17 @@ var setupProtoDescriptorRegistry = func(cmd *cobra.Command, args []string) {
         }
 }*/
 
-func onInit() <span class="cov0" title="0">{
+func onInit() <span class="cov8" title="1">{
         var err error
         cfg, err = config.ReadConfig(cfgFile)
         if err != nil </span><span class="cov0" title="0">{
                 panic(err)</span>
         }
 
-        <span class="cov0" title="0">cfg.ClusterOverride = clusterOverride
+        <span class="cov8" title="1">cfg.ClusterOverride = clusterOverride
 
         cluster := cfg.ActiveCluster()
-        if cluster != nil </span><span class="cov0" title="0">{
+        if cluster != nil </span><span class="cov8" title="1">{
                 // Use active cluster from config
                 currentCluster = cluster
         }</span> else<span class="cov0" title="0"> {
@@ -1060,27 +1060,27 @@ func onInit() <span class="cov0" title="0">{
         }</span>
 
         // Any set flags override the configuration
-        <span class="cov0" title="0">if schemaRegistryURL != "" </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if schemaRegistryURL != "" </span><span class="cov0" title="0">{
                 currentCluster.SchemaRegistryURL = schemaRegistryURL
                 currentCluster.SchemaRegistryCredentials = nil
         }</span>
 
-        <span class="cov0" title="0">if brokersFlag != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if brokersFlag != nil </span><span class="cov0" title="0">{
                 currentCluster.Brokers = brokersFlag
         }</span>
 
-        <span class="cov0" title="0">if verbose </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if verbose </span><span class="cov0" title="0">{
                 sarama.Logger = log.New(errWriter, "[sarama] ", log.Lshortfile|log.LstdFlags)
         }</span>
 }
 
-func getClusterAdmin() (admin sarama.ClusterAdmin, e error) <span class="cov0" title="0">{
+func getClusterAdmin() (admin sarama.ClusterAdmin, e error) <span class="cov8" title="1">{
         cfg, err := getConfig()
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov0" title="0">clusterAdmin, err := sarama.NewClusterAdmin(currentCluster.Brokers, cfg)
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">clusterAdmin, err := sarama.NewClusterAdmin(currentCluster.Brokers, cfg)
+        if err != nil </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("Unable to get cluster admin: %v\n", err)
         }</span>
 
@@ -1165,18 +1165,18 @@ type tokenProvider struct {
 }
 
 // This is a singleton
-func newTokenProvider() *tokenProvider <span class="cov0" title="0">{
-        once.Do(func() </span><span class="cov0" title="0">{
+func newTokenProvider() *tokenProvider <span class="cov8" title="1">{
+        once.Do(func() </span><span class="cov8" title="1">{
                 cluster := currentCluster
 
                 //token either from tokenURL or static
-                if len(cluster.SASL.Token) != 0 </span><span class="cov0" title="0">{
+                if len(cluster.SASL.Token) != 0 </span><span class="cov8" title="1">{
                         tokenProv = &amp;tokenProvider{
                                 oauthClientCFG: &amp;clientcredentials.Config{},
                                 staticToken:    true,
                                 currentToken:   cluster.SASL.Token,
                         }
-                }</span> else<span class="cov0" title="0"> {
+                }</span> else<span class="cov8" title="1"> {
                         tokenProv = &amp;tokenProvider{
                                 oauthClientCFG: &amp;clientcredentials.Config{
                                         ClientID:     cluster.SASL.ClientID,
@@ -1186,7 +1186,7 @@ func newTokenProvider() *tokenProvider <span class="cov0" title="0">{
                                 staticToken: false,
                         }
                 }</span>
-                <span class="cov0" title="0">if !tokenProv.staticToken </span><span class="cov0" title="0">{
+                <span class="cov8" title="1">if !tokenProv.staticToken </span><span class="cov8" title="1">{
                         // create context with timeout
                         ctx := context.Background()
                         httpClient := &amp;http.Client{Timeout: tokenFetchTimeout}
@@ -1195,49 +1195,49 @@ func newTokenProvider() *tokenProvider <span class="cov0" title="0">{
 
                         // get first token
                         firstToken, err := tokenProv.oauthClientCFG.Token(ctx)
-                        if err != nil </span><span class="cov0" title="0">{
+                        if err != nil </span><span class="cov8" title="1">{
                                 panic(fmt.Errorf("Could not fetch OAUTH token: " + err.Error()))</span>
                         }
-                        <span class="cov0" title="0">tokenProv.currentToken = firstToken.AccessToken
+                        <span class="cov8" title="1">tokenProv.currentToken = firstToken.AccessToken
                         tokenProv.expiresAt = firstToken.Expiry
                         tokenProv.replaceAt = firstToken.Expiry.Add(-refreshBuffer)</span>
                 }
         })
-        <span class="cov0" title="0">return tokenProv</span>
+        <span class="cov8" title="1">return tokenProv</span>
 }
 
-func (tp *tokenProvider) Token() (*sarama.AccessToken, error) <span class="cov0" title="0">{
+func (tp *tokenProvider) Token() (*sarama.AccessToken, error) <span class="cov8" title="1">{
 
-        if !tp.staticToken </span><span class="cov0" title="0">{
-                if time.Now().After(tp.replaceAt) </span><span class="cov0" title="0">{
+        if !tp.staticToken </span><span class="cov8" title="1">{
+                if time.Now().After(tp.replaceAt) </span><span class="cov8" title="1">{
                         if err := tp.refreshToken(); err != nil </span><span class="cov0" title="0">{
                                 return nil, err
                         }</span>
 
                 }
         }
-        <span class="cov0" title="0">return &amp;sarama.AccessToken{
+        <span class="cov8" title="1">return &amp;sarama.AccessToken{
                 Token:      tp.currentToken,
                 Extensions: nil,
         }, nil</span>
 }
 
-func (tp *tokenProvider) refreshToken() error <span class="cov0" title="0">{
+func (tp *tokenProvider) refreshToken() error <span class="cov8" title="1">{
         // Get a lock on the update
         tp.refreshMutex.Lock()
         defer tp.refreshMutex.Unlock()
 
         // Check whether another call refreshed the token while waiting for the lock to be acquired here
-        if time.Now().Before(tp.replaceAt) </span><span class="cov0" title="0">{
+        if time.Now().Before(tp.replaceAt) </span><span class="cov8" title="1">{
                 return nil
         }</span>
 
-        <span class="cov0" title="0">token, err := tp.oauthClientCFG.Token(tp.ctx)
+        <span class="cov8" title="1">token, err := tp.oauthClientCFG.Token(tp.ctx)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
         // Save the token
-        <span class="cov0" title="0">tp.currentToken = token.AccessToken
+        <span class="cov8" title="1">tp.currentToken = token.AccessToken
         tp.expiresAt = token.Expiry
         tp.replaceAt = token.Expiry.Add(-refreshBuffer)
         return nil</span>
@@ -1539,7 +1539,7 @@ func (vp *DetailPage) Show() <span class="cov8" title="1">{
 
         legend := vp.CreateInputLegend()
         valueFlex.AddItem(legend, 6, 1, false)
-        if vp.showHeaders </span><span class="cov0" title="0">{
+        if vp.showHeaders </span><span class="cov8" title="1">{
                 valueFlex.AddItem(vp.headerTable, len(vp.headers), 1, false)
         }</span>
         //valueFlex.AddItem(vp.headerTextView, len(vp.headers), 1, false)
@@ -1588,8 +1588,8 @@ func (vp *DetailPage) handleInput(event *tcell.EventKey) *tcell.EventKey <span c
 //                }
 //                return event
 //        }
-func (vp *DetailPage) showCopiedNotification() <span class="cov0" title="0">{
-        go func() </span><span class="cov0" title="0">{
+func (vp *DetailPage) showCopiedNotification() <span class="cov8" title="1">{
+        go func() </span><span class="cov8" title="1">{
                 _, page := vp.pages.GetFrontPage()
                 item := tview.NewTextView().SetText("😎 Content copied to clipboard ...").SetTextAlign(tview.AlignCenter)
                 vp.app.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
@@ -1845,22 +1845,22 @@ func (m *MainPage) UpdateMidFlexTitle(currentResouce string, amount int) <span c
         }</span>
 }
 
-func (m *MainPage) FetchConsumerGroups(dataSource api.KafkaDataSource) []api.ConsumerGroup <span class="cov0" title="0">{
+func (m *MainPage) FetchConsumerGroups(dataSource api.KafkaDataSource) []api.ConsumerGroup <span class="cov8" title="1">{
         cgs, err := dataSource.GetConsumerGroups()
         if err != nil </span><span class="cov0" title="0">{
                 m.ShowNotification(fmt.Sprintf("Error fetching GetConsumerGroups: %v", err))
                 return []api.ConsumerGroup{}
         }</span>
-        <span class="cov0" title="0">return cgs</span>
+        <span class="cov8" title="1">return cgs</span>
 }
 
-func (m *MainPage) FetchContexts(dataSource api.KafkaDataSource) []string <span class="cov0" title="0">{
+func (m *MainPage) FetchContexts(dataSource api.KafkaDataSource) []string <span class="cov8" title="1">{
         contexts, err := dataSource.GetContexts()
         if err != nil </span><span class="cov0" title="0">{
                 m.ShowNotification(fmt.Sprintf("Error fetching contexts: %v", err))
                 return []string{}
         }</span>
-        <span class="cov0" title="0">return contexts</span>
+        <span class="cov8" title="1">return contexts</span>
 }
 
 func CreateMainInputLegend() *tview.Flex <span class="cov8" title="1">{
@@ -2562,7 +2562,7 @@ func (r *ResouceTopic) UpdateTableDataRoutine(ctx context.Context, dataSource ap
 
                         // Check if the context has been canceled
                         select </span>{
-                        case &lt;-ctx.Done():<span class="cov8" title="1">
+                        case &lt;-ctx.Done():<span class="cov0" title="0">
                                 return</span>
                         default:<span class="cov8" title="1">
                                 time.Sleep(refreshInterval)</span>
@@ -2880,19 +2880,19 @@ func CopySelectedRowToClipboard(table *tview.Table, ConsumeMessage func(message 
         }</span>
 
         // Initialize a slice to hold column values
-        <span class="cov8" title="1">var rowValues []string
+        <span class="cov0" title="0">var rowValues []string
 
         // Iterate over each column in the selected row
-        for column := 0; column &lt; table.GetColumnCount(); column++ </span><span class="cov8" title="1">{
+        for column := 0; column &lt; table.GetColumnCount(); column++ </span><span class="cov0" title="0">{
                 cell := table.GetCell(row, column)
-                if cell != nil </span><span class="cov8" title="1">{
+                if cell != nil </span><span class="cov0" title="0">{
                         // Append the cell text to the rowValues slice
                         rowValues = append(rowValues, cell.Text)
                 }</span>
         }
 
         // Create a CSV string by joining rowValues with commas
-        <span class="cov8" title="1">csvString := strings.Join(rowValues, ",")
+        <span class="cov0" title="0">csvString := strings.Join(rowValues, ",")
 
         // Copy the CSV string to the clipboard
         err := clipboard.WriteAll(csvString)
@@ -2903,7 +2903,7 @@ func CopySelectedRowToClipboard(table *tview.Table, ConsumeMessage func(message 
         }</span>
 
         // Show notification
-        <span class="cov8" title="1">ConsumeMessage("😎 Copied selection to clipboard ...")</span>
+        <span class="cov0" title="0">ConsumeMessage("😎 Copied selection to clipboard ...")</span>
 }
 </pre>
 		

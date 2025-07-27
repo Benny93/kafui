@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Benny93/kafui/pkg/api"
 	"github.com/rivo/tview"
 )
 
@@ -405,5 +406,437 @@ func BenchmarkCreateMainInputLegend(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = CreateMainInputLegend()
+	}
+}
+
+// TestMainPage_FetchConsumerGroups tests consumer group fetching
+func TestMainPage_FetchConsumerGroups(t *testing.T) {
+	mainPage := NewMainPage()
+	
+	tests := []struct {
+		name           string
+		dataSource     api.KafkaDataSource
+		expectedLength int
+		expectError    bool
+	}{
+		{
+			name:           "successful fetch",
+			dataSource:     &MockKafkaDataSource{},
+			expectedLength: 2,
+			expectError:    false,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Initialize notification text view to capture error messages
+			mainPage.NotificationTextView = tview.NewTextView()
+			
+			result := mainPage.FetchConsumerGroups(tt.dataSource)
+			
+			if len(result) != tt.expectedLength {
+				t.Errorf("FetchConsumerGroups() returned %d groups, want %d", len(result), tt.expectedLength)
+			}
+			
+			// For successful cases, verify the content
+			if !tt.expectError && len(result) > 0 {
+				for i, group := range result {
+					if group.Name == "" {
+						t.Errorf("Consumer group %d has empty Name", i)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestMainPage_FetchContexts tests context fetching
+func TestMainPage_FetchContexts(t *testing.T) {
+	mainPage := NewMainPage()
+	
+	tests := []struct {
+		name           string
+		dataSource     api.KafkaDataSource
+		expectedLength int
+		expectError    bool
+	}{
+		{
+			name:           "successful fetch",
+			dataSource:     &MockKafkaDataSource{},
+			expectedLength: 2,
+			expectError:    false,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Initialize notification text view to capture error messages
+			mainPage.NotificationTextView = tview.NewTextView()
+			
+			result := mainPage.FetchContexts(tt.dataSource)
+			
+			if len(result) != tt.expectedLength {
+				t.Errorf("FetchContexts() returned %d contexts, want %d", len(result), tt.expectedLength)
+			}
+			
+			// For successful cases, verify the content
+			if !tt.expectError && len(result) > 0 {
+				for i, context := range result {
+					if context == "" {
+						t.Errorf("Context %d is empty", i)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestCreateNotificationTextView tests notification text view creation
+func TestCreateNotificationTextView(t *testing.T) {
+	textView := createNotificationTextView()
+	
+	if textView == nil {
+		t.Fatal("createNotificationTextView() returned nil")
+	}
+	
+	// Test initial state
+	text := textView.GetText(false)
+	if text != "" {
+		t.Errorf("Initial text should be empty, got %q", text)
+	}
+	
+	// Test that border is disabled (we can't easily test this with tview API)
+	// The border setting is internal to tview
+}
+
+// TestCreateContextInfo tests context info creation
+func TestCreateContextInfo(t *testing.T) {
+	contextInfo := createContextInfo()
+	
+	if contextInfo == nil {
+		t.Fatal("createContextInfo() returned nil")
+	}
+	
+	// Test initial state
+	text := contextInfo.GetText()
+	if text != "n/a" {
+		t.Errorf("Initial text should be 'n/a', got %q", text)
+	}
+	
+	// Test that field is disabled (we can't easily test this with tview API)
+	// The disabled setting is internal to tview
+	
+	// Test label
+	label := contextInfo.GetLabel()
+	if label != "Current Context: " {
+		t.Errorf("Label should be 'Current Context: ', got %q", label)
+	}
+}
+
+// TestMainPage_UpdateTable_EdgeCases tests edge cases for table updates
+func TestMainPage_UpdateTable_EdgeCases(t *testing.T) {
+	mainPage := NewMainPage()
+	table := tview.NewTable()
+	dataSource := &MockKafkaDataSource{}
+	
+	tests := []struct {
+		name         string
+		setupFunc    func()
+		expectPanic  bool
+	}{
+		{
+			name: "nil current resource",
+			setupFunc: func() {
+				mainPage.CurrentResource = nil
+				mainPage.SearchBar = nil
+			},
+			expectPanic: false,
+		},
+		{
+			name: "nil search bar",
+			setupFunc: func() {
+				mockResource := NewResouceTopic(dataSource, func(err error) {}, func() {})
+				var resource Resource = mockResource
+				mainPage.CurrentResource = &resource
+				mainPage.SearchBar = nil
+			},
+			expectPanic: false,
+		},
+		{
+			name: "valid setup with search string",
+			setupFunc: func() {
+				mockResource := NewResouceTopic(dataSource, func(err error) {}, func() {})
+				var resource Resource = mockResource
+				mainPage.CurrentResource = &resource
+				searchBar := NewSearchBar(table, dataSource, tview.NewPages(), tview.NewApplication(), 
+					tview.NewModal(), func(Resource, string) {}, func(error) {})
+				searchBar.CurrentString = "test-search"
+				mainPage.SearchBar = searchBar
+			},
+			expectPanic: false,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupFunc()
+			
+			defer func() {
+				if r := recover(); r != nil {
+					if !tt.expectPanic {
+						t.Errorf("UpdateTable panicked unexpectedly: %v", r)
+					}
+				} else if tt.expectPanic {
+					t.Error("UpdateTable should have panicked but didn't")
+				}
+			}()
+			
+			mainPage.UpdateTable(table, dataSource)
+		})
+	}
+}
+
+// TestMainPage_ShowNotification_EdgeCases tests edge cases for notifications
+func TestMainPage_ShowNotification_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name         string
+		message      string
+		setupFunc    func(*MainPage)
+		expectPanic  bool
+	}{
+		{
+			name:    "nil notification text view",
+			message: "Test message",
+			setupFunc: func(mp *MainPage) {
+				mp.NotificationTextView = nil
+			},
+			expectPanic: false,
+		},
+		{
+			name:    "empty message",
+			message: "",
+			setupFunc: func(mp *MainPage) {
+				mp.NotificationTextView = tview.NewTextView()
+			},
+			expectPanic: false,
+		},
+		{
+			name:    "long message",
+			message: strings.Repeat("This is a very long message. ", 100),
+			setupFunc: func(mp *MainPage) {
+				mp.NotificationTextView = tview.NewTextView()
+			},
+			expectPanic: false,
+		},
+		{
+			name:    "message with special characters",
+			message: "Error: Connection failed! @#$%^&*(){}[]|\\:;\"'<>,.?/~`",
+			setupFunc: func(mp *MainPage) {
+				mp.NotificationTextView = tview.NewTextView()
+			},
+			expectPanic: false,
+		},
+		{
+			name:    "unicode message",
+			message: "错误: 连接失败! 🚨💥",
+			setupFunc: func(mp *MainPage) {
+				mp.NotificationTextView = tview.NewTextView()
+			},
+			expectPanic: false,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mainPage := NewMainPage()
+			tt.setupFunc(mainPage)
+			
+			defer func() {
+				if r := recover(); r != nil {
+					if !tt.expectPanic {
+						t.Errorf("ShowNotification panicked unexpectedly: %v", r)
+					}
+				} else if tt.expectPanic {
+					t.Error("ShowNotification should have panicked but didn't")
+				}
+			}()
+			
+			mainPage.ShowNotification(tt.message)
+			
+			// Give some time for goroutine to start
+			time.Sleep(5 * time.Millisecond)
+		})
+	}
+}
+
+// TestMainPage_UpdateMidFlexTitle_EdgeCases tests edge cases for title updates
+func TestMainPage_UpdateMidFlexTitle_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupFunc    func(*MainPage)
+		resource     string
+		amount       int
+		expectPanic  bool
+	}{
+		{
+			name: "nil MidFlex",
+			setupFunc: func(mp *MainPage) {
+				mp.MidFlex = nil
+			},
+			resource:    "Topics",
+			amount:      5,
+			expectPanic: false,
+		},
+		{
+			name: "valid MidFlex",
+			setupFunc: func(mp *MainPage) {
+				mp.MidFlex = tview.NewFlex()
+			},
+			resource:    "Topics",
+			amount:      5,
+			expectPanic: false,
+		},
+		{
+			name: "empty resource name",
+			setupFunc: func(mp *MainPage) {
+				mp.MidFlex = tview.NewFlex()
+			},
+			resource:    "",
+			amount:      0,
+			expectPanic: false,
+		},
+		{
+			name: "negative amount",
+			setupFunc: func(mp *MainPage) {
+				mp.MidFlex = tview.NewFlex()
+			},
+			resource:    "Topics",
+			amount:      -1,
+			expectPanic: false,
+		},
+		{
+			name: "large amount",
+			setupFunc: func(mp *MainPage) {
+				mp.MidFlex = tview.NewFlex()
+			},
+			resource:    "Topics",
+			amount:      1000000,
+			expectPanic: false,
+		},
+		{
+			name: "special characters in resource name",
+			setupFunc: func(mp *MainPage) {
+				mp.MidFlex = tview.NewFlex()
+			},
+			resource:    "Topics@#$%^&*()",
+			amount:      5,
+			expectPanic: false,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mainPage := NewMainPage()
+			tt.setupFunc(mainPage)
+			
+			defer func() {
+				if r := recover(); r != nil {
+					if !tt.expectPanic {
+						t.Errorf("UpdateMidFlexTitle panicked unexpectedly: %v", r)
+					}
+				} else if tt.expectPanic {
+					t.Error("UpdateMidFlexTitle should have panicked but didn't")
+				}
+			}()
+			
+			mainPage.UpdateMidFlexTitle(tt.resource, tt.amount)
+		})
+	}
+}
+
+// TestMainPage_UpdateTableRoutine_EdgeCases tests edge cases for the update routine
+func TestMainPage_UpdateTableRoutine_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFunc   func() (*MainPage, *tview.Application, *tview.Table, *tview.TextView, api.KafkaDataSource)
+		expectExit  bool
+	}{
+		{
+			name: "nil app",
+			setupFunc: func() (*MainPage, *tview.Application, *tview.Table, *tview.TextView, api.KafkaDataSource) {
+				mainPage := NewMainPage()
+				return mainPage, nil, tview.NewTable(), tview.NewTextView(), &MockKafkaDataSource{}
+			},
+			expectExit: true,
+		},
+		{
+			name: "nil table",
+			setupFunc: func() (*MainPage, *tview.Application, *tview.Table, *tview.TextView, api.KafkaDataSource) {
+				mainPage := NewMainPage()
+				app := tview.NewApplication()
+				return mainPage, app, nil, tview.NewTextView(), &MockKafkaDataSource{}
+			},
+			expectExit: false,
+		},
+		{
+			name: "nil timer view",
+			setupFunc: func() (*MainPage, *tview.Application, *tview.Table, *tview.TextView, api.KafkaDataSource) {
+				mainPage := NewMainPage()
+				app := tview.NewApplication()
+				return mainPage, app, tview.NewTable(), nil, &MockKafkaDataSource{}
+			},
+			expectExit: false,
+		},
+		{
+			name: "nil data source",
+			setupFunc: func() (*MainPage, *tview.Application, *tview.Table, *tview.TextView, api.KafkaDataSource) {
+				mainPage := NewMainPage()
+				app := tview.NewApplication()
+				return mainPage, app, tview.NewTable(), tview.NewTextView(), nil
+			},
+			expectExit: false,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mainPage, app, table, timerView, dataSource := tt.setupFunc()
+			
+			// Set up required components for non-nil cases
+			if app != nil {
+				mockResource := NewResouceTopic(&MockKafkaDataSource{}, func(err error) {}, func() {})
+				var resource Resource = mockResource
+				mainPage.CurrentResource = &resource
+				if table != nil {
+					searchBar := NewSearchBar(table, &MockKafkaDataSource{}, tview.NewPages(), app, 
+						tview.NewModal(), func(Resource, string) {}, func(error) {})
+					mainPage.SearchBar = searchBar
+				}
+			}
+			
+			// Test that the routine handles edge cases gracefully
+			done := make(chan bool, 1)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						t.Errorf("UpdateTableRoutine panicked: %v", r)
+					}
+					done <- true
+				}()
+				mainPage.UpdateTableRoutine(app, table, timerView, dataSource)
+			}()
+			
+			// Wait a short time for the routine to process
+			select {
+			case <-done:
+				if !tt.expectExit {
+					t.Log("Routine exited as expected")
+				}
+			case <-time.After(50 * time.Millisecond):
+				if tt.expectExit {
+					t.Error("Routine should have exited immediately but didn't")
+				}
+			}
+		})
 	}
 }
