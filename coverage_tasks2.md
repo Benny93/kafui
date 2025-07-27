@@ -11,8 +11,8 @@ This document contains additional tasks for improving test coverage across the k
 ## High Priority Tasks (Low Coverage Files)
 
 ### Task 1: Implement pkg/kafui/ui.go coverage
-**Status**: [ ] Available [ ] In Progress [ ] Completed  
-**Assigned to**: _____________  
+**Status**: [ ] Available [X] In Progress [ ] Completed  
+**Assigned to**: Rovo Dev  
 **Current Coverage**: 0.0% (OpenUI function)  
 **Target Coverage**: 80%+
 

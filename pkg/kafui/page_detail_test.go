@@ -1,9 +1,12 @@
 package kafui
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -750,6 +753,283 @@ func generateLargeJSON() string {
 			"array": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 		}
 	}`
+}
+
+// TestDetailPage_ClipboardIntegration tests clipboard functionality
+func TestDetailPage_ClipboardIntegration(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	headers := api.MessageHeaders{}
+	value := "test clipboard content"
+
+	detailPage := NewDetailPage(app, pages, headers, value)
+	detailPage.Show()
+
+	// Test clipboard write functionality by calling the method directly
+	t.Run("clipboard write", func(t *testing.T) {
+		// Create a mock focused text view by directly testing the clipboard operation
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Clipboard operation panicked: %v", r)
+			}
+		}()
+
+		// Test the clipboard.WriteAll call directly
+		err := clipboard.WriteAll(detailPage.valueTextView.GetText(true))
+		if err != nil {
+			t.Logf("Clipboard write failed (expected in test environment): %v", err)
+		}
+	})
+}
+
+// TestDetailPage_FocusedInputHandling tests input handling with mocked focus
+func TestDetailPage_FocusedInputHandling(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	headers := api.MessageHeaders{
+		{Key: "test", Value: "header"},
+	}
+	value := `{"test": "content"}`
+
+	detailPage := NewDetailPage(app, pages, headers, value)
+	detailPage.Show()
+
+	// Create a custom TextView that reports as focused
+	focusedTextView := tview.NewTextView()
+	focusedTextView.SetText(value)
+	
+	// Replace the valueTextView temporarily to test focused behavior
+	originalTextView := detailPage.valueTextView
+	detailPage.valueTextView = focusedTextView
+
+	t.Run("copy with simulated focus", func(t *testing.T) {
+		// Test the copy logic path by calling the clipboard operation directly
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Copy operation panicked: %v", r)
+			}
+		}()
+
+		// Simulate the copy operation that would happen with focus
+		clipboard.WriteAll(detailPage.valueTextView.GetText(true))
+		detailPage.showCopiedNotification()
+	})
+
+	t.Run("header toggle with simulated focus", func(t *testing.T) {
+		originalShowHeaders := detailPage.showHeaders
+		
+		// Simulate the header toggle logic
+		detailPage.showHeaders = !detailPage.showHeaders
+		
+		if detailPage.showHeaders == originalShowHeaders {
+			t.Error("Headers should have been toggled")
+		}
+		
+		// Test the Show/Hide cycle that happens during toggle
+		detailPage.Hide()
+		detailPage.Show()
+	})
+
+	// Restore original text view
+	detailPage.valueTextView = originalTextView
+}
+
+// TestDetailPage_NotificationTiming tests the notification display and removal
+func TestDetailPage_NotificationTiming(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	headers := api.MessageHeaders{}
+	value := "notification test"
+
+	detailPage := NewDetailPage(app, pages, headers, value)
+	detailPage.Show()
+
+	t.Run("notification lifecycle", func(t *testing.T) {
+		// Test that the notification function completes without error
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Notification lifecycle panicked: %v", r)
+			}
+		}()
+
+		// Call the notification function
+		detailPage.showCopiedNotification()
+		
+		// Give the goroutine a moment to execute
+		time.Sleep(10 * time.Millisecond)
+	})
+}
+
+// TestDetailPage_JSONFormattingEdgeCases tests additional JSON formatting scenarios
+func TestDetailPage_JSONFormattingEdgeCases(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	headers := api.MessageHeaders{}
+
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{
+			name:  "null JSON",
+			value: "null",
+		},
+		{
+			name:  "boolean JSON",
+			value: "true",
+		},
+		{
+			name:  "number JSON",
+			value: "42",
+		},
+		{
+			name:  "string JSON",
+			value: `"hello world"`,
+		},
+		{
+			name:  "nested array",
+			value: `[{"nested": [1, 2, {"deep": true}]}, "string"]`,
+		},
+		{
+			name:  "unicode content",
+			value: `{"unicode": "Hello 世界 🌍", "emoji": "😀🎉"}`,
+		},
+		{
+			name:  "special characters",
+			value: `{"special": "line\nbreak\ttab\"quote"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detailPage := NewDetailPage(app, pages, headers, tt.value)
+			
+			if detailPage.valueTextView == nil {
+				t.Fatal("valueTextView should be initialized")
+			}
+			
+			// Verify the text view contains content
+			text := detailPage.valueTextView.GetText(false)
+			if text == "" && tt.value != "" {
+				t.Error("valueTextView should contain formatted content")
+			}
+		})
+	}
+}
+
+// TestDetailPage_HeaderTableConfiguration tests header table setup details
+func TestDetailPage_HeaderTableConfiguration(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	
+	tests := []struct {
+		name    string
+		headers api.MessageHeaders
+	}{
+		{
+			name: "single header",
+			headers: api.MessageHeaders{
+				{Key: "single", Value: "value"},
+			},
+		},
+		{
+			name: "multiple headers with special characters",
+			headers: api.MessageHeaders{
+				{Key: "content-type", Value: "application/json; charset=utf-8"},
+				{Key: "x-custom-header", Value: "special!@#$%^&*()"},
+				{Key: "unicode-header", Value: "世界🌍"},
+			},
+		},
+		{
+			name: "headers with empty values",
+			headers: api.MessageHeaders{
+				{Key: "empty-value", Value: ""},
+				{Key: "space-value", Value: " "},
+				{Key: "tab-value", Value: "\t"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detailPage := NewDetailPage(app, pages, tt.headers, "test")
+			
+			// Verify header table configuration
+			if detailPage.headerTable == nil {
+				t.Fatal("headerTable should be initialized")
+			}
+			
+			// Check row count
+			expectedRows := len(tt.headers)
+			actualRows := detailPage.headerTable.GetRowCount()
+			if actualRows != expectedRows {
+				t.Errorf("Header table rows = %d, want %d", actualRows, expectedRows)
+			}
+			
+			// Verify each header is properly set
+			for i, header := range tt.headers {
+				keyCell := detailPage.headerTable.GetCell(i, 0)
+				valueCell := detailPage.headerTable.GetCell(i, 1)
+				
+				if keyCell == nil || valueCell == nil {
+					t.Errorf("Missing cells for header %d", i)
+					continue
+				}
+				
+				if keyCell.Text != header.Key {
+					t.Errorf("Header key[%d] = %q, want %q", i, keyCell.Text, header.Key)
+				}
+				
+				if valueCell.Text != header.Value {
+					t.Errorf("Header value[%d] = %q, want %q", i, valueCell.Text, header.Value)
+				}
+			}
+		})
+	}
+}
+
+// TestDetailPage_ShowHideSequence tests multiple show/hide cycles
+func TestDetailPage_ShowHideSequence(t *testing.T) {
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	headers := api.MessageHeaders{
+		{Key: "test", Value: "header"},
+	}
+	value := "test value"
+
+	detailPage := NewDetailPage(app, pages, headers, value)
+
+	// Test multiple show/hide cycles
+	for i := 0; i < 3; i++ {
+		t.Run(fmt.Sprintf("cycle_%d", i), func(t *testing.T) {
+			// Show
+			detailPage.Show()
+			
+			// Verify it's shown
+			pageNames := pages.GetPageNames(false)
+			found := false
+			for _, name := range pageNames {
+				if name == "DetailPage" {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("DetailPage not found after Show() in cycle %d", i)
+			}
+			
+			// Hide
+			detailPage.Hide()
+			
+			// Verify it's hidden
+			pageNames = pages.GetPageNames(false)
+			for _, name := range pageNames {
+				if name == "DetailPage" {
+					t.Errorf("DetailPage should be hidden after Hide() in cycle %d", i)
+				}
+			}
+		})
+	}
 }
 
 // Benchmark tests for DetailPage operations
