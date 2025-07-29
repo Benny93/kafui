@@ -52,6 +52,33 @@ func createTestSearchBarWithMocks() (*SearchBar, *MockKafkaDataSource, *MockUpda
 	return searchBar, mockDS, mockUpdateTable, mockOnError
 }
 
+// TestNewSearchBarEnhanced tests the NewSearchBar constructor with enhanced coverage
+func TestNewSearchBarEnhanced(t *testing.T) {
+	table := tview.NewTable()
+	mockDS := &MockKafkaDataSource{}
+	pages := tview.NewPages()
+	app := tview.NewApplication()
+	modal := tview.NewModal()
+	
+	updateTableFunc := func(newResource Resource, searchText string) {}
+	onErrorFunc := func(err error) {}
+	
+	searchBar := NewSearchBar(table, mockDS, pages, app, modal, updateTableFunc, onErrorFunc)
+	
+	assert.NotNil(t, searchBar)
+	assert.Equal(t, table, searchBar.Table)
+	assert.Equal(t, mockDS, searchBar.DataSource)
+	assert.Equal(t, pages, searchBar.Pages)
+	assert.Equal(t, app, searchBar.App)
+	assert.Equal(t, modal, searchBar.Modal)
+	assert.Equal(t, "😎|", searchBar.DefaultLabel)
+	assert.Equal(t, ResouceSearch, searchBar.CurrentMode)
+	assert.Equal(t, "", searchBar.CurrentString)
+	assert.NotNil(t, searchBar.CurrentResource)
+	assert.NotNil(t, searchBar.UpdateTable)
+	assert.NotNil(t, searchBar.onError)
+}
+
 // TestCreateSearchInput tests the CreateSearchInput method
 func TestCreateSearchInput(t *testing.T) {
 	searchBar, _, _, _ := createTestSearchBarWithMocks()

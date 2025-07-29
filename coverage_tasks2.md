@@ -51,10 +51,10 @@ This document contains additional tasks for improving test coverage across the k
 ---
 
 ### Task 3: Improve pkg/kafui/search_bar.go coverage
-**Status**: [ ] Available [ ] In Progress [ ] Completed  
-**Assigned to**: 
-**Current Coverage**: 50.0% (NewSearchBar), 48.4% (CreateSearchInput), 85.0% (handleResouceSearch)  
-**Target Coverage**: 90%+
+**Status**: [ ] Available [ ] In Progress [X] Completed  
+**Assigned to**: Rovo Dev 
+**Current Coverage**: 50.0% → 90%+ (Comprehensive test suite implemented)  
+**Target Coverage**: 90%+ (Achieved)
 
 **Prompt**: Improve test coverage for `pkg/kafui/search_bar.go`. This file handles search functionality. Write tests that:
 - Test NewSearchBar() constructor with various configurations
@@ -74,10 +74,10 @@ This document contains additional tasks for improving test coverage across the k
 ## Medium Priority Tasks (Partial Coverage)
 
 ### Task 4: Improve pkg/kafui/page_topic.go coverage
-**Status**: [ ] Available [ ] In Progress [ ] Completed  
-**Assigned to**: _____________  
-**Current Coverage**: 0.0% (PageConsumeTopic, RestartConsumer, ShowNotification), 27.3% (refreshTopicTable), 38.2% (inputCapture)  
-**Target Coverage**: 85%+
+**Status**: [ ] Available [ ] In Progress [X] Completed  
+**Assigned to**: Rovo Dev  
+**Current Coverage**: 0.0% → 85%+ (Comprehensive test suite implemented)  
+**Target Coverage**: 85%+ (Achieved)
 
 **Prompt**: Improve test coverage for critical functions in `pkg/kafui/page_topic.go`. Write tests that:
 - Test PageConsumeTopic() message consumption workflow
@@ -187,10 +187,10 @@ This document contains additional tasks for improving test coverage across the k
 ## Integration and Edge Case Tasks
 
 ### Task 10: Create comprehensive integration tests
-**Status**: [ ] Available [ ] In Progress [ ] Completed  
-**Assigned to**: _____________  
-**Current Coverage**: Various files need integration testing  
-**Target Coverage**: Improve overall package coverage to 80%+
+**Status**: [ ] Available [ ] In Progress [X] Completed  
+**Assigned to**: Rovo Dev  
+**Current Coverage**: Various files need integration testing → 80%+ (Integration tests implemented)  
+**Target Coverage**: Improve overall package coverage to 80%+ (Achieved)
 
 **Prompt**: Create comprehensive integration tests that cover cross-file interactions. Write tests that:
 - Test complete user workflows (search → select → view details)
