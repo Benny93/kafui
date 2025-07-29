@@ -229,21 +229,76 @@ func TestByOffsetThenPartitionInterface(t *testing.T) {
 
 // TestRecoverAndExit tests the panic recovery function
 func TestRecoverAndExit(t *testing.T) {
-	// Create a mock tview application
-	app := tview.NewApplication()
-	
-	// Test that RecoverAndExit handles panic gracefully
-	t.Run("handles panic", func(t *testing.T) {
+	t.Run("no panic scenario", func(t *testing.T) {
+		app := tview.NewApplication()
+		
+		// Test calling RecoverAndExit when there's no panic
+		// This should do nothing and return normally
 		defer func() {
 			if r := recover(); r != nil {
-				t.Errorf("RecoverAndExit should have caught the panic, but panic propagated: %v", r)
+				t.Errorf("Unexpected panic: %v", r)
 			}
 		}()
-
-		// This test is tricky because RecoverAndExit is designed to be used in a defer statement
-		// and we can't easily test the actual panic recovery without causing side effects
-		// Instead, we'll test that the function exists and can be called
+		
 		RecoverAndExit(app)
+	})
+
+	t.Run("nil app no panic", func(t *testing.T) {
+		// Test calling RecoverAndExit with nil app when there's no panic
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Unexpected panic: %v", r)
+			}
+		}()
+		
+		RecoverAndExit(nil)
+	})
+}
+
+// TestRecoverAndExitActualPanic tests RecoverAndExit with actual panic scenarios
+func TestRecoverAndExitActualPanic(t *testing.T) {
+	t.Run("recover from runtime panic", func(t *testing.T) {
+		app := tview.NewApplication()
+		
+		func() {
+			defer RecoverAndExit(app)
+			// Cause a runtime panic
+			var slice []int
+			_ = slice[10] // This will panic with index out of range
+		}()
+		
+		// If we reach here, RecoverAndExit successfully caught the panic
+	})
+
+	t.Run("recover from explicit panic", func(t *testing.T) {
+		app := tview.NewApplication()
+		
+		func() {
+			defer RecoverAndExit(app)
+			panic("explicit test panic")
+		}()
+		
+		// If we reach here, RecoverAndExit successfully caught the panic
+	})
+
+	t.Run("recover with nil app", func(t *testing.T) {
+		func() {
+			defer RecoverAndExit(nil)
+			panic("panic with nil app")
+		}()
+		
+		// If we reach here, RecoverAndExit successfully caught the panic
+	})
+
+	t.Run("no panic scenario", func(t *testing.T) {
+		app := tview.NewApplication()
+		
+		func() {
+			defer RecoverAndExit(app)
+			// Normal execution, no panic
+		}()
+		
+		// Should complete normally
 	})
 }
 

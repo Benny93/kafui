@@ -268,6 +268,96 @@ func TestResouceTopic_StartStopFetching(t *testing.T) {
 
 // TestResouceTopic_UpdateTableDataRoutine tests the background fetching routine
 func TestResouceTopic_UpdateTableDataRoutine(t *testing.T) {
+	tests := []struct {
+		name        string
+		dataSource  api.KafkaDataSource
+		expectError bool
+	}{
+		{
+			name:        "successful routine",
+			dataSource:  &MockKafkaDataSource{},
+			expectError: false,
+		},
+		{
+			name:        "error handling in routine",
+			dataSource:  &ErrorKafkaDataSource{},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errorCalled := false
+			
+			onError := func(err error) {
+				errorCalled = true
+			}
+			recoverFunc := func() {}
+
+			resource := &ResouceTopic{
+				dataSource:  tt.dataSource,
+				onError:     onError,
+				recoverFunc: recoverFunc,
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+
+			// Start the routine
+			resource.UpdateTableDataRoutine(ctx, tt.dataSource)
+
+			// Give some time for the routine to run
+			time.Sleep(100 * time.Millisecond)
+
+			// Cancel the context
+			cancel()
+
+			// Give some time for cleanup
+			time.Sleep(50 * time.Millisecond)
+
+			// Check that topics were fetched
+			if resource.LastFetchedTopics == nil {
+				t.Error("LastFetchedTopics should be populated")
+			}
+
+			if tt.expectError && !errorCalled {
+				t.Error("Expected error callback to be called")
+			}
+		})
+	}
+}
+
+// TestResouceTopic_UpdateTableDataRoutineContextCancellation tests context cancellation
+func TestResouceTopic_UpdateTableDataRoutineContextCancellation(t *testing.T) {
+	mockDataSource := &MockKafkaDataSource{}
+	recoverCalled := false
+	
+	recoverFunc := func() {
+		recoverCalled = true
+	}
+
+	resource := &ResouceTopic{
+		dataSource:  mockDataSource,
+		recoverFunc: recoverFunc,
+	}
+
+	// Create a context that cancels immediately
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Start the routine with already cancelled context
+	resource.UpdateTableDataRoutine(ctx, mockDataSource)
+
+	// Give some time for the routine to process cancellation
+	time.Sleep(50 * time.Millisecond)
+
+	// The routine should exit quickly due to cancelled context
+	if !recoverCalled {
+		t.Error("Expected recover function to be called when routine exits")
+	}
+}
+
+// TestResouceTopic_UpdateTableDataRoutineConcurrency tests concurrent access
+func TestResouceTopic_UpdateTableDataRoutineConcurrency(t *testing.T) {
 	mockDataSource := &MockKafkaDataSource{}
 	recoverFunc := func() {}
 
@@ -277,20 +367,17 @@ func TestResouceTopic_UpdateTableDataRoutine(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Start the routine
-	resource.UpdateTableDataRoutine(ctx, mockDataSource)
+	// Start multiple routines
+	for i := 0; i < 3; i++ {
+		resource.UpdateTableDataRoutine(ctx, mockDataSource)
+	}
 
-	// Give some time for the routine to run
-	time.Sleep(50 * time.Millisecond)
+	// Give some time for routines to run
+	time.Sleep(100 * time.Millisecond)
 
-	// Cancel the context
-	cancel()
-
-	// Give some time for cleanup
-	time.Sleep(50 * time.Millisecond)
-
-	// Check that topics were fetched
+	// Check that topics were fetched (should not panic with concurrent access)
 	if resource.LastFetchedTopics == nil {
 		t.Error("LastFetchedTopics should be populated")
 	}

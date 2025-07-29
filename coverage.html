@@ -71,7 +71,7 @@
 				
 				<option value="file7">github.com/Benny93/kafui/pkg/datasource/mock/kafka_data_source_mock.go (100.0%)</option>
 				
-				<option value="file8">github.com/Benny93/kafui/pkg/kafui/helper.go (94.4%)</option>
+				<option value="file8">github.com/Benny93/kafui/pkg/kafui/helper.go (100.0%)</option>
 				
 				<option value="file9">github.com/Benny93/kafui/pkg/kafui/kafui.go (100.0%)</option>
 				
@@ -85,7 +85,7 @@
 				
 				<option value="file14">github.com/Benny93/kafui/pkg/kafui/resource_group.go (100.0%)</option>
 				
-				<option value="file15">github.com/Benny93/kafui/pkg/kafui/resource_topic.go (97.2%)</option>
+				<option value="file15">github.com/Benny93/kafui/pkg/kafui/resource_topic.go (100.0%)</option>
 				
 				<option value="file16">github.com/Benny93/kafui/pkg/kafui/search_bar.go (72.2%)</option>
 				
@@ -1416,7 +1416,7 @@ func (a ByOffsetThenPartition) Less(i, j int) bool <span class="cov8" title="1">
 
 func RecoverAndExit(app *tview.Application) <span class="cov8" title="1">{
         if r := recover(); r != nil </span><span class="cov8" title="1">{
-                if app != nil </span><span class="cov0" title="0">{
+                if app != nil </span><span class="cov8" title="1">{
                         app.Stop()
                 }</span>
                 <span class="cov8" title="1">fmt.Println("An error occurred:", r)
@@ -2562,7 +2562,7 @@ func (r *ResouceTopic) UpdateTableDataRoutine(ctx context.Context, dataSource ap
 
                         // Check if the context has been canceled
                         select </span>{
-                        case &lt;-ctx.Done():<span class="cov0" title="0">
+                        case &lt;-ctx.Done():<span class="cov8" title="1">
                                 return</span>
                         default:<span class="cov8" title="1">
                                 time.Sleep(refreshInterval)</span>
