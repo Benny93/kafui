@@ -11,7 +11,7 @@ This document contains additional tasks for improving test coverage across the k
 ## High Priority Tasks (Low Coverage Files)
 
 ### Task 1: Improve cmd/kafui coverage
-**Status**: [ ] Available [ ] In Progress [ ] Completed  
+**Status**: [ ] Available [ ] In Progress [x] Completed  
 **Assigned to**: _____________  
 **Current Coverage**: 0.0%  
 **Target Coverage**: 80%+
