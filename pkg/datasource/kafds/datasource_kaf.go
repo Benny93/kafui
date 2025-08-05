@@ -21,6 +21,24 @@ import (
 )
 
 type KafkaDataSourceKaf struct {
+	clientFactory KafkaClientFactory
+	configManager ConfigManager
+}
+
+// NewKafkaDataSourceKaf creates a new instance with default dependencies
+func NewKafkaDataSourceKaf() *KafkaDataSourceKaf {
+	return &KafkaDataSourceKaf{
+		clientFactory: kafkaClientFactory,
+		configManager: configManager,
+	}
+}
+
+// NewKafkaDataSourceKafWithDeps creates a new instance with custom dependencies for testing
+func NewKafkaDataSourceKafWithDeps(clientFactory KafkaClientFactory, configManager ConfigManager) *KafkaDataSourceKaf {
+	return &KafkaDataSourceKaf{
+		clientFactory: clientFactory,
+		configManager: configManager,
+	}
 }
 
 var cfgFile string
@@ -73,7 +91,7 @@ func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) {
 }
 
 func (kp KafkaDataSourceKaf) GetContext() string {
-	activeCluster := cfg.ActiveCluster()
+	activeCluster := kp.configManager.GetActiveCluster(cfg)
 	if activeCluster == nil {
 		return "default localhost:9092"
 	}
@@ -92,7 +110,7 @@ func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) {
 }
 
 func (kp KafkaDataSourceKaf) SetContext(contextName string) error {
-	cfg, err := config.ReadConfig(cfgFile)
+	cfg, err := kp.configManager.ReadConfig(cfgFile)
 	if err != nil {
 		return err
 	}
@@ -375,12 +393,12 @@ func onInit() {
 	}
 }
 
-func getClusterAdmin() (admin sarama.ClusterAdmin, e error) {
+func getClusterAdmin() (admin ClusterAdminInterface, e error) {
 	cfg, err := getConfig()
 	if err != nil {
 		return nil, err
 	}
-	clusterAdmin, err := sarama.NewClusterAdmin(currentCluster.Brokers, cfg)
+	clusterAdmin, err := kafkaClientFactory.CreateClusterAdmin(currentCluster.Brokers, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get cluster admin: %v\n", err)
 	}
