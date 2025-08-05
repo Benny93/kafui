@@ -18,7 +18,7 @@ func Init(cfgOption string, useMock bool) {
 
 	dataSource = mock.KafkaDataSourceMock{}
 	if !useMock {
-		dataSource = &kafds.KafkaDataSourceKaf{}
+		dataSource = kafds.NewKafkaDataSourceKaf()
 	}
 	dataSource.Init(cfgOption)
 	openUIFunc(dataSource)
