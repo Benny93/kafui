@@ -39,7 +39,7 @@ func TestKafkaDataSourceKaf_GetTopics_Integration(t *testing.T) {
 	// This is an integration test that would require a real Kafka connection
 	// For now, we'll just test that the method exists and can be called
 	kds := &KafkaDataSourceKaf{}
-	
+
 	// This will likely fail due to no Kafka connection, but tests the method signature
 	_, err := kds.GetTopics()
 	// We expect an error since there's no real Kafka cluster
@@ -57,7 +57,7 @@ func TestKafkaDataSourceKaf_GetContexts(t *testing.T) {
 	contexts, err := kds.GetContexts()
 	assert.NoError(t, err)
 	assert.Empty(t, contexts)
-	
+
 	// Test with some clusters
 	cfg.Clusters = []*config.Cluster{
 		{Name: "cluster1"},
@@ -75,8 +75,10 @@ func TestKafkaDataSourceKaf_GetContext(t *testing.T) {
 	originalCfg := cfg
 	defer func() { cfg = originalCfg }()
 
-	// Initialize cfg for the test
-	cfg = config.Config{}
+	// Initialize cfg for the test with proper clusters slice
+	cfg = config.Config{
+		Clusters: []*config.Cluster{},
+	}
 
 	// Test when no active cluster
 	mockConfigManager := &MockConfigManager{
@@ -84,15 +86,15 @@ func TestKafkaDataSourceKaf_GetContext(t *testing.T) {
 	}
 	mockClientFactory := &MockKafkaClientFactory{}
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	context := kds.GetContext()
 	assert.Equal(t, "default localhost:9092", context)
-	
+
 	// Test when active cluster exists
 	mockCluster := &config.Cluster{Name: "test-cluster"}
 	mockConfigManager.MockActiveCluster = mockCluster
 	kds = NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	context = kds.GetContext()
 	assert.Equal(t, "test-cluster", context)
 }
@@ -107,7 +109,7 @@ clusters:
     brokers: ["prod:9092"]
 currentCluster: test-cluster
 `
-	
+
 	tests := []struct {
 		name        string
 		contextName string
@@ -127,7 +129,7 @@ currentCluster: test-cluster
 			defer deleteFile(tmpFile)
 
 			cfgFile = tmpFile
-			
+
 			// Use the new constructor with real config manager for this integration test
 			kds := NewKafkaDataSourceKaf()
 			err = kds.SetContext(tt.contextName)
@@ -168,7 +170,7 @@ func createTempConfigFile(filename, content string) error {
 		return err
 	}
 	defer file.Close()
-	
+
 	_, err = file.WriteString(content)
 	return err
 }
@@ -189,7 +191,7 @@ func TestNewKafkaDataSourceKaf(t *testing.T) {
 func TestNewKafkaDataSourceKafWithDeps(t *testing.T) {
 	mockClientFactory := &MockKafkaClientFactory{}
 	mockConfigManager := &MockConfigManager{}
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
 	assert.NotNil(t, kds)
 	assert.Equal(t, mockClientFactory, kds.clientFactory)
@@ -216,22 +218,22 @@ func TestKafkaDataSourceKaf_GetTopics_Success(t *testing.T) {
 	mockAdmin := &MockClusterAdmin{
 		MockTopics: mockTopics,
 	}
-	
+
 	mockClientFactory := &MockKafkaClientFactory{
 		MockClusterAdmin: mockAdmin,
 	}
-	
+
 	mockConfigManager := &MockConfigManager{}
-	
+
 	// Set up global state for getClusterAdmin
 	originalFactory := kafkaClientFactory
 	defer func() { kafkaClientFactory = originalFactory }()
 	kafkaClientFactory = mockClientFactory
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	topics, err := kds.GetTopics()
-	
+
 	assert.NoError(t, err)
 	assert.Len(t, topics, 2)
 	assert.Contains(t, topics, "topic1")
@@ -245,18 +247,18 @@ func TestKafkaDataSourceKaf_GetTopics_AdminError(t *testing.T) {
 	mockClientFactory := &MockKafkaClientFactory{
 		ShouldFailClusterAdmin: true,
 	}
-	
+
 	mockConfigManager := &MockConfigManager{}
-	
+
 	// Set up global state for getClusterAdmin
 	originalFactory := kafkaClientFactory
 	defer func() { kafkaClientFactory = originalFactory }()
 	kafkaClientFactory = mockClientFactory
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	topics, err := kds.GetTopics()
-	
+
 	assert.Error(t, err)
 	assert.Nil(t, topics)
 	assert.Contains(t, err.Error(), "mock cluster admin creation failed")
@@ -267,22 +269,22 @@ func TestKafkaDataSourceKaf_GetTopics_ListTopicsError(t *testing.T) {
 	mockAdmin := &MockClusterAdmin{
 		ShouldFailListTopics: true,
 	}
-	
+
 	mockClientFactory := &MockKafkaClientFactory{
 		MockClusterAdmin: mockAdmin,
 	}
-	
+
 	mockConfigManager := &MockConfigManager{}
-	
+
 	// Set up global state for getClusterAdmin
 	originalFactory := kafkaClientFactory
 	defer func() { kafkaClientFactory = originalFactory }()
 	kafkaClientFactory = mockClientFactory
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	topics, err := kds.GetTopics()
-	
+
 	assert.Error(t, err)
 	assert.Nil(t, topics)
 	assert.Contains(t, err.Error(), "mock list topics failed")
@@ -293,24 +295,26 @@ func TestKafkaDataSourceKaf_GetContext_WithActiveCluster(t *testing.T) {
 	// Save original cfg and restore after test
 	originalCfg := cfg
 	defer func() { cfg = originalCfg }()
-	
-	// Initialize cfg for the test
-	cfg = config.Config{}
-	
+
+	// Initialize cfg for the test with proper clusters slice
+	cfg = config.Config{
+		Clusters: []*config.Cluster{},
+	}
+
 	mockCluster := &config.Cluster{
 		Name: "test-cluster",
 	}
-	
+
 	mockConfigManager := &MockConfigManager{
 		MockActiveCluster: mockCluster,
 	}
-	
+
 	mockClientFactory := &MockKafkaClientFactory{}
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	context := kds.GetContext()
-	
+
 	assert.Equal(t, "test-cluster", context)
 }
 
@@ -319,20 +323,22 @@ func TestKafkaDataSourceKaf_GetContext_NoActiveCluster(t *testing.T) {
 	// Save original cfg and restore after test
 	originalCfg := cfg
 	defer func() { cfg = originalCfg }()
-	
-	// Initialize cfg for the test
-	cfg = config.Config{}
-	
+
+	// Initialize cfg for the test with proper clusters slice
+	cfg = config.Config{
+		Clusters: []*config.Cluster{},
+	}
+
 	mockConfigManager := &MockConfigManager{
 		MockActiveCluster: nil,
 	}
-	
+
 	mockClientFactory := &MockKafkaClientFactory{}
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	context := kds.GetContext()
-	
+
 	assert.Equal(t, "default localhost:9092", context)
 }
 
@@ -344,17 +350,17 @@ func TestKafkaDataSourceKaf_SetContext_Success(t *testing.T) {
 			{Name: "cluster2"},
 		},
 	}
-	
+
 	mockConfigManager := &MockConfigManager{
 		MockConfig: mockConfig,
 	}
-	
+
 	mockClientFactory := &MockKafkaClientFactory{}
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	err := kds.SetContext("cluster1")
-	
+
 	assert.NoError(t, err)
 }
 
@@ -366,17 +372,17 @@ func TestKafkaDataSourceKaf_SetContext_ClusterNotFound(t *testing.T) {
 			{Name: "cluster2"},
 		},
 	}
-	
+
 	mockConfigManager := &MockConfigManager{
 		MockConfig: mockConfig,
 	}
-	
+
 	mockClientFactory := &MockKafkaClientFactory{}
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	err := kds.SetContext("nonexistent")
-	
+
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -386,13 +392,13 @@ func TestKafkaDataSourceKaf_SetContext_ConfigReadError(t *testing.T) {
 	mockConfigManager := &MockConfigManager{
 		ShouldFailReadConfig: true,
 	}
-	
+
 	mockClientFactory := &MockKafkaClientFactory{}
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	err := kds.SetContext("any-cluster")
-	
+
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "mock config read failed")
 }
@@ -403,7 +409,7 @@ func TestKafkaDataSourceKaf_GetConsumerGroups_Success(t *testing.T) {
 		"group1": "consumer",
 		"group2": "consumer",
 	}
-	
+
 	mockGroupDescs := []*sarama.GroupDescription{
 		{
 			GroupId: "group1",
@@ -418,27 +424,27 @@ func TestKafkaDataSourceKaf_GetConsumerGroups_Success(t *testing.T) {
 			Members: map[string]*sarama.GroupMemberDescription{},
 		},
 	}
-	
+
 	mockAdmin := &MockClusterAdmin{
 		MockConsumerGroups:    mockGroups,
 		MockGroupDescriptions: mockGroupDescs,
 	}
-	
+
 	mockClientFactory := &MockKafkaClientFactory{
 		MockClusterAdmin: mockAdmin,
 	}
-	
+
 	mockConfigManager := &MockConfigManager{}
-	
+
 	// Set up global state for getClusterAdmin
 	originalFactory := kafkaClientFactory
 	defer func() { kafkaClientFactory = originalFactory }()
 	kafkaClientFactory = mockClientFactory
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	groups, err := kds.GetConsumerGroups()
-	
+
 	assert.NoError(t, err)
 	assert.Len(t, groups, 2)
 	assert.Equal(t, "group1", groups[0].Name)
