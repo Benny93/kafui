@@ -55,43 +55,49 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/Benny93/kafui/cmd/kafui/root.go (0.0%)</option>
+				<option value="file0">github.com/Benny93/kafui/cmd/kafui/root.go (88.9%)</option>
 				
 				<option value="file1">github.com/Benny93/kafui/main.go (100.0%)</option>
 				
 				<option value="file2">github.com/Benny93/kafui/pkg/api/api.go (100.0%)</option>
 				
-				<option value="file3">github.com/Benny93/kafui/pkg/datasource/kafds/consume.go (48.3%)</option>
+				<option value="file3">github.com/Benny93/kafui/pkg/datasource/kafds/consume.go (69.2%)</option>
 				
-				<option value="file4">github.com/Benny93/kafui/pkg/datasource/kafds/datasource_kaf.go (34.1%)</option>
+				<option value="file4">github.com/Benny93/kafui/pkg/datasource/kafds/consume_interfaces.go (14.3%)</option>
 				
-				<option value="file5">github.com/Benny93/kafui/pkg/datasource/kafds/oauth.go (93.9%)</option>
+				<option value="file5">github.com/Benny93/kafui/pkg/datasource/kafds/datasource_kaf.go (52.1%)</option>
 				
-				<option value="file6">github.com/Benny93/kafui/pkg/datasource/kafds/scram_client.go (90.0%)</option>
+				<option value="file6">github.com/Benny93/kafui/pkg/datasource/kafds/interfaces.go (100.0%)</option>
 				
-				<option value="file7">github.com/Benny93/kafui/pkg/datasource/mock/kafka_data_source_mock.go (100.0%)</option>
+				<option value="file7">github.com/Benny93/kafui/pkg/datasource/kafds/mocks.go (80.0%)</option>
 				
-				<option value="file8">github.com/Benny93/kafui/pkg/kafui/helper.go (100.0%)</option>
+				<option value="file8">github.com/Benny93/kafui/pkg/datasource/kafds/oauth.go (93.9%)</option>
 				
-				<option value="file9">github.com/Benny93/kafui/pkg/kafui/kafui.go (100.0%)</option>
+				<option value="file9">github.com/Benny93/kafui/pkg/datasource/kafds/scram_client.go (90.0%)</option>
 				
-				<option value="file10">github.com/Benny93/kafui/pkg/kafui/page_detail.go (84.1%)</option>
+				<option value="file10">github.com/Benny93/kafui/pkg/datasource/mock/kafka_data_source_mock.go (100.0%)</option>
 				
-				<option value="file11">github.com/Benny93/kafui/pkg/kafui/page_main.go (78.2%)</option>
+				<option value="file11">github.com/Benny93/kafui/pkg/kafui/helper.go (100.0%)</option>
 				
-				<option value="file12">github.com/Benny93/kafui/pkg/kafui/page_topic.go (55.0%)</option>
+				<option value="file12">github.com/Benny93/kafui/pkg/kafui/kafui.go (100.0%)</option>
 				
-				<option value="file13">github.com/Benny93/kafui/pkg/kafui/resource_context.go (100.0%)</option>
+				<option value="file13">github.com/Benny93/kafui/pkg/kafui/page_detail.go (84.1%)</option>
 				
-				<option value="file14">github.com/Benny93/kafui/pkg/kafui/resource_group.go (100.0%)</option>
+				<option value="file14">github.com/Benny93/kafui/pkg/kafui/page_main.go (78.2%)</option>
 				
-				<option value="file15">github.com/Benny93/kafui/pkg/kafui/resource_topic.go (100.0%)</option>
+				<option value="file15">github.com/Benny93/kafui/pkg/kafui/page_topic.go (55.0%)</option>
 				
-				<option value="file16">github.com/Benny93/kafui/pkg/kafui/search_bar.go (72.2%)</option>
+				<option value="file16">github.com/Benny93/kafui/pkg/kafui/resource_context.go (100.0%)</option>
 				
-				<option value="file17">github.com/Benny93/kafui/pkg/kafui/table_input.go (10.4%)</option>
+				<option value="file17">github.com/Benny93/kafui/pkg/kafui/resource_group.go (100.0%)</option>
 				
-				<option value="file18">github.com/Benny93/kafui/pkg/kafui/ui.go (17.4%)</option>
+				<option value="file18">github.com/Benny93/kafui/pkg/kafui/resource_topic.go (100.0%)</option>
+				
+				<option value="file19">github.com/Benny93/kafui/pkg/kafui/search_bar.go (72.2%)</option>
+				
+				<option value="file20">github.com/Benny93/kafui/pkg/kafui/table_input.go (10.4%)</option>
+				
+				<option value="file21">github.com/Benny93/kafui/pkg/kafui/ui.go (17.4%)</option>
 				
 				</select>
 			</div>
@@ -114,20 +120,33 @@ import (
 
 var cfgFile string
 
-func DoExecute() <span class="cov0" title="0">{
+// KafuiInitFunc is a function type for kafui initialization
+type KafuiInitFunc func(configFile string, mock bool)
+
+// defaultKafuiInit is the default implementation
+var defaultKafuiInit KafuiInitFunc = kafui.Init
+
+// CreateRootCommand creates and returns the root cobra command
+func CreateRootCommand(initFunc KafuiInitFunc) *cobra.Command <span class="cov8" title="1">{
         rootCmd := &amp;cobra.Command{
                 Use:   "kafui",
                 Short: "k9s style kafka explorer",
                 Long:  "Explore different kafka broker in a k9s fashion with quick switches between topics, consumer groups and brokers",
-                Run: func(cmd *cobra.Command, args []string) </span><span class="cov0" title="0">{
+                Run: func(cmd *cobra.Command, args []string) </span><span class="cov8" title="1">{
                         mock, _ := cmd.Flags().GetBool("mock")
-                        kafui.Init(cfgFile, mock)
+                        initFunc(cfgFile, mock)
                 }</span>,
         }
 
         // Add flags to root command
-        <span class="cov0" title="0">rootCmd.PersistentFlags().Bool("mock", false, "Enable mock mode: Display mock data to test various functions without a real kafka broker")
+        <span class="cov8" title="1">rootCmd.PersistentFlags().Bool("mock", false, "Enable mock mode: Display mock data to test various functions without a real kafka broker")
         rootCmd.PersistentFlags().StringVar(&amp;cfgFile, "config", "", "config file (default is $HOME/.kaf/config)")
+        
+        return rootCmd</span>
+}
+
+func DoExecute() <span class="cov8" title="1">{
+        rootCmd := CreateRootCommand(defaultKafuiInit)
         if err := rootCmd.Execute(); err != nil </span><span class="cov0" title="0">{
                 panic(err)</span>
         }
@@ -281,48 +300,54 @@ func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, 
 var handler api.MessageHandlerFunc // todo remove global var
 
 func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) <span class="cov8" title="1">{
+        DoConsumeWithDeps(ctx, topic, consumeFlags, handleMessage, onError, configProviderInstance, consumerInstance, messageProcessorInstance)
+}</span>
+
+func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface, processor MessageProcessorInterface) <span class="cov8" title="1">{
         var offset int64
-        cfg, err := getConfig()
-        if err != nil </span><span class="cov0" title="0">{
-                onError(err)
-                return
-        }</span>
-        <span class="cov8" title="1">client, err := getClientFromConfig(cfg)
+        cfg, err := configProvider.GetConsumerConfig()
         if err != nil </span><span class="cov8" title="1">{
                 onError(err)
                 return
         }</span>
-        <span class="cov0" title="0">handler = handleMessage
+        <span class="cov8" title="1">client, err := configProvider.GetClientFromConfig(cfg)
+        if err != nil </span><span class="cov8" title="1">{
+                onError(err)
+                return
+        }</span>
+        <span class="cov8" title="1">handler = handleMessage
         // Allow deprecated flag to override when outputFormat is not specified, or default.
         if outputFormat == OutputFormatDefault &amp;&amp; raw </span><span class="cov0" title="0">{
                 outputFormat = OutputFormatRaw
         }</span>
-        <span class="cov0" title="0">offsetFlag = "oldest" // TODO as parameter
-        follow = consumeFlags.Follow
+        <span class="cov8" title="1">offsetFlag = consumeFlags.OffsetFlag // Use from flags instead of hardcoded
+        if offsetFlag == "" </span><span class="cov0" title="0">{
+                offsetFlag = "oldest" // Default fallback
+        }</span>
+        <span class="cov8" title="1">follow = consumeFlags.Follow
         tail = consumeFlags.Tail
 
         switch offsetFlag </span>{
-        case "oldest":<span class="cov0" title="0">
+        case "oldest":<span class="cov8" title="1">
                 offset = sarama.OffsetOldest
                 cfg.Consumer.Offsets.Initial = sarama.OffsetOldest</span>
-        case "newest":<span class="cov0" title="0">
+        case "newest":<span class="cov8" title="1">
                 offset = sarama.OffsetNewest
                 cfg.Consumer.Offsets.Initial = sarama.OffsetNewest</span>
-        default:<span class="cov0" title="0">
+        default:<span class="cov8" title="1">
                 o, err := strconv.ParseInt(offsetFlag, 10, 64)
-                if err != nil </span><span class="cov0" title="0">{
+                if err != nil </span><span class="cov8" title="1">{
                         onError(err)
                         return
                 }</span>
                 <span class="cov0" title="0">offset = o</span>
         }
 
-        <span class="cov0" title="0">if groupFlag != "" </span><span class="cov0" title="0">{
-                withConsumerGroup(ctx, client, topic, groupFlag)
-        }</span> else<span class="cov0" title="0"> {
-                withoutConsumerGroup(ctx, client, topic, offset, onError)
+        <span class="cov8" title="1">if groupFlag != "" </span><span class="cov0" title="0">{
+                withConsumerGroupWithDeps(ctx, client, topic, groupFlag, consumer, processor)
+        }</span> else<span class="cov8" title="1"> {
+                withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumer, processor)
         }</span>
-
 }
 
 type g struct{}
@@ -348,7 +373,11 @@ func (g *g) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGro
 }
 
 func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) error <span class="cov8" title="1">{
-        cg, err := sarama.NewConsumerGroupFromClient(group, client)
+        return withConsumerGroupWithDeps(ctx, client, topic, group, consumerInstance, messageProcessorInstance)
+}</span>
+
+func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic, group string, consumer ConsumerInterface, processor MessageProcessorInterface) error <span class="cov8" title="1">{
+        cg, err := consumer.CreateConsumerGroupFromClient(group, client)
         if err != nil </span><span class="cov8" title="1">{
                 return fmt.Errorf("Failed to create consumer group: %v", err)
         }</span>
@@ -361,19 +390,23 @@ func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group s
 }
 
 func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) <span class="cov8" title="1">{
+        withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumerInstance, messageProcessorInstance)
+}</span>
+
+func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any), consumer ConsumerInterface, processor MessageProcessorInterface) <span class="cov8" title="1">{
         if client == nil </span><span class="cov8" title="1">{
                 onError(fmt.Sprintf("Unable to create consumer from client: client is nil\n"))
                 return
         }</span>
-        <span class="cov0" title="0">consumer, err := sarama.NewConsumerFromClient(client)
+        <span class="cov8" title="1">saramaConsumer, err := sarama.NewConsumerFromClient(client)
         if err != nil </span><span class="cov0" title="0">{
                 onError(fmt.Sprintf("Unable to create consumer from client: %v\n", err))
                 return
         }</span>
 
-        <span class="cov0" title="0">var partitions []int32
-        if len(flagPartitions) == 0 </span><span class="cov0" title="0">{
-                partitions, err = consumer.Partitions(topic)
+        <span class="cov8" title="1">var partitions []int32
+        if len(flagPartitions) == 0 </span><span class="cov8" title="1">{
+                partitions, err = saramaConsumer.Partitions(topic)
                 if err != nil </span><span class="cov0" title="0">{
                         onError(fmt.Sprintf("Unable to get partitions: %v\n", err))
                         return
@@ -382,26 +415,26 @@ func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic strin
                 partitions = flagPartitions
         }</span>
 
-        <span class="cov0" title="0">wg := sync.WaitGroup{}
+        <span class="cov8" title="1">wg := sync.WaitGroup{}
         mu := sync.Mutex{} // Synchronizes stderr and stdout.
-        for _, partition := range partitions </span><span class="cov0" title="0">{
+        for _, partition := range partitions </span><span class="cov8" title="1">{
                 wg.Add(1)
 
-                go func(partition int32, offset int64) </span><span class="cov0" title="0">{
+                go func(partition int32, offset int64) </span><span class="cov8" title="1">{
                         defer wg.Done()
-                        defer func() </span><span class="cov0" title="0">{
-                                if r := recover(); r != nil </span><span class="cov0" title="0">{
+                        defer func() </span><span class="cov8" title="1">{
+                                if r := recover(); r != nil </span><span class="cov8" title="1">{
                                         onError(r)
                                         return
                                 }</span>
                         }()
 
-                        <span class="cov0" title="0">offsets, err := getOffsets(client, topic, partition)
+                        <span class="cov8" title="1">offsets, err := getOffsets(client, topic, partition)
                         if err != nil </span><span class="cov0" title="0">{
                                 onError(fmt.Errorf("Failed to get %s offsets for partition %d: %w", topic, partition, err))
                         }</span>
 
-                        <span class="cov0" title="0">if tail != 0 </span><span class="cov0" title="0">{
+                        <span class="cov8" title="1">if tail != 0 </span><span class="cov8" title="1">{
                                 offset = offsets.newest - int64(tail)
                                 if offset &lt; offsets.oldest </span><span class="cov0" title="0">{
                                         offset = offsets.oldest
@@ -409,11 +442,11 @@ func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic strin
                         }
 
                         // Already at end of partition, return early
-                        <span class="cov0" title="0">if !follow &amp;&amp; offsets.newest == offsets.oldest </span><span class="cov0" title="0">{
+                        <span class="cov8" title="1">if !follow &amp;&amp; offsets.newest == offsets.oldest </span><span class="cov0" title="0">{
                                 return
                         }</span>
 
-                        <span class="cov0" title="0">pc, err := consumer.ConsumePartition(topic, partition, offset)
+                        <span class="cov8" title="1">pc, err := saramaConsumer.ConsumePartition(topic, partition, offset)
                         if err != nil </span><span class="cov0" title="0">{
                                 onError(fmt.Errorf("Unable to consume partition: %v %v %v %v\n", topic, partition, offset, err))
                         }</span>
@@ -436,7 +469,7 @@ func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic strin
                         }
                 }(partition, offset)
         }
-        <span class="cov0" title="0">wg.Wait()</span>
+        <span class="cov8" title="1">wg.Wait()</span>
 }
 
 func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) <span class="cov8" title="1">{
@@ -700,6 +733,118 @@ func completeOutputFormat(cmd *cobra.Command, args []string, toComplete string) 
 		<pre class="file" id="file4" style="display: none">package kafds
 
 import (
+        "github.com/IBM/sarama"
+        "github.com/Benny93/kafui/pkg/api"
+)
+
+// ConsumerInterface wraps the consumer functionality for testing
+type ConsumerInterface interface {
+        GetOffsets(client sarama.Client, topic string, partition int32) (*offsets, error)
+        CreateConsumerFromClient(client sarama.Client, topic string, partition int32) (sarama.PartitionConsumer, error)
+        CreateConsumerGroupFromClient(group string, client sarama.Client) (sarama.ConsumerGroup, error)
+}
+
+// MessageProcessorInterface handles message processing and formatting
+type MessageProcessorInterface interface {
+        ProcessMessage(msg *sarama.ConsumerMessage, handler api.MessageHandlerFunc) error
+        FormatKey(key []byte) []byte
+        FormatValue(value []byte) []byte
+        DecodeAvro(data []byte) ([]byte, error)
+        DecodeProto(data []byte, protoType string) ([]byte, error)
+}
+
+// ConfigProviderInterface provides configuration for consumers
+type ConfigProviderInterface interface {
+        GetConsumerConfig() (*sarama.Config, error)
+        GetClientFromConfig(config *sarama.Config) (sarama.Client, error)
+}
+
+// DefaultConsumer implements ConsumerInterface using real Sarama
+type DefaultConsumer struct{}
+
+func (c *DefaultConsumer) GetOffsets(client sarama.Client, topic string, partition int32) (*offsets, error) <span class="cov0" title="0">{
+        return getOffsets(client, topic, partition)
+}</span>
+
+func (c *DefaultConsumer) CreateConsumerFromClient(client sarama.Client, topic string, partition int32) (sarama.PartitionConsumer, error) <span class="cov0" title="0">{
+        consumer, err := sarama.NewConsumerFromClient(client)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return consumer.ConsumePartition(topic, partition, sarama.OffsetOldest)</span>
+}
+
+func (c *DefaultConsumer) CreateConsumerGroupFromClient(group string, client sarama.Client) (sarama.ConsumerGroup, error) <span class="cov8" title="1">{
+        return sarama.NewConsumerGroupFromClient(group, client)
+}</span>
+
+// DefaultMessageProcessor implements MessageProcessorInterface
+type DefaultMessageProcessor struct{}
+
+func (p *DefaultMessageProcessor) ProcessMessage(msg *sarama.ConsumerMessage, handler api.MessageHandlerFunc) error <span class="cov0" title="0">{
+        apiMsg := api.Message{
+                Key:       string(msg.Key),
+                Value:     string(msg.Value),
+                Offset:    msg.Offset,
+                Partition: msg.Partition,
+                Headers:   convertHeaders(msg.Headers),
+        }
+        handler(apiMsg)
+        return nil
+}</span>
+
+func (p *DefaultMessageProcessor) FormatKey(key []byte) []byte <span class="cov0" title="0">{
+        return formatKey(key)
+}</span>
+
+func (p *DefaultMessageProcessor) FormatValue(value []byte) []byte <span class="cov0" title="0">{
+        return formatValue(value)
+}</span>
+
+func (p *DefaultMessageProcessor) DecodeAvro(data []byte) ([]byte, error) <span class="cov0" title="0">{
+        return avroDecode(data)
+}</span>
+
+func (p *DefaultMessageProcessor) DecodeProto(data []byte, protoType string) ([]byte, error) <span class="cov0" title="0">{
+        if reg != nil </span><span class="cov0" title="0">{
+                return protoDecode(reg, data, protoType)
+        }</span>
+        <span class="cov0" title="0">return data, nil</span>
+}
+
+// DefaultConfigProvider implements ConfigProviderInterface
+type DefaultConfigProvider struct{}
+
+func (cp *DefaultConfigProvider) GetConsumerConfig() (*sarama.Config, error) <span class="cov8" title="1">{
+        return getConfig()
+}</span>
+
+func (cp *DefaultConfigProvider) GetClientFromConfig(config *sarama.Config) (sarama.Client, error) <span class="cov8" title="1">{
+        return getClientFromConfig(config)
+}</span>
+
+// Helper function to convert Sarama headers to API headers
+func convertHeaders(saramaHeaders []*sarama.RecordHeader) []api.MessageHeader <span class="cov0" title="0">{
+        headers := make([]api.MessageHeader, len(saramaHeaders))
+        for i, h := range saramaHeaders </span><span class="cov0" title="0">{
+                headers[i] = api.MessageHeader{
+                        Key:   string(h.Key),
+                        Value: string(h.Value),
+                }
+        }</span>
+        <span class="cov0" title="0">return headers</span>
+}
+
+// Global instances that can be replaced for testing
+var (
+        consumerInstance       ConsumerInterface       = &amp;DefaultConsumer{}
+        messageProcessorInstance MessageProcessorInterface = &amp;DefaultMessageProcessor{}
+        configProviderInstance ConfigProviderInterface   = &amp;DefaultConfigProvider{}
+)</pre>
+		
+		<pre class="file" id="file5" style="display: none">package kafds
+
+import (
         "context"
         "crypto/tls"
         "crypto/x509"
@@ -720,7 +865,25 @@ import (
 )
 
 type KafkaDataSourceKaf struct {
+        clientFactory KafkaClientFactory
+        configManager ConfigManager
 }
+
+// NewKafkaDataSourceKaf creates a new instance with default dependencies
+func NewKafkaDataSourceKaf() *KafkaDataSourceKaf <span class="cov8" title="1">{
+        return &amp;KafkaDataSourceKaf{
+                clientFactory: kafkaClientFactory,
+                configManager: configManager,
+        }
+}</span>
+
+// NewKafkaDataSourceKafWithDeps creates a new instance with custom dependencies for testing
+func NewKafkaDataSourceKafWithDeps(clientFactory KafkaClientFactory, configManager ConfigManager) *KafkaDataSourceKaf <span class="cov8" title="1">{
+        return &amp;KafkaDataSourceKaf{
+                clientFactory: clientFactory,
+                configManager: configManager,
+        }
+}</span>
 
 var cfgFile string
 
@@ -738,16 +901,16 @@ func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) <span cla
         if err != nil </span><span class="cov8" title="1">{
                 return nil, err
         }</span>
-        <span class="cov0" title="0">topicDetails, err := admin.ListTopics()
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">topicDetails, err := admin.ListTopics()
+        if err != nil </span><span class="cov8" title="1">{
                 return nil, err
         }</span>
 
         //client := getClient()
 
-        <span class="cov0" title="0">topics := make(map[string]api.Topic)
+        <span class="cov8" title="1">topics := make(map[string]api.Topic)
 
-        for key, value := range topicDetails </span><span class="cov0" title="0">{
+        for key, value := range topicDetails </span><span class="cov8" title="1">{
                 /*
                         var messageCount int64 = 0
                         // Iterate over all partitions last offset to get the overall message count
@@ -768,11 +931,16 @@ func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) <span cla
                 }
         }</span>
 
-        <span class="cov0" title="0">return topics, err</span>
+        <span class="cov8" title="1">return topics, err</span>
 }
 
 func (kp KafkaDataSourceKaf) GetContext() string <span class="cov8" title="1">{
-        activeCluster := cfg.ActiveCluster()
+        // Check if cfg is properly initialized
+        if cfg.Clusters == nil </span><span class="cov0" title="0">{
+                return "default localhost:9092 (config not loaded)"
+        }</span>
+        
+        <span class="cov8" title="1">activeCluster := kp.configManager.GetActiveCluster(cfg)
         if activeCluster == nil </span><span class="cov8" title="1">{
                 return "default localhost:9092"
         }</span>
@@ -791,8 +959,8 @@ func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) <span class="cov8" 
 }
 
 func (kp KafkaDataSourceKaf) SetContext(contextName string) error <span class="cov8" title="1">{
-        cfg, err := config.ReadConfig(cfgFile)
-        if err != nil </span><span class="cov0" title="0">{
+        cfg, err := kp.configManager.ReadConfig(cfgFile)
+        if err != nil </span><span class="cov8" title="1">{
                 return err
         }</span>
 
@@ -820,27 +988,27 @@ func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) <s
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">groups, err := admin.ListConsumerGroups()
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">groups, err := admin.ListConsumerGroups()
+        if err != nil </span><span class="cov8" title="1">{
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">groupList := make([]string, 0, len(groups))
-        for grp := range groups </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">groupList := make([]string, 0, len(groups))
+        for grp := range groups </span><span class="cov8" title="1">{
                 groupList = append(groupList, grp)
         }</span>
 
-        <span class="cov0" title="0">sort.Slice(groupList, func(i int, j int) bool </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">sort.Slice(groupList, func(i int, j int) bool </span><span class="cov8" title="1">{
                 return groupList[i] &lt; groupList[j]
         }</span>)
 
-        <span class="cov0" title="0">groupDescs, err := admin.DescribeConsumerGroups(groupList)
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">groupDescs, err := admin.DescribeConsumerGroups(groupList)
+        if err != nil </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("Unable to describe consumer groups: %v\n", err)
         }</span>
 
-        <span class="cov0" title="0">finalGroups := make([]api.ConsumerGroup, 0, len(groupDescs))
-        for _, detail := range groupDescs </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">finalGroups := make([]api.ConsumerGroup, 0, len(groupDescs))
+        for _, detail := range groupDescs </span><span class="cov8" title="1">{
                 state := detail.State
                 consumers := len(detail.Members)
                 tmpGroup := api.ConsumerGroup{
@@ -852,7 +1020,7 @@ func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) <s
 
         }</span>
 
-        <span class="cov0" title="0">return finalGroups, nil</span>
+        <span class="cov8" title="1">return finalGroups, nil</span>
 }
 
 func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error <span class="cov8" title="1">{
@@ -861,14 +1029,14 @@ func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string,
         if err != nil </span><span class="cov8" title="1">{
                 return err
         }</span>
-        <span class="cov0" title="0">topicDetails, _ := admin.ListTopics()
+        <span class="cov8" title="1">topicDetails, _ := admin.ListTopics()
 
         keys := make([]string, 0, len(topicDetails))
-        for key := range topicDetails </span><span class="cov0" title="0">{
+        for key := range topicDetails </span><span class="cov8" title="1">{
                 keys = append(keys, key)
         }</span>
 
-        <span class="cov0" title="0">DoConsume(ctx, topicName, flags, handleMessage, onError)
+        <span class="cov8" title="1">DoConsume(ctx, topicName, flags, handleMessage, onError)
 
         //cgs := []string{"message1", "message2", "message3"} // Example
         return nil</span>
@@ -1043,8 +1211,12 @@ func onInit() <span class="cov8" title="1">{
         var err error
         cfg, err = config.ReadConfig(cfgFile)
         if err != nil </span><span class="cov0" title="0">{
-                panic(err)</span>
-        }
+                // Instead of panicking, create a default config
+                fmt.Fprintf(errWriter, "Warning: Could not read config file (%v). Using default configuration.\n", err)
+                cfg = config.Config{
+                        Clusters: []*config.Cluster{},
+                }
+        }</span>
 
         <span class="cov8" title="1">cfg.ClusterOverride = clusterOverride
 
@@ -1074,17 +1246,22 @@ func onInit() <span class="cov8" title="1">{
         }</span>
 }
 
-func getClusterAdmin() (admin sarama.ClusterAdmin, e error) <span class="cov8" title="1">{
+func getClusterAdmin() (admin ClusterAdminInterface, e error) <span class="cov8" title="1">{
         cfg, err := getConfig()
         if err != nil </span><span class="cov0" title="0">{
-                return nil, err
+                return nil, fmt.Errorf("failed to get Kafka config: %v", err)
         }</span>
-        <span class="cov8" title="1">clusterAdmin, err := sarama.NewClusterAdmin(currentCluster.Brokers, cfg)
+        
+        <span class="cov8" title="1">if currentCluster == nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("no Kafka cluster configured. Please check your configuration or ensure Kafka is running")
+        }</span>
+        
+        <span class="cov8" title="1">clusterAdmin, err := kafkaClientFactory.CreateClusterAdmin(currentCluster.Brokers, cfg)
         if err != nil </span><span class="cov8" title="1">{
-                return nil, fmt.Errorf("Unable to get cluster admin: %v\n", err)
+                return nil, fmt.Errorf("unable to connect to Kafka cluster at %v: %v\nPlease ensure Kafka is running and accessible", currentCluster.Brokers, err)
         }</span>
 
-        <span class="cov0" title="0">return clusterAdmin, nil</span>
+        <span class="cov8" title="1">return clusterAdmin, nil</span>
 }
 
 func getClient() (client sarama.Client, e error) <span class="cov0" title="0">{
@@ -1124,7 +1301,145 @@ func getSchemaCache() (cache *avro.SchemaCache, er error) <span class="cov0" tit
 }
 </pre>
 		
-		<pre class="file" id="file5" style="display: none">package kafds
+		<pre class="file" id="file6" style="display: none">package kafds
+
+import (
+        "github.com/IBM/sarama"
+        "github.com/birdayz/kaf/pkg/config"
+)
+
+// ClusterAdminInterface wraps the methods we actually use from sarama.ClusterAdmin
+type ClusterAdminInterface interface {
+        ListTopics() (map[string]sarama.TopicDetail, error)
+        ListConsumerGroups() (map[string]string, error)
+        DescribeConsumerGroups(groups []string) ([]*sarama.GroupDescription, error)
+        Close() error
+}
+
+// KafkaClientFactory interface for creating Kafka clients
+type KafkaClientFactory interface {
+        CreateClusterAdmin(brokers []string, config *sarama.Config) (ClusterAdminInterface, error)
+        CreateClient(brokers []string, config *sarama.Config) (sarama.Client, error)
+}
+
+// ConfigManager interface for configuration operations
+type ConfigManager interface {
+        ReadConfig(configFile string) (config.Config, error)
+        GetActiveCluster(cfg config.Config) *config.Cluster
+}
+
+// DefaultKafkaClientFactory implements KafkaClientFactory using real Sarama clients
+type DefaultKafkaClientFactory struct{}
+
+func (f *DefaultKafkaClientFactory) CreateClusterAdmin(brokers []string, config *sarama.Config) (ClusterAdminInterface, error) <span class="cov8" title="1">{
+        return sarama.NewClusterAdmin(brokers, config)
+}</span>
+
+func (f *DefaultKafkaClientFactory) CreateClient(brokers []string, config *sarama.Config) (sarama.Client, error) <span class="cov8" title="1">{
+        return sarama.NewClient(brokers, config)
+}</span>
+
+// DefaultConfigManager implements ConfigManager using real config operations
+type DefaultConfigManager struct{}
+
+func (m *DefaultConfigManager) ReadConfig(configFile string) (config.Config, error) <span class="cov8" title="1">{
+        return config.ReadConfig(configFile)
+}</span>
+
+func (m *DefaultConfigManager) GetActiveCluster(cfg config.Config) *config.Cluster <span class="cov8" title="1">{
+        return cfg.ActiveCluster()
+}</span>
+
+// Global instances that can be replaced for testing
+var (
+        kafkaClientFactory KafkaClientFactory = &amp;DefaultKafkaClientFactory{}
+        configManager      ConfigManager      = &amp;DefaultConfigManager{}
+)</pre>
+		
+		<pre class="file" id="file7" style="display: none">package kafds
+
+import (
+        "errors"
+        "github.com/IBM/sarama"
+        "github.com/birdayz/kaf/pkg/config"
+)
+
+// MockKafkaClientFactory for testing
+type MockKafkaClientFactory struct {
+        ShouldFailClusterAdmin bool
+        ShouldFailClient       bool
+        MockClusterAdmin       ClusterAdminInterface
+        MockClient             sarama.Client
+}
+
+func (m *MockKafkaClientFactory) CreateClusterAdmin(brokers []string, config *sarama.Config) (ClusterAdminInterface, error) <span class="cov8" title="1">{
+        if m.ShouldFailClusterAdmin </span><span class="cov8" title="1">{
+                return nil, errors.New("mock cluster admin creation failed")
+        }</span>
+        <span class="cov8" title="1">return m.MockClusterAdmin, nil</span>
+}
+
+func (m *MockKafkaClientFactory) CreateClient(brokers []string, config *sarama.Config) (sarama.Client, error) <span class="cov0" title="0">{
+        if m.ShouldFailClient </span><span class="cov0" title="0">{
+                return nil, errors.New("mock client creation failed")
+        }</span>
+        <span class="cov0" title="0">return m.MockClient, nil</span>
+}
+
+// MockConfigManager for testing
+type MockConfigManager struct {
+        ShouldFailReadConfig bool
+        MockConfig           config.Config
+        MockActiveCluster    *config.Cluster
+}
+
+func (m *MockConfigManager) ReadConfig(configFile string) (config.Config, error) <span class="cov8" title="1">{
+        if m.ShouldFailReadConfig </span><span class="cov8" title="1">{
+                return config.Config{}, errors.New("mock config read failed")
+        }</span>
+        <span class="cov8" title="1">return m.MockConfig, nil</span>
+}
+
+func (m *MockConfigManager) GetActiveCluster(cfg config.Config) *config.Cluster <span class="cov8" title="1">{
+        return m.MockActiveCluster
+}</span>
+
+// MockClusterAdmin for testing - implements ClusterAdminInterface
+type MockClusterAdmin struct {
+        ShouldFailListTopics         bool
+        ShouldFailListConsumerGroups bool
+        ShouldFailDescribeGroups     bool
+        MockTopics                   map[string]sarama.TopicDetail
+        MockConsumerGroups           map[string]string
+        MockGroupDescriptions        []*sarama.GroupDescription
+}
+
+func (m *MockClusterAdmin) ListTopics() (map[string]sarama.TopicDetail, error) <span class="cov8" title="1">{
+        if m.ShouldFailListTopics </span><span class="cov8" title="1">{
+                return nil, errors.New("mock list topics failed")
+        }</span>
+        <span class="cov8" title="1">return m.MockTopics, nil</span>
+}
+
+func (m *MockClusterAdmin) ListConsumerGroups() (map[string]string, error) <span class="cov8" title="1">{
+        if m.ShouldFailListConsumerGroups </span><span class="cov8" title="1">{
+                return nil, errors.New("mock list consumer groups failed")
+        }</span>
+        <span class="cov8" title="1">return m.MockConsumerGroups, nil</span>
+}
+
+func (m *MockClusterAdmin) DescribeConsumerGroups(groups []string) ([]*sarama.GroupDescription, error) <span class="cov8" title="1">{
+        if m.ShouldFailDescribeGroups </span><span class="cov8" title="1">{
+                return nil, errors.New("mock describe consumer groups failed")
+        }</span>
+        <span class="cov8" title="1">return m.MockGroupDescriptions, nil</span>
+}
+
+func (m *MockClusterAdmin) Close() error <span class="cov0" title="0">{
+        return nil
+}</pre>
+		
+		<pre class="file" id="file8" style="display: none">package kafds
 
 import (
         "context"
@@ -1244,7 +1559,7 @@ func (tp *tokenProvider) refreshToken() error <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file6" style="display: none">package kafds
+		<pre class="file" id="file9" style="display: none">package kafds
 
 import (
         "crypto/sha256"
@@ -1282,7 +1597,7 @@ func (x *XDGSCRAMClient) Done() bool <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file7" style="display: none">package mock
+		<pre class="file" id="file10" style="display: none">package mock
 
 import (
         "context"
@@ -1371,7 +1686,7 @@ func (kp KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string
 }
 </pre>
 		
-		<pre class="file" id="file8" style="display: none">package kafui
+		<pre class="file" id="file11" style="display: none">package kafui
 
 import (
         "fmt"
@@ -1426,7 +1741,7 @@ func RecoverAndExit(app *tview.Application) <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file9" style="display: none">package kafui
+		<pre class="file" id="file12" style="display: none">package kafui
 
 import (
         "fmt"
@@ -1446,14 +1761,14 @@ func Init(cfgOption string, useMock bool) <span class="cov8" title="1">{
 
         dataSource = mock.KafkaDataSourceMock{}
         if !useMock </span><span class="cov8" title="1">{
-                dataSource = &amp;kafds.KafkaDataSourceKaf{}
+                dataSource = kafds.NewKafkaDataSourceKaf()
         }</span>
         <span class="cov8" title="1">dataSource.Init(cfgOption)
         openUIFunc(dataSource)</span>
 }
 </pre>
 		
-		<pre class="file" id="file10" style="display: none">package kafui
+		<pre class="file" id="file13" style="display: none">package kafui
 
 import (
         "encoding/json"
@@ -1627,7 +1942,7 @@ func (vp *DetailPage) CreateInputLegend() *tview.Flex <span class="cov8" title="
 }</span>
 </pre>
 		
-		<pre class="file" id="file11" style="display: none">package kafui
+		<pre class="file" id="file14" style="display: none">package kafui
 
 import (
         "fmt"
@@ -1886,7 +2201,7 @@ func CreateMainInputLegend() *tview.Flex <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file12" style="display: none">package kafui
+		<pre class="file" id="file15" style="display: none">package kafui
 
 import (
         "container/list"
@@ -2295,7 +2610,7 @@ func (tp *TopicPage) CreateInputSearch(onDone func()) *tview.Flex <span class="c
 }
 </pre>
 		
-		<pre class="file" id="file13" style="display: none">package kafui
+		<pre class="file" id="file16" style="display: none">package kafui
 
 import (
         "context"
@@ -2408,7 +2723,7 @@ func (r ResourceContext) GetName() string <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file14" style="display: none">package kafui
+		<pre class="file" id="file17" style="display: none">package kafui
 
 import (
         "context"
@@ -2523,7 +2838,7 @@ func (r ResourceGroup) GetName() string <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file15" style="display: none">package kafui
+		<pre class="file" id="file18" style="display: none">package kafui
 
 import (
         "context"
@@ -2640,7 +2955,7 @@ func (r ResouceTopic) GetName() string <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file16" style="display: none">package kafui
+		<pre class="file" id="file19" style="display: none">package kafui
 
 import (
         "fmt"
@@ -2799,7 +3114,7 @@ func (s *SearchBar) ReceivingMessage(app *tview.Application, table *tview.Table,
 }
 </pre>
 		
-		<pre class="file" id="file17" style="display: none">package kafui
+		<pre class="file" id="file20" style="display: none">package kafui
 
 import (
         "fmt"
@@ -2907,7 +3222,7 @@ func CopySelectedRowToClipboard(table *tview.Table, ConsumeMessage func(message 
 }
 </pre>
 		
-		<pre class="file" id="file18" style="display: none">package kafui
+		<pre class="file" id="file21" style="display: none">package kafui
 
 import (
         "fmt"
