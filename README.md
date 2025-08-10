@@ -115,3 +115,9 @@ clusters:
   schema-registry-url: localhost:8085
   schema-registry-credentials: null
 ```
+
+## Test coverage
+
+![Coverage treemap](./coverage.svg)
+
+> [Created with go-cover-treemap](https://github.com/nikolaydubina/go-cover-treemap)
