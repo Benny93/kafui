@@ -67,21 +67,30 @@ func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, 
 var handler api.MessageHandlerFunc // todo remove global var
 
 func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) {
+	DoConsumeWithDeps(ctx, topic, consumeFlags, handleMessage, onError, configProviderInstance, consumerInstance, messageProcessorInstance)
+}
+
+func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface, processor MessageProcessorInterface) {
 	var offset int64
-	cfg, err := getConfig()
+	cfg, err := configProvider.GetConsumerConfig()
 	if err != nil {
 		onError(err)
+		return
 	}
-	client, err := getClientFromConfig(cfg)
+	client, err := configProvider.GetClientFromConfig(cfg)
 	if err != nil {
 		onError(err)
+		return
 	}
 	handler = handleMessage
 	// Allow deprecated flag to override when outputFormat is not specified, or default.
 	if outputFormat == OutputFormatDefault && raw {
 		outputFormat = OutputFormatRaw
 	}
-	offsetFlag = "oldest" // TODO as parameter
+	offsetFlag = consumeFlags.OffsetFlag // Use from flags instead of hardcoded
+	if offsetFlag == "" {
+		offsetFlag = "oldest" // Default fallback
+	}
 	follow = consumeFlags.Follow
 	tail = consumeFlags.Tail
 
@@ -96,16 +105,16 @@ func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags,
 		o, err := strconv.ParseInt(offsetFlag, 10, 64)
 		if err != nil {
 			onError(err)
+			return
 		}
 		offset = o
 	}
 
 	if groupFlag != "" {
-		withConsumerGroup(ctx, client, topic, groupFlag)
+		withConsumerGroupWithDeps(ctx, client, topic, groupFlag, consumer, processor)
 	} else {
-		withoutConsumerGroup(ctx, client, topic, offset, onError)
+		withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumer, processor)
 	}
-
 }
 
 type g struct{}
@@ -131,7 +140,11 @@ func (g *g) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGro
 }
 
 func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) error {
-	cg, err := sarama.NewConsumerGroupFromClient(group, client)
+	return withConsumerGroupWithDeps(ctx, client, topic, group, consumerInstance, messageProcessorInstance)
+}
+
+func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic, group string, consumer ConsumerInterface, processor MessageProcessorInterface) error {
+	cg, err := consumer.CreateConsumerGroupFromClient(group, client)
 	if err != nil {
 		return fmt.Errorf("Failed to create consumer group: %v", err)
 	}
@@ -144,7 +157,15 @@ func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group s
 }
 
 func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) {
-	consumer, err := sarama.NewConsumerFromClient(client)
+	withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumerInstance, messageProcessorInstance)
+}
+
+func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any), consumer ConsumerInterface, processor MessageProcessorInterface) {
+	if client == nil {
+		onError(fmt.Sprintf("Unable to create consumer from client: client is nil\n"))
+		return
+	}
+	saramaConsumer, err := sarama.NewConsumerFromClient(client)
 	if err != nil {
 		onError(fmt.Sprintf("Unable to create consumer from client: %v\n", err))
 		return
@@ -152,7 +173,7 @@ func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic strin
 
 	var partitions []int32
 	if len(flagPartitions) == 0 {
-		partitions, err = consumer.Partitions(topic)
+		partitions, err = saramaConsumer.Partitions(topic)
 		if err != nil {
 			onError(fmt.Sprintf("Unable to get partitions: %v\n", err))
 			return
@@ -192,7 +213,7 @@ func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic strin
 				return
 			}
 
-			pc, err := consumer.ConsumePartition(topic, partition, offset)
+			pc, err := saramaConsumer.ConsumePartition(topic, partition, offset)
 			if err != nil {
 				onError(fmt.Errorf("Unable to consume partition: %v %v %v %v\n", topic, partition, offset, err))
 			}
@@ -380,6 +401,9 @@ func formatMessage(msg *sarama.ConsumerMessage, rawMessage []byte, keyToDisplay 
 
 // proto to JSON
 func protoDecode(reg *proto.DescriptorRegistry, b []byte, _type string) ([]byte, error) {
+	if reg == nil {
+		return b, nil
+	}
 	dynamicMessage := reg.MessageForType(_type)
 	if dynamicMessage == nil {
 		return b, nil
@@ -409,8 +433,10 @@ func avroDecode(b []byte) ([]byte, error) {
 }
 
 func formatKey(key []byte) []byte {
-	if b, err := keyfmt.Format(key); err == nil {
-		return b
+	if keyfmt != nil {
+		if b, err := keyfmt.Format(key); err == nil {
+			return b
+		}
 	}
 	return key
 

@@ -8,6 +8,9 @@ import (
 	"github.com/Benny93/kafui/pkg/datasource/mock"
 )
 
+// openUIFunc is a variable that holds the OpenUI function, allowing it to be mocked in tests
+var openUIFunc = OpenUI
+
 func Init(cfgOption string, useMock bool) {
 
 	fmt.Println("Init...")
@@ -15,8 +18,8 @@ func Init(cfgOption string, useMock bool) {
 
 	dataSource = mock.KafkaDataSourceMock{}
 	if !useMock {
-		dataSource = &kafds.KafkaDataSourceKaf{}
+		dataSource = kafds.NewKafkaDataSourceKaf()
 	}
 	dataSource.Init(cfgOption)
-	OpenUI(dataSource)
+	openUIFunc(dataSource)
 }

@@ -34,14 +34,23 @@ func (m *MainPage) CurrentTimeString() string {
 }
 
 func (m *MainPage) UpdateTableRoutine(app *tview.Application, table *tview.Table, timerView *tview.TextView, dataSource api.KafkaDataSource) {
-	defer RecoverAndExit(app)
+	defer func() {
+		if app != nil {
+			RecoverAndExit(app)
+		}
+	}()
 	for {
+		if app == nil {
+			return
+		}
 
 		app.QueueUpdateDraw(func() {
-
-			timerView.SetText(m.CurrentTimeString())
-			m.UpdateTable(table, dataSource)
-
+			if timerView != nil {
+				timerView.SetText(m.CurrentTimeString())
+			}
+			if table != nil && dataSource != nil {
+				m.UpdateTable(table, dataSource)
+			}
 		})
 
 		time.Sleep(refreshIntervalTable)
@@ -50,9 +59,21 @@ func (m *MainPage) UpdateTableRoutine(app *tview.Application, table *tview.Table
 
 func (m *MainPage) UpdateTable(table *tview.Table, dataSource api.KafkaDataSource) {
 	//m.ShowNotification("Update Table..")
+	if m.CurrentResource == nil {
+		return
+	}
+	
 	resource := *m.CurrentResource
-	resource.UpdateTable(table, dataSource, m.SearchBar.CurrentString)
-	m.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount())
+	searchString := ""
+	if m.SearchBar != nil {
+		searchString = m.SearchBar.CurrentString
+	}
+	
+	resource.UpdateTable(table, dataSource, searchString)
+	
+	if m.SearchBar != nil && m.SearchBar.CurrentResource != nil {
+		m.UpdateMidFlexTitle(m.SearchBar.CurrentResource.GetName(), table.GetRowCount())
+	}
 }
 
 func (m *MainPage) CreateMainPage(dataSource api.KafkaDataSource, pages *tview.Pages, app *tview.Application, modal *tview.Modal, msgChannel chan UIEvent) *tview.Flex {
@@ -150,16 +171,24 @@ func startUpdatingData(m *MainPage, app *tview.Application, dataSource api.Kafka
 }*/
 
 func (m *MainPage) ShowNotification(message string) {
+	if m.NotificationTextView == nil {
+		return
+	}
+	
 	go func() {
 		defer RecoverAndExit(tviewApp)
 		tviewApp.QueueUpdateDraw(func() {
-			m.NotificationTextView.SetText(message)
+			if m.NotificationTextView != nil {
+				m.NotificationTextView.SetText(message)
+			}
 		})
 		// Schedule hiding TextView after 2 seconds
 
 		time.Sleep(2 * time.Second)
 		tviewApp.QueueUpdateDraw(func() {
-			m.NotificationTextView.SetText("")
+			if m.NotificationTextView != nil {
+				m.NotificationTextView.SetText("")
+			}
 		})
 
 	}()
@@ -182,7 +211,9 @@ func createContextInfo() *tview.InputField {
 }
 
 func (m *MainPage) UpdateMidFlexTitle(currentResouce string, amount int) {
-	m.MidFlex.SetTitle(fmt.Sprintf("<%s (%d)>", currentResouce, amount-1))
+	if m.MidFlex != nil {
+		m.MidFlex.SetTitle(fmt.Sprintf("<%s (%d)>", currentResouce, amount-1))
+	}
 }
 
 func (m *MainPage) FetchConsumerGroups(dataSource api.KafkaDataSource) []api.ConsumerGroup {

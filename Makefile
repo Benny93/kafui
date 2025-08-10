@@ -5,6 +5,24 @@ DOCKER_NAME ?= kafui
 DOCKER_TAG ?= latest
 BUILD_TAG ?= latest
 
+GOBIN ?= $$(go env GOPATH)/bin
+
+.PHONY: build install run run-mock release release-snapshot test test-short test-integration test-benchmarks run-kafka stop-kafka docker-build
+
+
+install-go-test-coverage:
+	go install github.com/vladopajic/go-test-coverage/v2@latest
+
+install-go-cover-treemap:
+	go install github.com/nikolaydubina/go-cover-treemap@latest
+
+check-coverage: install-go-test-coverage
+	go test ./... -coverprofile=./coverage.out -covermode=atomic -coverpkg=./...
+	${GOBIN}/go-test-coverage --config=./.testcoverage.yml
+
+treemap-coverage: install-go-cover-treemap
+	${GOBIN}/go-cover-treemap -coverprofile ./coverage.out > coverage.svg
+
 build:
 	go build -ldflags "-w -s" .
 install:
@@ -17,6 +35,16 @@ release:
 	goreleaser --clean
 release-snapshot:
 	goreleaser --clean --snapshot
+test:
+	go test -v -cover -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+test-short:
+	go test -short -v ./...
+test-integration:
+	./scripts/run_integration_tests.sh
+test-benchmarks:
+	go test -bench=. -benchmem ./pkg/kafui/ -run "^$$"
 run-kafka:
 	cd example/dockercompose/ && docker compose up -d
 stop-kafka:
