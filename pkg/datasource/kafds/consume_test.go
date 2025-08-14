@@ -532,10 +532,20 @@ func TestHandleMessage(t *testing.T) {
 		var receivedMessage api.Message
 		var mu sync.Mutex
 		
-		// Set up global handler
-		handler = func(msg api.Message) {
+		// Set up test handler
+		testHandler := func(msg api.Message) {
 			receivedMessage = msg
 		}
+		
+		// Set up global handler for backward compatibility
+		var originalHandler api.MessageHandlerFunc
+		if handler != nil {
+			originalHandler = handler
+		}
+		handler = testHandler
+		defer func() {
+			handler = originalHandler
+		}()
 		
 		saramaMsg := &sarama.ConsumerMessage{
 			Key:       []byte("test-key"),
@@ -702,7 +712,9 @@ func (m *MockConsumerGroupClaim) Messages() <-chan *sarama.ConsumerMessage      
 // TestConsumerGroupHandler tests the consumer group handler implementation
 func TestConsumerGroupHandler(t *testing.T) {
 	t.Run("consumer_group_setup_and_cleanup", func(t *testing.T) {
-		handler := &g{}
+		config := DefaultConsumeConfig()
+		testHandler := func(msg api.Message) {}
+		handler := &consumerGroupHandler{config: config, handler: testHandler}
 		
 		// Mock session
 		mockSession := &MockConsumerGroupSession{}
@@ -720,8 +732,8 @@ func TestConsumerGroupHandler(t *testing.T) {
 		var receivedMessages []api.Message
 		var mu sync.Mutex
 		
-		// Set up global handler to capture messages
-		handler = func(msg api.Message) {
+		// Set up test handler to capture messages
+		testHandler := func(msg api.Message) {
 			mu.Lock()
 			receivedMessages = append(receivedMessages, msg)
 			mu.Unlock()
@@ -758,7 +770,8 @@ func TestConsumerGroupHandler(t *testing.T) {
 		// Test without group commit
 		groupCommitFlag = false
 		
-		consumerHandler := &g{}
+		config := DefaultConsumeConfig()
+		consumerHandler := &consumerGroupHandler{config: config, handler: testHandler}
 		err := consumerHandler.ConsumeClaim(mockSession, mockClaim)
 		
 		assert.NoError(t, err)
@@ -774,7 +787,7 @@ func TestConsumerGroupHandler(t *testing.T) {
 		var receivedMessages []api.Message
 		var mu sync.Mutex
 		
-		handler = func(msg api.Message) {
+		testHandler := func(msg api.Message) {
 			mu.Lock()
 			receivedMessages = append(receivedMessages, msg)
 			mu.Unlock()
@@ -798,7 +811,9 @@ func TestConsumerGroupHandler(t *testing.T) {
 		// Test with group commit
 		groupCommitFlag = true
 		
-		consumerHandler := &g{}
+		config := DefaultConsumeConfig()
+		config.GroupCommitFlag = true
+		consumerHandler := &consumerGroupHandler{config: config, handler: testHandler}
 		err := consumerHandler.ConsumeClaim(mockSession, mockClaim)
 		
 		assert.NoError(t, err)

@@ -21,25 +21,22 @@ import (
 )
 
 var (
+	// Backward compatibility global variables
 	offsetFlag      string
 	groupFlag       string
 	groupCommitFlag bool
 	outputFormat    = OutputFormatDefault
-	// Deprecated: Use outputFormat instead.
-	raw         bool
-	follow      bool
-	tail        int32
-	schemaCache *avro.SchemaCache
-	keyfmt      *prettyjson.Formatter
-
-	protoType    string
-	keyProtoType string
-
-	flagPartitions []int32
-
+	raw             bool
+	follow          bool
+	tail            int32
+	schemaCache     *avro.SchemaCache
+	keyfmt          *prettyjson.Formatter
+	protoType       string
+	keyProtoType    string
+	flagPartitions  []int32
 	limitMessagesFlag int64
-
-	reg *proto.DescriptorRegistry
+	reg             *proto.DescriptorRegistry
+	handler         api.MessageHandlerFunc // Global handler for backward compatibility
 )
 
 type offsets struct {
@@ -64,13 +61,45 @@ func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, 
 	}, nil
 }
 
-var handler api.MessageHandlerFunc // todo remove global var
+// ConsumeConfig holds all configuration for consuming messages
+type ConsumeConfig struct {
+	OffsetFlag        string
+	GroupFlag         string
+	GroupCommitFlag   bool
+	OutputFormat      OutputFormat
+	Raw               bool
+	Follow            bool
+	Tail              int32
+	SchemaCache       *avro.SchemaCache
+	Keyfmt            *prettyjson.Formatter
+	ProtoType         string
+	KeyProtoType      string
+	FlagPartitions    []int32
+	LimitMessagesFlag int64
+	Reg               *proto.DescriptorRegistry
+	DecodeMsgPack     bool
+}
+
+// DefaultConsumeConfig returns a default configuration
+func DefaultConsumeConfig() *ConsumeConfig {
+	return &ConsumeConfig{
+		OutputFormat:      OutputFormatDefault,
+		OffsetFlag:        "oldest",
+		FlagPartitions:    []int32{},
+		LimitMessagesFlag: 0,
+	}
+}
 
 func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) {
 	DoConsumeWithDeps(ctx, topic, consumeFlags, handleMessage, onError, configProviderInstance, consumerInstance, messageProcessorInstance)
 }
 
 func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface, processor MessageProcessorInterface) {
+	config := DefaultConsumeConfig()
+	DoConsumeWithConfig(ctx, topic, consumeFlags, handleMessage, onError, configProvider, consumer, processor, config)
+}
+
+func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface, processor MessageProcessorInterface, config *ConsumeConfig) {
 	var offset int64
 	cfg, err := configProvider.GetConsumerConfig()
 	if err != nil {
@@ -82,19 +111,22 @@ func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.Consu
 		onError(err)
 		return
 	}
-	handler = handleMessage
+	
+	// Update config from flags
+	config.OffsetFlag = consumeFlags.OffsetFlag
+	if config.OffsetFlag == "" {
+		config.OffsetFlag = "oldest" // Default fallback
+	}
+	config.Follow = consumeFlags.Follow
+	config.Tail = consumeFlags.Tail
+	config.GroupFlag = consumeFlags.GroupFlag
+	
 	// Allow deprecated flag to override when outputFormat is not specified, or default.
-	if outputFormat == OutputFormatDefault && raw {
-		outputFormat = OutputFormatRaw
+	if config.OutputFormat == OutputFormatDefault && config.Raw {
+		config.OutputFormat = OutputFormatRaw
 	}
-	offsetFlag = consumeFlags.OffsetFlag // Use from flags instead of hardcoded
-	if offsetFlag == "" {
-		offsetFlag = "oldest" // Default fallback
-	}
-	follow = consumeFlags.Follow
-	tail = consumeFlags.Tail
 
-	switch offsetFlag {
+	switch config.OffsetFlag {
 	case "oldest":
 		offset = sarama.OffsetOldest
 		cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
@@ -102,7 +134,7 @@ func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.Consu
 		offset = sarama.OffsetNewest
 		cfg.Consumer.Offsets.Initial = sarama.OffsetNewest
 	default:
-		o, err := strconv.ParseInt(offsetFlag, 10, 64)
+		o, err := strconv.ParseInt(config.OffsetFlag, 10, 64)
 		if err != nil {
 			onError(err)
 			return
@@ -110,10 +142,10 @@ func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.Consu
 		offset = o
 	}
 
-	if groupFlag != "" {
-		withConsumerGroupWithDeps(ctx, client, topic, groupFlag, consumer, processor)
+	if config.GroupFlag != "" {
+		withConsumerGroupWithDeps(ctx, client, topic, config.GroupFlag, consumer, processor, config, handleMessage)
 	} else {
-		withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumer, processor)
+		withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumer, processor, config, handleMessage)
 	}
 }
 
@@ -127,12 +159,24 @@ func (g *g) Cleanup(s sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-func (g *g) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+type consumerGroupHandler struct {
+	config  *ConsumeConfig
+	handler api.MessageHandlerFunc
+}
 
+func (g *consumerGroupHandler) Setup(s sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+func (g *consumerGroupHandler) Cleanup(s sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+func (g *consumerGroupHandler) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	mu := sync.Mutex{} // Synchronizes stderr and stdout.
 	for msg := range claim.Messages() {
-		handleMessage(msg, &mu)
-		if groupCommitFlag {
+		handleMessageWithConfig(msg, &mu, g.config, g.handler)
+		if g.config.GroupCommitFlag {
 			s.MarkMessage(msg, "")
 		}
 	}
@@ -140,16 +184,22 @@ func (g *g) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGro
 }
 
 func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) error {
-	return withConsumerGroupWithDeps(ctx, client, topic, group, consumerInstance, messageProcessorInstance)
+	config := DefaultConsumeConfig()
+	return withConsumerGroupWithDeps(ctx, client, topic, group, consumerInstance, messageProcessorInstance, config, nil)
 }
 
-func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic, group string, consumer ConsumerInterface, processor MessageProcessorInterface) error {
+func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic, group string, consumer ConsumerInterface, processor MessageProcessorInterface, config *ConsumeConfig, handler api.MessageHandlerFunc) error {
 	cg, err := consumer.CreateConsumerGroupFromClient(group, client)
 	if err != nil {
 		return fmt.Errorf("Failed to create consumer group: %v", err)
 	}
 
-	err = cg.Consume(ctx, []string{topic}, &g{})
+	groupHandler := &consumerGroupHandler{
+		config:  config,
+		handler: handler,
+	}
+	
+	err = cg.Consume(ctx, []string{topic}, groupHandler)
 	if err != nil {
 		return fmt.Errorf("Error on consume: %v", err)
 	}
@@ -157,10 +207,11 @@ func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic,
 }
 
 func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) {
-	withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumerInstance, messageProcessorInstance)
+	config := DefaultConsumeConfig()
+	withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumerInstance, messageProcessorInstance, config, nil)
 }
 
-func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any), consumer ConsumerInterface, processor MessageProcessorInterface) {
+func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any), consumer ConsumerInterface, processor MessageProcessorInterface, config *ConsumeConfig, handler api.MessageHandlerFunc) {
 	if client == nil {
 		onError(fmt.Sprintf("Unable to create consumer from client: client is nil\n"))
 		return
@@ -172,14 +223,14 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
 	}
 
 	var partitions []int32
-	if len(flagPartitions) == 0 {
+	if len(config.FlagPartitions) == 0 {
 		partitions, err = saramaConsumer.Partitions(topic)
 		if err != nil {
 			onError(fmt.Sprintf("Unable to get partitions: %v\n", err))
 			return
 		}
 	} else {
-		partitions = flagPartitions
+		partitions = config.FlagPartitions
 	}
 
 	wg := sync.WaitGroup{}
@@ -201,15 +252,15 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
 				onError(fmt.Errorf("Failed to get %s offsets for partition %d: %w", topic, partition, err))
 			}
 
-			if tail != 0 {
-				offset = offsets.newest - int64(tail)
+			if config.Tail != 0 {
+				offset = offsets.newest - int64(config.Tail)
 				if offset < offsets.oldest {
 					offset = offsets.oldest
 				}
 			}
 
 			// Already at end of partition, return early
-			if !follow && offsets.newest == offsets.oldest {
+			if !config.Follow && offsets.newest == offsets.oldest {
 				return
 			}
 
@@ -224,12 +275,12 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
 				case <-ctx.Done():
 					return
 				case msg := <-pc.Messages():
-					handleMessage(msg, &mu)
+					handleMessageWithConfig(msg, &mu, config, handler)
 					count++
-					if limitMessagesFlag > 0 && count >= limitMessagesFlag {
+					if config.LimitMessagesFlag > 0 && count >= config.LimitMessagesFlag {
 						return
 					}
-					if !follow && msg.Offset+1 >= pc.HighWaterMarkOffset() {
+					if !config.Follow && msg.Offset+1 >= pc.HighWaterMarkOffset() {
 						return
 					}
 				}
@@ -240,37 +291,49 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
 }
 
 func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
+	// Backward compatibility function - uses global variables
+	config := &ConsumeConfig{
+		ProtoType:     protoType,
+		KeyProtoType:  keyProtoType,
+		DecodeMsgPack: decodeMsgPack,
+		Reg:           reg,
+		SchemaCache:   schemaCache,
+	}
+	handleMessageWithConfig(msg, mu, config, handler)
+}
+
+func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config *ConsumeConfig, handler api.MessageHandlerFunc) {
 	var stderr bytes.Buffer
 
 	var dataToDisplay []byte
 	var keyToDisplay []byte
 	var err error
 
-	if protoType != "" {
-		dataToDisplay, err = protoDecode(reg, msg.Value, protoType)
+	if config.ProtoType != "" {
+		dataToDisplay, err = protoDecode(config.Reg, msg.Value, config.ProtoType)
 		if err != nil {
-			fmt.Fprintf(&stderr, "failed to decode proto. falling back to binary outputla. Error: %v\n", err)
+			fmt.Fprintf(&stderr, "failed to decode proto. falling back to binary output. Error: %v\n", err)
 		}
 	} else {
-		dataToDisplay, err = avroDecode(msg.Value)
+		dataToDisplay, err = avroDecodeWithCache(msg.Value, config.SchemaCache)
 		if err != nil {
 			fmt.Fprintf(&stderr, "could not decode Avro data: %v\n", err)
 		}
 	}
 
-	if keyProtoType != "" {
-		keyToDisplay, err = protoDecode(reg, msg.Key, keyProtoType)
+	if config.KeyProtoType != "" {
+		keyToDisplay, err = protoDecode(config.Reg, msg.Key, config.KeyProtoType)
 		if err != nil {
-			fmt.Fprintf(&stderr, "failed to decode proto key. falling back to binary outputla. Error: %v\n", err)
+			fmt.Fprintf(&stderr, "failed to decode proto key. falling back to binary output. Error: %v\n", err)
 		}
 	} else {
-		keyToDisplay, err = avroDecode(msg.Key)
+		keyToDisplay, err = avroDecodeWithCache(msg.Key, config.SchemaCache)
 		if err != nil {
 			fmt.Fprintf(&stderr, "could not decode Avro data: %v\n", err)
 		}
 	}
 
-	if decodeMsgPack {
+	if config.DecodeMsgPack {
 		var obj interface{}
 		err = msgpack.Unmarshal(msg.Value, &obj)
 		if err != nil {
@@ -283,12 +346,6 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 		}
 	}
 
-	//dataToDisplay = formatMessage(msg, dataToDisplay, keyToDisplay, &stderr)
-
-	//mu.Lock()
-	//stderr.WriteTo(errWriter)
-	//_, _ = colorableOut.Write(dataToDisplay)
-	//fmt.Fprintln(outWriter)
 	keySchema := getSchemaIdIfPresent(msg.Key)
 	valueSchema := getSchemaIdIfPresent(msg.Value)
 	headers := make([]api.MessageHeader, 0)
@@ -301,7 +358,6 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 	}
 
 	newMessage := api.Message{
-
 		Key:           string(keyToDisplay),
 		Headers:       headers,
 		Value:         string(dataToDisplay),
@@ -310,8 +366,10 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 		KeySchemaID:   keySchema,
 		ValueSchemaID: valueSchema,
 	}
-	handler(newMessage)
-	//mu.Unlock()
+	
+	if handler != nil {
+		handler(newMessage)
+	}
 }
 
 func getSchemaIdIfPresent(b []byte) string {
@@ -428,6 +486,13 @@ func protoDecode(reg *proto.DescriptorRegistry, b []byte, _type string) ([]byte,
 func avroDecode(b []byte) ([]byte, error) {
 	if schemaCache != nil {
 		return schemaCache.DecodeMessage(b)
+	}
+	return b, nil
+}
+
+func avroDecodeWithCache(b []byte, cache *avro.SchemaCache) ([]byte, error) {
+	if cache != nil {
+		return cache.DecodeMessage(b)
 	}
 	return b, nil
 }

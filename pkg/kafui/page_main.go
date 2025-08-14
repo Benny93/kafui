@@ -175,6 +175,13 @@ func (m *MainPage) ShowNotification(message string) {
 		return
 	}
 	
+	// Check if tviewApp is nil (e.g., during tests)
+	if tviewApp == nil {
+		// In test mode, just set the text directly without goroutines
+		m.NotificationTextView.SetText(message)
+		return
+	}
+	
 	go func() {
 		defer RecoverAndExit(tviewApp)
 		tviewApp.QueueUpdateDraw(func() {

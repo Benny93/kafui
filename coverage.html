@@ -61,7 +61,7 @@
 				
 				<option value="file2">github.com/Benny93/kafui/pkg/api/api.go (100.0%)</option>
 				
-				<option value="file3">github.com/Benny93/kafui/pkg/datasource/kafds/consume.go (69.2%)</option>
+				<option value="file3">github.com/Benny93/kafui/pkg/datasource/kafds/consume.go (69.3%)</option>
 				
 				<option value="file4">github.com/Benny93/kafui/pkg/datasource/kafds/consume_interfaces.go (14.3%)</option>
 				
@@ -83,7 +83,7 @@
 				
 				<option value="file13">github.com/Benny93/kafui/pkg/kafui/page_detail.go (84.1%)</option>
 				
-				<option value="file14">github.com/Benny93/kafui/pkg/kafui/page_main.go (78.2%)</option>
+				<option value="file14">github.com/Benny93/kafui/pkg/kafui/page_main.go (76.1%)</option>
 				
 				<option value="file15">github.com/Benny93/kafui/pkg/kafui/page_topic.go (55.0%)</option>
 				
@@ -202,6 +202,7 @@ type ConsumeFlags struct {
         Follow     bool
         Tail       int32
         OffsetFlag string
+        GroupFlag  string
 }
 
 func DefaultConsumeFlags() ConsumeFlags <span class="cov8" title="1">{
@@ -254,25 +255,22 @@ import (
 )
 
 var (
+        // Backward compatibility global variables
         offsetFlag      string
         groupFlag       string
         groupCommitFlag bool
         outputFormat    = OutputFormatDefault
-        // Deprecated: Use outputFormat instead.
-        raw         bool
-        follow      bool
-        tail        int32
-        schemaCache *avro.SchemaCache
-        keyfmt      *prettyjson.Formatter
-
-        protoType    string
-        keyProtoType string
-
-        flagPartitions []int32
-
+        raw             bool
+        follow          bool
+        tail            int32
+        schemaCache     *avro.SchemaCache
+        keyfmt          *prettyjson.Formatter
+        protoType       string
+        keyProtoType    string
+        flagPartitions  []int32
         limitMessagesFlag int64
-
-        reg *proto.DescriptorRegistry
+        reg             *proto.DescriptorRegistry
+        handler         api.MessageHandlerFunc // Global handler for backward compatibility
 )
 
 type offsets struct {
@@ -297,13 +295,45 @@ func getOffsets(client sarama.Client, topic string, partition int32) (*offsets, 
         }, nil</span>
 }
 
-var handler api.MessageHandlerFunc // todo remove global var
+// ConsumeConfig holds all configuration for consuming messages
+type ConsumeConfig struct {
+        OffsetFlag        string
+        GroupFlag         string
+        GroupCommitFlag   bool
+        OutputFormat      OutputFormat
+        Raw               bool
+        Follow            bool
+        Tail              int32
+        SchemaCache       *avro.SchemaCache
+        Keyfmt            *prettyjson.Formatter
+        ProtoType         string
+        KeyProtoType      string
+        FlagPartitions    []int32
+        LimitMessagesFlag int64
+        Reg               *proto.DescriptorRegistry
+        DecodeMsgPack     bool
+}
+
+// DefaultConsumeConfig returns a default configuration
+func DefaultConsumeConfig() *ConsumeConfig <span class="cov8" title="1">{
+        return &amp;ConsumeConfig{
+                OutputFormat:      OutputFormatDefault,
+                OffsetFlag:        "oldest",
+                FlagPartitions:    []int32{},
+                LimitMessagesFlag: 0,
+        }
+}</span>
 
 func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) <span class="cov8" title="1">{
         DoConsumeWithDeps(ctx, topic, consumeFlags, handleMessage, onError, configProviderInstance, consumerInstance, messageProcessorInstance)
 }</span>
 
 func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface, processor MessageProcessorInterface) <span class="cov8" title="1">{
+        config := DefaultConsumeConfig()
+        DoConsumeWithConfig(ctx, topic, consumeFlags, handleMessage, onError, configProvider, consumer, processor, config)
+}</span>
+
+func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface, processor MessageProcessorInterface, config *ConsumeConfig) <span class="cov8" title="1">{
         var offset int64
         cfg, err := configProvider.GetConsumerConfig()
         if err != nil </span><span class="cov8" title="1">{
@@ -315,19 +345,22 @@ func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.Consu
                 onError(err)
                 return
         }</span>
-        <span class="cov8" title="1">handler = handleMessage
+        
+        // Update config from flags
+        <span class="cov8" title="1">config.OffsetFlag = consumeFlags.OffsetFlag
+        if config.OffsetFlag == "" </span><span class="cov0" title="0">{
+                config.OffsetFlag = "oldest" // Default fallback
+        }</span>
+        <span class="cov8" title="1">config.Follow = consumeFlags.Follow
+        config.Tail = consumeFlags.Tail
+        config.GroupFlag = consumeFlags.GroupFlag
+        
         // Allow deprecated flag to override when outputFormat is not specified, or default.
-        if outputFormat == OutputFormatDefault &amp;&amp; raw </span><span class="cov0" title="0">{
-                outputFormat = OutputFormatRaw
+        if config.OutputFormat == OutputFormatDefault &amp;&amp; config.Raw </span><span class="cov0" title="0">{
+                config.OutputFormat = OutputFormatRaw
         }</span>
-        <span class="cov8" title="1">offsetFlag = consumeFlags.OffsetFlag // Use from flags instead of hardcoded
-        if offsetFlag == "" </span><span class="cov0" title="0">{
-                offsetFlag = "oldest" // Default fallback
-        }</span>
-        <span class="cov8" title="1">follow = consumeFlags.Follow
-        tail = consumeFlags.Tail
 
-        switch offsetFlag </span>{
+        <span class="cov8" title="1">switch config.OffsetFlag </span>{
         case "oldest":<span class="cov8" title="1">
                 offset = sarama.OffsetOldest
                 cfg.Consumer.Offsets.Initial = sarama.OffsetOldest</span>
@@ -335,7 +368,7 @@ func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.Consu
                 offset = sarama.OffsetNewest
                 cfg.Consumer.Offsets.Initial = sarama.OffsetNewest</span>
         default:<span class="cov8" title="1">
-                o, err := strconv.ParseInt(offsetFlag, 10, 64)
+                o, err := strconv.ParseInt(config.OffsetFlag, 10, 64)
                 if err != nil </span><span class="cov8" title="1">{
                         onError(err)
                         return
@@ -343,29 +376,41 @@ func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.Consu
                 <span class="cov0" title="0">offset = o</span>
         }
 
-        <span class="cov8" title="1">if groupFlag != "" </span><span class="cov0" title="0">{
-                withConsumerGroupWithDeps(ctx, client, topic, groupFlag, consumer, processor)
+        <span class="cov8" title="1">if config.GroupFlag != "" </span><span class="cov0" title="0">{
+                withConsumerGroupWithDeps(ctx, client, topic, config.GroupFlag, consumer, processor, config, handleMessage)
         }</span> else<span class="cov8" title="1"> {
-                withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumer, processor)
+                withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumer, processor, config, handleMessage)
         }</span>
 }
 
 type g struct{}
 
-func (g *g) Setup(s sarama.ConsumerGroupSession) error <span class="cov8" title="1">{
+func (g *g) Setup(s sarama.ConsumerGroupSession) error <span class="cov0" title="0">{
         return nil
 }</span>
 
-func (g *g) Cleanup(s sarama.ConsumerGroupSession) error <span class="cov8" title="1">{
+func (g *g) Cleanup(s sarama.ConsumerGroupSession) error <span class="cov0" title="0">{
         return nil
 }</span>
 
-func (g *g) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error <span class="cov8" title="1">{
+type consumerGroupHandler struct {
+        config  *ConsumeConfig
+        handler api.MessageHandlerFunc
+}
 
+func (g *consumerGroupHandler) Setup(s sarama.ConsumerGroupSession) error <span class="cov8" title="1">{
+        return nil
+}</span>
+
+func (g *consumerGroupHandler) Cleanup(s sarama.ConsumerGroupSession) error <span class="cov8" title="1">{
+        return nil
+}</span>
+
+func (g *consumerGroupHandler) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error <span class="cov8" title="1">{
         mu := sync.Mutex{} // Synchronizes stderr and stdout.
         for msg := range claim.Messages() </span><span class="cov8" title="1">{
-                handleMessage(msg, &amp;mu)
-                if groupCommitFlag </span><span class="cov8" title="1">{
+                handleMessageWithConfig(msg, &amp;mu, g.config, g.handler)
+                if g.config.GroupCommitFlag </span><span class="cov8" title="1">{
                         s.MarkMessage(msg, "")
                 }</span>
         }
@@ -373,16 +418,22 @@ func (g *g) ConsumeClaim(s sarama.ConsumerGroupSession, claim sarama.ConsumerGro
 }
 
 func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) error <span class="cov8" title="1">{
-        return withConsumerGroupWithDeps(ctx, client, topic, group, consumerInstance, messageProcessorInstance)
+        config := DefaultConsumeConfig()
+        return withConsumerGroupWithDeps(ctx, client, topic, group, consumerInstance, messageProcessorInstance, config, nil)
 }</span>
 
-func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic, group string, consumer ConsumerInterface, processor MessageProcessorInterface) error <span class="cov8" title="1">{
+func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic, group string, consumer ConsumerInterface, processor MessageProcessorInterface, config *ConsumeConfig, handler api.MessageHandlerFunc) error <span class="cov8" title="1">{
         cg, err := consumer.CreateConsumerGroupFromClient(group, client)
         if err != nil </span><span class="cov8" title="1">{
                 return fmt.Errorf("Failed to create consumer group: %v", err)
         }</span>
 
-        <span class="cov0" title="0">err = cg.Consume(ctx, []string{topic}, &amp;g{})
+        <span class="cov0" title="0">groupHandler := &amp;consumerGroupHandler{
+                config:  config,
+                handler: handler,
+        }
+        
+        err = cg.Consume(ctx, []string{topic}, groupHandler)
         if err != nil </span><span class="cov0" title="0">{
                 return fmt.Errorf("Error on consume: %v", err)
         }</span>
@@ -390,10 +441,11 @@ func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic,
 }
 
 func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) <span class="cov8" title="1">{
-        withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumerInstance, messageProcessorInstance)
+        config := DefaultConsumeConfig()
+        withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumerInstance, messageProcessorInstance, config, nil)
 }</span>
 
-func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any), consumer ConsumerInterface, processor MessageProcessorInterface) <span class="cov8" title="1">{
+func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any), consumer ConsumerInterface, processor MessageProcessorInterface, config *ConsumeConfig, handler api.MessageHandlerFunc) <span class="cov8" title="1">{
         if client == nil </span><span class="cov8" title="1">{
                 onError(fmt.Sprintf("Unable to create consumer from client: client is nil\n"))
                 return
@@ -405,14 +457,14 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
         }</span>
 
         <span class="cov8" title="1">var partitions []int32
-        if len(flagPartitions) == 0 </span><span class="cov8" title="1">{
+        if len(config.FlagPartitions) == 0 </span><span class="cov8" title="1">{
                 partitions, err = saramaConsumer.Partitions(topic)
                 if err != nil </span><span class="cov0" title="0">{
                         onError(fmt.Sprintf("Unable to get partitions: %v\n", err))
                         return
                 }</span>
         } else<span class="cov0" title="0"> {
-                partitions = flagPartitions
+                partitions = config.FlagPartitions
         }</span>
 
         <span class="cov8" title="1">wg := sync.WaitGroup{}
@@ -434,15 +486,15 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
                                 onError(fmt.Errorf("Failed to get %s offsets for partition %d: %w", topic, partition, err))
                         }</span>
 
-                        <span class="cov8" title="1">if tail != 0 </span><span class="cov8" title="1">{
-                                offset = offsets.newest - int64(tail)
+                        <span class="cov8" title="1">if config.Tail != 0 </span><span class="cov8" title="1">{
+                                offset = offsets.newest - int64(config.Tail)
                                 if offset &lt; offsets.oldest </span><span class="cov0" title="0">{
                                         offset = offsets.oldest
                                 }</span>
                         }
 
                         // Already at end of partition, return early
-                        <span class="cov8" title="1">if !follow &amp;&amp; offsets.newest == offsets.oldest </span><span class="cov0" title="0">{
+                        <span class="cov8" title="1">if !config.Follow &amp;&amp; offsets.newest == offsets.oldest </span><span class="cov0" title="0">{
                                 return
                         }</span>
 
@@ -457,12 +509,12 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
                                 case &lt;-ctx.Done():<span class="cov0" title="0">
                                         return</span>
                                 case msg := &lt;-pc.Messages():<span class="cov0" title="0">
-                                        handleMessage(msg, &amp;mu)
+                                        handleMessageWithConfig(msg, &amp;mu, config, handler)
                                         count++
-                                        if limitMessagesFlag &gt; 0 &amp;&amp; count &gt;= limitMessagesFlag </span><span class="cov0" title="0">{
+                                        if config.LimitMessagesFlag &gt; 0 &amp;&amp; count &gt;= config.LimitMessagesFlag </span><span class="cov0" title="0">{
                                                 return
                                         }</span>
-                                        <span class="cov0" title="0">if !follow &amp;&amp; msg.Offset+1 &gt;= pc.HighWaterMarkOffset() </span><span class="cov0" title="0">{
+                                        <span class="cov0" title="0">if !config.Follow &amp;&amp; msg.Offset+1 &gt;= pc.HighWaterMarkOffset() </span><span class="cov0" title="0">{
                                                 return
                                         }</span>
                                 }
@@ -473,37 +525,49 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
 }
 
 func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) <span class="cov8" title="1">{
+        // Backward compatibility function - uses global variables
+        config := &amp;ConsumeConfig{
+                ProtoType:     protoType,
+                KeyProtoType:  keyProtoType,
+                DecodeMsgPack: decodeMsgPack,
+                Reg:           reg,
+                SchemaCache:   schemaCache,
+        }
+        handleMessageWithConfig(msg, mu, config, handler)
+}</span>
+
+func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config *ConsumeConfig, handler api.MessageHandlerFunc) <span class="cov8" title="1">{
         var stderr bytes.Buffer
 
         var dataToDisplay []byte
         var keyToDisplay []byte
         var err error
 
-        if protoType != "" </span><span class="cov0" title="0">{
-                dataToDisplay, err = protoDecode(reg, msg.Value, protoType)
+        if config.ProtoType != "" </span><span class="cov0" title="0">{
+                dataToDisplay, err = protoDecode(config.Reg, msg.Value, config.ProtoType)
                 if err != nil </span><span class="cov0" title="0">{
-                        fmt.Fprintf(&amp;stderr, "failed to decode proto. falling back to binary outputla. Error: %v\n", err)
+                        fmt.Fprintf(&amp;stderr, "failed to decode proto. falling back to binary output. Error: %v\n", err)
                 }</span>
         } else<span class="cov8" title="1"> {
-                dataToDisplay, err = avroDecode(msg.Value)
+                dataToDisplay, err = avroDecodeWithCache(msg.Value, config.SchemaCache)
                 if err != nil </span><span class="cov0" title="0">{
                         fmt.Fprintf(&amp;stderr, "could not decode Avro data: %v\n", err)
                 }</span>
         }
 
-        <span class="cov8" title="1">if keyProtoType != "" </span><span class="cov0" title="0">{
-                keyToDisplay, err = protoDecode(reg, msg.Key, keyProtoType)
+        <span class="cov8" title="1">if config.KeyProtoType != "" </span><span class="cov0" title="0">{
+                keyToDisplay, err = protoDecode(config.Reg, msg.Key, config.KeyProtoType)
                 if err != nil </span><span class="cov0" title="0">{
-                        fmt.Fprintf(&amp;stderr, "failed to decode proto key. falling back to binary outputla. Error: %v\n", err)
+                        fmt.Fprintf(&amp;stderr, "failed to decode proto key. falling back to binary output. Error: %v\n", err)
                 }</span>
         } else<span class="cov8" title="1"> {
-                keyToDisplay, err = avroDecode(msg.Key)
+                keyToDisplay, err = avroDecodeWithCache(msg.Key, config.SchemaCache)
                 if err != nil </span><span class="cov0" title="0">{
                         fmt.Fprintf(&amp;stderr, "could not decode Avro data: %v\n", err)
                 }</span>
         }
 
-        <span class="cov8" title="1">if decodeMsgPack </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if config.DecodeMsgPack </span><span class="cov0" title="0">{
                 var obj interface{}
                 err = msgpack.Unmarshal(msg.Value, &amp;obj)
                 if err != nil </span><span class="cov0" title="0">{
@@ -516,12 +580,6 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) <span class="cov
                 }</span>
         }
 
-        //dataToDisplay = formatMessage(msg, dataToDisplay, keyToDisplay, &amp;stderr)
-
-        //mu.Lock()
-        //stderr.WriteTo(errWriter)
-        //_, _ = colorableOut.Write(dataToDisplay)
-        //fmt.Fprintln(outWriter)
         <span class="cov8" title="1">keySchema := getSchemaIdIfPresent(msg.Key)
         valueSchema := getSchemaIdIfPresent(msg.Value)
         headers := make([]api.MessageHeader, 0)
@@ -534,7 +592,6 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) <span class="cov
         }</span>
 
         <span class="cov8" title="1">newMessage := api.Message{
-
                 Key:           string(keyToDisplay),
                 Headers:       headers,
                 Value:         string(dataToDisplay),
@@ -543,8 +600,10 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) <span class="cov
                 KeySchemaID:   keySchema,
                 ValueSchemaID: valueSchema,
         }
-        handler(newMessage)</span>
-        //mu.Unlock()
+        
+        if handler != nil </span><span class="cov8" title="1">{
+                handler(newMessage)
+        }</span>
 }
 
 func getSchemaIdIfPresent(b []byte) string <span class="cov8" title="1">{
@@ -661,6 +720,13 @@ func protoDecode(reg *proto.DescriptorRegistry, b []byte, _type string) ([]byte,
 func avroDecode(b []byte) ([]byte, error) <span class="cov8" title="1">{
         if schemaCache != nil </span><span class="cov0" title="0">{
                 return schemaCache.DecodeMessage(b)
+        }</span>
+        <span class="cov8" title="1">return b, nil</span>
+}
+
+func avroDecodeWithCache(b []byte, cache *avro.SchemaCache) ([]byte, error) <span class="cov8" title="1">{
+        if cache != nil </span><span class="cov0" title="0">{
+                return cache.DecodeMessage(b)
         }</span>
         <span class="cov8" title="1">return b, nil</span>
 }
@@ -2119,7 +2185,14 @@ func (m *MainPage) ShowNotification(message string) <span class="cov8" title="1"
                 return
         }</span>
         
-        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+        // Check if tviewApp is nil (e.g., during tests)
+        <span class="cov8" title="1">if tviewApp == nil </span><span class="cov8" title="1">{
+                // In test mode, just set the text directly without goroutines
+                m.NotificationTextView.SetText(message)
+                return
+        }</span>
+        
+        <span class="cov0" title="0">go func() </span><span class="cov0" title="0">{
                 defer RecoverAndExit(tviewApp)
                 tviewApp.QueueUpdateDraw(func() </span><span class="cov0" title="0">{
                         if m.NotificationTextView != nil </span><span class="cov0" title="0">{

@@ -24,13 +24,13 @@ func TestUIWorkflowIntegration(t *testing.T) {
 		}
 
 		// Create minimal UI components for testing
-		_ = tview.NewApplication()
+		app := tview.NewApplication()
 		pages := tview.NewPages()
 		modal := tview.NewModal()
 		msgChannel := make(chan UIEvent, 10)
 
 		// Test main page creation
-		flex := mainPage.CreateMainPage(dataSource, pages, tviewApp, modal, msgChannel)
+		flex := mainPage.CreateMainPage(dataSource, pages, app, modal, msgChannel)
 		if flex == nil {
 			t.Error("CreateMainPage returned nil flex")
 		}

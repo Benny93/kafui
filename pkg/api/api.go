@@ -36,6 +36,7 @@ type ConsumeFlags struct {
 	Follow     bool
 	Tail       int32
 	OffsetFlag string
+	GroupFlag  string
 }
 
 func DefaultConsumeFlags() ConsumeFlags {

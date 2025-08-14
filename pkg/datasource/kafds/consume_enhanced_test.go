@@ -509,7 +509,8 @@ func TestWithoutConsumerGroupWithDeps_NilClient(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	withoutConsumerGroupWithDeps(ctx, nil, "test-topic", sarama.OffsetOldest, onError, mockConsumer, mockProcessor)
+	config := DefaultConsumeConfig()
+	withoutConsumerGroupWithDeps(ctx, nil, "test-topic", sarama.OffsetOldest, onError, mockConsumer, mockProcessor, config, nil)
 
 	assert.True(t, errorCalled)
 	assert.Contains(t, errorMsg.(string), "client is nil")
