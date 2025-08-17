@@ -37,3 +37,4 @@ vendor/
 dist/
 
 .agent.md
+.crush/

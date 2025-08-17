@@ -18,7 +18,7 @@ After each step, respond with:
 - Next step: [next step to be executed]
 - Current status: [success/partial/failed]
 
-write progress to progress.md
+write progress to progress.md (append only style)
 Before proceeding, confirm you have read and understood the migration plan in bubbleteamigration.md.
 ```
 
