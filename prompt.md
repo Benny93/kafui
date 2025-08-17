@@ -9,7 +9,7 @@ You are tasked with migrating the Kafui project from tview to Bubble Tea UI fram
 3. Verify the results match the expected output
 4. If verification passes, proceed to next step
 5. If verification fails, execute the fallback procedure
-6. Always save your progress by committing working changes
+
 
 After each step, respond with:
 - Step completed: [step number and name]
@@ -28,22 +28,9 @@ You are continuing the Kafui project migration from tview to Bubble Tea UI frame
 
 1. First, assess the current state:
    - Check current git branch and status
-   - Review the last successful commit message
-   - Check for any uncommitted changes
-   - Locate the last completed step in bubbleteamigration.md
+   - Locate the last completed step in bubbleteamigration.md and progress.md
 
-2. Report the current state:
-   - Last completed step: [step number and name]
-   - Current branch state: [clean/dirty]
-   - Uncommitted changes: [yes/no]
-   - Failed step (if any): [step number and reason]
-
-3. Determine the next action:
-   - If previous step failed: Execute fallback procedure
-   - If previous step succeeded: Begin next step
-   - If uncommitted changes exist: Review and commit/discard
-
-4. Continue with the migration plan from the appropriate point
+2. Continue with the migration plan from the appropriate point
 
 Before proceeding, confirm you have assessed the current state and identified the correct next step.
 ```
