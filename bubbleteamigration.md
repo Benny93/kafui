@@ -426,81 +426,12 @@ go list -f '{{.ImportPath}} {{.Imports}}' ./... | findstr "tview"
 go build ./...
 ```
 
-### Step 8: Final Validation
-
-Create file `scripts/validate_migration.sh`:
-
-```bash
-#!/bin/bash
-set -e
-
-# Build check
-echo "Running build check..."
-go build ./...
-
-# Test check
-echo "Running tests..."
-go test ./...
-
-# Import check
-echo "Checking for tview imports..."
-if go list -f '{{.ImportPath}} {{.Imports}}' ./... | grep -q "tview"; then
-    echo "Error: Found remaining tview imports"
-    exit 1
-fi
-
-# Run application check
-echo "Testing application startup..."
-timeout 5s ./kafui --version
-
-echo "Migration validation complete!"
-```
-
-**Run Validation:**
-```powershell
-# Make script executable
-chmod +x scripts/validate_migration.sh
-
-# Run validation
-./scripts/validate_migration.sh
-```
-
-### Fallback Plan
-
-If any step fails:
-
-1. Save any working changes:
-```powershell
-git add .
-git commit -m "WIP: Bubble Tea migration progress"
-```
-
-2. Restore from backup:
-```powershell
-git checkout backup/pre-bubbletea-migration
-git checkout -b feature/bubbletea-migration-retry
-```
-
-3. Cherry-pick working changes if needed:
-```powershell
-git cherry-pick <commit-hash>
-```
-
 ## Post-Migration Tasks
 
 1. Update documentation:
-```powershell
-# Update README.md with new UI library information
-git checkout feature/bubbletea-migration
-git add README.md
-git commit -m "docs: update UI library information"
-```
 
-2. Create pull request:
-```powershell
-git push origin feature/bubbletea-migration
-# Create PR through GitHub interface
-```
+Update README.md with new UI library information
+
 
 ## Completion Checklist
 
@@ -510,4 +441,4 @@ git push origin feature/bubbletea-migration
 - [ ] Application builds successfully
 - [ ] Manual testing completed
 - [ ] Documentation updated
-- [ ] PR created
+
