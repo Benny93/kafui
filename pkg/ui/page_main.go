@@ -16,56 +16,77 @@ import (
 )
 
 var (
-	// Base colors
-	subtleColor = lipgloss.AdaptiveColor{Light: "240", Dark: "244"}
-	accentColor = lipgloss.AdaptiveColor{Light: "205", Dark: "205"}
+	// Colors
+	subtle = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
+	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+	special = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
+
+	// Border styles
+	roundedBorder = lipgloss.Border{
+		Top:         "─",
+		Bottom:      "─",
+		Left:        "│",
+		Right:       "│",
+		TopLeft:     "╭",
+		TopRight:    "╮",
+		BottomLeft:  "╰",
+		BottomRight: "╯",
+	}
 
 	// Header styles
 	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.Color("#1a1a1a")).
-			Align(lipgloss.Center).
-			Padding(0, 1)
+		Bold(true).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(highlight).
+		BorderStyle(roundedBorder).
+		BorderForeground(subtle).
+		Padding(0, 1).
+		MarginBottom(1)
 
 	// Search bar style
 	mainPageSearchBarStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.RoundedBorder()).
-				BorderForeground(subtleColor).
-				Padding(0, 1).
-				MarginBottom(1)
+		BorderStyle(roundedBorder).
+		BorderForeground(subtle).
+		Padding(0, 1).
+		MarginBottom(1)
+
+	// Main content styles
+	mainTableStyle = lipgloss.NewStyle().
+		BorderStyle(roundedBorder).
+		BorderForeground(subtle).
+		Padding(1, 1)
 
 	// Sidebar styles
 	mainPageSidebarStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.RoundedBorder()).
-				BorderForeground(subtleColor).
-				Padding(1, 2).
-				MarginLeft(1)
+		BorderStyle(roundedBorder).
+		BorderForeground(subtle).
+		Padding(1, 2).
+		MarginLeft(1)
 
 	mainPageTitleStyle = lipgloss.NewStyle().
-				Foreground(accentColor).
-				Bold(true).
-				Align(lipgloss.Center)
+		Foreground(highlight).
+		Bold(true).
+		Align(lipgloss.Center)
 
 	mainPageContextStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("250")).
-				PaddingTop(1)
+		Foreground(special).
+		PaddingTop(1)
 
 	// Footer styles
 	footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.Color("#3c3c3c")).
-			Align(lipgloss.Center).
-			Padding(0, 1)
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(subtle).
+		BorderStyle(roundedBorder).
+		BorderForeground(subtle).
+		Padding(0, 1).
+		Align(lipgloss.Center)
 
 	// Status bar styles
 	mainStatusStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.Color("#2a2a2a")).
-			Align(lipgloss.Left).
-			Padding(0, 1)
-
-	// Using package-level constant
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(subtle).
+		Align(lipgloss.Left).
+		Padding(0, 1)	// Using package-level constant
 	_ = highlightColor
 )
 
@@ -392,18 +413,46 @@ func (m MainPageModel) View() string {
 		return "Loading..."
 	}
 
-	// Header with app title
-	header := headerStyle.Width(m.width).Render("Kafui - Kafka UI")
+	// Start building document
+	doc := strings.Builder{}
 
-	// Status bar with spinner and last update
+	// Header with app title
+	header := headerStyle.
+		Width(m.width).
+		Render("Kafui - Kafka UI")
+	doc.WriteString(header + "\n")
+
+	// Status bar with spinner and update time
 	statusText := fmt.Sprintf("%s %s Last update: %s",
 		m.spinner.View(),
 		m.statusMessage,
 		m.lastUpdate.Format("15:04:05"),
 	)
 	statusBar := mainStatusStyle.Width(m.width).Render(statusText)
+	doc.WriteString(statusBar + "\n")
 
-	// Create the sidebar with ASCII art and context
+	// Calculate content widths
+	sidebarWidth := 30
+	mainContentWidth := m.width - sidebarWidth - 4 // Account for margins and padding
+
+	// Create main content area
+	searchBar := mainPageSearchBarStyle.
+		Width(mainContentWidth).
+		Render(m.searchBar.View())
+
+	// Table with rounded borders and consistent style
+	tableContent := mainTableStyle.
+		Width(mainContentWidth).
+		Height(m.height - 11). // Account for all other elements
+		Render(m.topicList.View())
+
+	mainContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		searchBar,
+		tableContent,
+	)
+
+	// Create sidebar with ASCII art and context info
 	asciiTitle := `
  _        __ 
 | |__    / _|_   _ _ __ 
@@ -415,60 +464,42 @@ func (m MainPageModel) View() string {
 	sidebarContent := lipgloss.JoinVertical(
 		lipgloss.Left,
 		mainPageTitleStyle.Render(asciiTitle),
-		"",
-		mainPageContextStyle.Render("Current Context:"),
+		lipgloss.NewStyle().
+			MarginTop(1).
+			MarginBottom(1).
+			Border(lipgloss.NormalBorder(), true, true, true, true).
+			BorderForeground(subtle).
+			Padding(0, 1).
+			Render("Context Information"),
 		mainPageContextStyle.Render(currentContext),
 	)
 
-	// Calculate content widths
-	sidebarWidth := 30
-	mainContentWidth := m.width - sidebarWidth - 4 // Account for margins and padding
-
-	// Search bar with rounded corners
-	searchBar := mainPageSearchBarStyle.
-		Width(mainContentWidth).
-		Render(m.searchBar.View())
-
-	// Main list with topics
-	tableContent := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(subtleColor).
-		Width(mainContentWidth).
-		Height(m.height - 8). // Account for header, status, search and footer
-		Render(m.topicList.View())
-
-	// Main content area combining search and table
-	mainArea := lipgloss.JoinVertical(
-		lipgloss.Left,
-		searchBar,
-		tableContent,
-	)
-
-	// Sidebar with fixed width and height to match content
+	// Sidebar with consistent style
 	sidebar := mainPageSidebarStyle.
 		Width(sidebarWidth).
-		Height(m.height - 8). // Match main content height
+		Height(m.height - 11).
 		Render(sidebarContent)
 
-	// Join main content and sidebar horizontally
-	mainSection := lipgloss.JoinHorizontal(
+	// Place main section with proper alignment
+	mainSection := lipgloss.Place(
+		m.width,
+		m.height-8,
+		lipgloss.Left,
 		lipgloss.Top,
-		mainArea,
-		sidebar,
+		lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			mainContent,
+			sidebar,
+		),
 	)
+	doc.WriteString(mainSection + "\n")
 
 	// Footer with key bindings
 	helpText := "q: quit • /: search • enter: select • ↑/k: up • ↓/j: down"
 	footer := footerStyle.Width(m.width).Render(helpText)
+	doc.WriteString(footer)
 
-	// Combine all sections vertically
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		statusBar,
-		mainSection,
-		footer,
-	)
+	return doc.String()
 }
 
 // switchToResource switches the current view to a different resource type
