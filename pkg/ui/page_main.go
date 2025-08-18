@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -218,7 +219,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		items := []list.Item(msg)
 		m.topicList.SetItems(items)
 		m.allItems = items // Store all items for filtering
-		m.statusMessage = fmt.Sprintf("Loaded %d topics", len(items))
+		m.statusMessage = fmt.Sprintf("Showing %d of %d topics", len(items), len(items))
 		return m, tea.Batch(
 			m.spinner.Tick,
 			m.updateTimer,
@@ -250,9 +251,15 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		filteredItems := []list.Item{}
 		
 		for _, item := range m.allItems {
+			// Check if it's a topicItem (legacy) or resourceListItem (new)
 			if topicItem, ok := item.(topicItem); ok {
 				// Simple case-insensitive search
 				if strings.Contains(strings.ToLower(topicItem.name), strings.ToLower(query)) {
+					filteredItems = append(filteredItems, item)
+				}
+			} else if resourceItem, ok := item.(resourceListItem); ok {
+				// Simple case-insensitive search on resource ID
+				if strings.Contains(strings.ToLower(resourceItem.resourceItem.GetID()), strings.ToLower(query)) {
 					filteredItems = append(filteredItems, item)
 				}
 			}
@@ -264,9 +271,9 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.searchBar.Blur()
 		
 		if len(filteredItems) == 0 {
-			m.statusMessage = fmt.Sprintf("No topics found for: %s", query)
+			m.statusMessage = fmt.Sprintf("No items found for: %s", query)
 		} else {
-			m.statusMessage = fmt.Sprintf("Found %d topics for: %s", len(filteredItems), query)
+			m.statusMessage = fmt.Sprintf("Showing %d of %d items", len(filteredItems), len(m.allItems))
 		}
 		
 		return m, nil
@@ -277,7 +284,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.searchBar.SetResultCount(0)
 		m.searchMode = false
 		m.searchBar.Blur()
-		m.statusMessage = "Search cleared"
+		m.statusMessage = fmt.Sprintf("Showing %d of %d topics", len(m.allItems), len(m.allItems))
 		return m, nil
 	case switchResourceMsg:
 		// Switch to a different resource type
@@ -343,9 +350,16 @@ func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 		})
 	}
 	
+	// Sort items by ID (name)
+	sort.Slice(listItems, func(i, j int) bool {
+		item1 := listItems[i].(resourceListItem)
+		item2 := listItems[j].(resourceListItem)
+		return item1.resourceItem.GetID() < item2.resourceItem.GetID()
+	})
+	
 	m.topicList.SetItems(listItems)
 	m.allItems = listItems
-	m.statusMessage = fmt.Sprintf("Showing %d %s", len(listItems), m.currentResource.GetName())
+	m.statusMessage = fmt.Sprintf("Showing %d of %d %s", len(listItems), len(listItems), m.currentResource.GetName())
 }
 
 // resourceListItem wraps a ResourceItem to implement list.Item interface
@@ -374,8 +388,18 @@ func (m *MainPageModel) loadTopics() tea.Msg {
 		return errorMsg(err)
 	}
 
+	// Create a slice of topic names for sorting
+	topicNames := make([]string, 0, len(topics))
+	for name := range topics {
+		topicNames = append(topicNames, name)
+	}
+	
+	// Sort topic names
+	sort.Strings(topicNames)
+
 	items := make([]list.Item, 0, len(topics))
-	for name, topic := range topics {
+	for _, name := range topicNames {
+		topic := topics[name]
 		items = append(items, topicItem{
 			name:  name,
 			topic: topic,
