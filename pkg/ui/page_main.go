@@ -129,9 +129,10 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			if m.topicList.SelectedItem() != nil {
-				topic := m.topicList.SelectedItem().(topicItem)
-				m.statusMessage = fmt.Sprintf("Selected topic: %s", topic.name)
-				return m, nil
+				// Let the main UI model handle navigation to topic page
+				return m, func() tea.Msg {
+					return pageChangeMsg(topicPage)
+				}
 			}
 		}
 

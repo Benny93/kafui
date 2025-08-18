@@ -16,12 +16,12 @@ const (
 	detailPage
 )
 
-	// Model represents the main application state
+// Model represents the main application state
 type Model struct {
 	dataSource   api.KafkaDataSource
 	currentPage  page
 	mainPage     *MainPageModel
-	currentTopic api.Topic
+	topicPage    *TopicPageModel
 	width        int
 	height       int
 }// Custom key mappings
@@ -55,7 +55,7 @@ func initialModel(dataSource api.KafkaDataSource) Model {
 	mp := NewMainPage(dataSource)
 	return Model{
 		dataSource:  dataSource,
-		currentPage: mainPage, // This is the page enum value, not the MainPageModel
+		currentPage: mainPage,
 		mainPage:    &mp,
 	}
 }
@@ -81,9 +81,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, keys.Back):
 			if m.currentPage > mainPage {
 				m.currentPage--
+				// Clean up topic page when leaving
+				if m.currentPage != topicPage && m.topicPage != nil {
+					m.topicPage = nil
+				}
 			}
 			return m, nil
 		}
+		
+	case pageChangeMsg:
+		m.currentPage = page(msg)
+		// Initialize topic page if needed
+		if m.currentPage == topicPage && m.topicPage == nil {
+			// Get selected topic from main page
+			if m.mainPage.topicList.SelectedItem() != nil {
+				topic := m.mainPage.topicList.SelectedItem().(topicItem)
+				tp := NewTopicPage(m.dataSource, topic.name, topic.topic)
+				m.topicPage = &tp
+				cmds = append(cmds, m.topicPage.Init())
+			} else {
+				// Fallback to main page if no topic selected
+				m.currentPage = mainPage
+			}
+		}
+		return m, nil
 	}
 
 	// Handle updates for sub-components
@@ -95,6 +116,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mainPage = updatedMainPage
 		}
 		cmds = append(cmds, cmd)
+		
+		// Check if we need to navigate to topic page
+		if m.mainPage.topicList.SelectedItem() != nil {
+			if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
+				m.currentPage = topicPage
+				topic := m.mainPage.topicList.SelectedItem().(topicItem)
+				tp := NewTopicPage(m.dataSource, topic.name, topic.topic)
+				m.topicPage = &tp
+				cmds = append(cmds, m.topicPage.Init())
+			}
+		}
+		
+	case topicPage:
+		if m.topicPage != nil {
+			var cmd tea.Cmd
+			topicModel, cmd := m.topicPage.Update(msg)
+			if updatedTopicPage, ok := topicModel.(*TopicPageModel); ok {
+				m.topicPage = updatedTopicPage
+			}
+			cmds = append(cmds, cmd)
+		}
+		
+	case detailPage:
+		// TODO: Implement detail page
 	}
 
 	return m, tea.Batch(cmds...)
@@ -105,7 +150,10 @@ func (m Model) View() string {
 	case mainPage:
 		return m.mainPage.View()
 	case topicPage:
-		return "Topic page (to be implemented)"
+		if m.topicPage != nil {
+			return m.topicPage.View()
+		}
+		return "Topic page not initialized"
 	case detailPage:
 		return "Detail page (to be implemented)"
 	default:
@@ -113,25 +161,7 @@ func (m Model) View() string {
 	}
 }
 
-// loadTopics loads the topics from the data source
-func (m Model) loadTopics() tea.Msg {
-	topics, err := m.dataSource.GetTopics()
-	if err != nil {
-		return err
-	}
-
-	// Convert topics to list items
-	items := make([]list.Item, len(topics))
-	for name, topic := range topics {
-		items = append(items, topicItem{
-			name:  name,
-			topic: topic,
-		})
-	}
-
-	return topicListMsg(items)
-}
-
 // Custom types for messages
 type topicListMsg []list.Item
 type errorMsg error
+type pageChangeMsg page

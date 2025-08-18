@@ -46,7 +46,7 @@ The original implementation can be found in pkg/kafui/page_topic.go for referenc
 
 ### Prompt for Message Detail Page
 ```
-Implement the Message Detail Page component in pkg/ui/page_detail.go. This page shows the full content of a selected Kafka message.
+Continue the Kafui migration from tview to Bubbletea by implementing the Message Detail Page component in pkg/ui/page_detail.go. This page shows the full content of a selected Kafka message.
 
 Required Features:
 1. Message Content Display
@@ -79,7 +79,7 @@ Use Bubbletea's viewport component for scrolling long content and implement prop
 
 ### Prompt for Search Bar
 ```
-Create a reusable search bar component in pkg/ui/components/search_bar.go that can be used across different pages.
+Create a reusable search bar component in pkg/ui/components/search_bar.go that can be used across different pages and is used in the main page to filter resouces in the main table.
 
 Required Features:
 1. Core Functionality
