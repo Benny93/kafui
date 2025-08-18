@@ -3,7 +3,7 @@
 ## Initial Start Prompt
 ```
 You are tasked with migrating the Kafui project from tview to Bubble Tea UI framework. Follow the migration plan in bubbleteamigration.md exactly. For each step:
-
+Some steps may have been laready completed (like installing bubble tea)
 1. Read and understand the current step's requirements
 2. Execute the commands exactly as written
 3. Verify the results match the expected output
@@ -32,7 +32,9 @@ You are continuing the Kafui project migration from tview to Bubble Tea UI frame
 
 2. Continue with the migration plan from the appropriate point
 
-Before proceeding, confirm you have assessed the current state and identified the correct next step.
+
+write progress to progress.md (append only style)
+
 ```
 
 ## Error Recovery Prompt

@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/Benny93/kafui/pkg/kafui"
+	"github.com/Benny93/kafui/pkg/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -11,7 +11,7 @@ var cfgFile string
 type KafuiInitFunc func(configFile string, mock bool)
 
 // defaultKafuiInit is the default implementation
-var defaultKafuiInit KafuiInitFunc = kafui.Init
+var defaultKafuiInit KafuiInitFunc = ui.Init
 
 // CreateRootCommand creates and returns the root cobra command
 func CreateRootCommand(initFunc KafuiInitFunc) *cobra.Command {
@@ -28,7 +28,7 @@ func CreateRootCommand(initFunc KafuiInitFunc) *cobra.Command {
 	// Add flags to root command
 	rootCmd.PersistentFlags().Bool("mock", false, "Enable mock mode: Display mock data to test various functions without a real kafka broker")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.kaf/config)")
-	
+
 	return rootCmd
 }
 
