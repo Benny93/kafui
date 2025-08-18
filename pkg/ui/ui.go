@@ -3,9 +3,7 @@ package ui
 import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-
 )
 
 type page int
@@ -161,7 +159,4 @@ func (m Model) View() string {
 	}
 }
 
-// Custom types for messages
-type topicListMsg []list.Item
-type errorMsg error
-type pageChangeMsg page
+

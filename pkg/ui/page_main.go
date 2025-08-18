@@ -2,15 +2,15 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/components"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-
 )
 
 var (
@@ -35,7 +35,7 @@ var (
 type MainPageModel struct {
 	dataSource    api.KafkaDataSource
 	topicList     list.Model
-	searchInput   textinput.Model
+	searchBar     components.SearchBarModel
 	spinner       spinner.Model
 	statusMessage string
 	lastUpdate    time.Time
@@ -60,18 +60,22 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 	topicList.Title = "Kafka Topics"
 	topicList.SetShowTitle(true)
 	topicList.SetShowHelp(true)
-	topicList.SetFilteringEnabled(true)
+	topicList.SetFilteringEnabled(false) // We'll handle filtering ourselves
 	topicList.SetShowFilter(false)
 	topicList.Styles.Title = titleStyle
 	topicList.FilterInput.Prompt = "search: "
 	topicList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(highlightColor)
 
-	// Initialize search
-	ti := textinput.New()
-	ti.Placeholder = "Press / to search topics..."
-	ti.CharLimit = 156
-	ti.Width = 30
-	ti.PromptStyle = lipgloss.NewStyle().Foreground(highlightColor)
+	// Initialize search bar
+	searchBar := components.NewSearchBar(
+		components.WithPlaceholder("Press / to search topics..."),
+		components.WithOnSearch(func(query string) tea.Msg {
+			return searchTopicsMsg(query)
+		}),
+		components.WithOnClear(func() tea.Msg {
+			return clearSearchMsg{}
+		}),
+	)
 
 	// Initialize spinner
 	sp := spinner.New()
@@ -81,7 +85,7 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 	return MainPageModel{
 		dataSource:    ds,
 		topicList:     topicList,
-		searchInput:   ti,
+		searchBar:     searchBar,
 		spinner:       sp,
 		lastUpdate:    time.Now(),
 		statusMessage: "Welcome to Kafui",
@@ -105,6 +109,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.topicList.SetSize(msg.Width, msg.Height-4)
+		m.searchBar.SetWidth(msg.Width)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -115,20 +120,29 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/":
 			if !m.searchMode {
 				m.searchMode = true
-				m.topicList.SetShowFilter(true)
 				m.statusMessage = "Search mode: Type to filter topics"
-				return m, nil
+				cmds = append(cmds, m.searchBar.Focus())
+				return m, tea.Batch(cmds...)
 			}
 		case "esc":
 			if m.searchMode {
 				m.searchMode = false
-				m.topicList.SetShowFilter(false)
-				m.topicList.ResetFilter()
+				m.searchBar.Blur()
+				m.searchBar.SetValue("")
 				m.statusMessage = "Search cancelled"
+				// Reset the topic list to show all items
+				m.topicList.ResetFilter()
 				return m, nil
 			}
 		case "enter":
-			if m.topicList.SelectedItem() != nil {
+			if m.searchMode && m.searchBar.Value() != "" {
+				// Add search to history and trigger search
+				query := m.searchBar.Value()
+				m.searchBar.SetValue("")
+				return m, func() tea.Msg {
+					return searchTopicsMsg(query)
+				}
+			} else if m.topicList.SelectedItem() != nil {
 				// Let the main UI model handle navigation to topic page
 				return m, func() tea.Msg {
 					return pageChangeMsg(topicPage)
@@ -136,11 +150,12 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// If in search mode, let the list handle filtering
+		// If in search mode, let the search bar handle keys
 		if m.searchMode {
 			var cmd tea.Cmd
-			m.topicList, cmd = m.topicList.Update(msg)
+			m.searchBar, cmd = m.searchBar.Update(msg)
 			cmds = append(cmds, cmd)
+			return m, tea.Batch(cmds...)
 		} else {
 			// Normal navigation
 			switch msg.String() {
@@ -185,13 +200,46 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.err = msg
 		m.statusMessage = fmt.Sprintf("Error: %v", msg)
-	}
 
-	// Handle text input updates
-	if m.searchInput.Focused() {
-		var cmd tea.Cmd
-		m.searchInput, cmd = m.searchInput.Update(msg)
-		cmds = append(cmds, cmd)
+	case searchTopicsMsg:
+		// Handle search query
+		query := string(msg)
+		m.statusMessage = fmt.Sprintf("Searching for: %s", query)
+		
+		// Filter the topic list
+		allItems := m.topicList.Items()
+		filteredItems := []list.Item{}
+		
+		for _, item := range allItems {
+			if topicItem, ok := item.(topicItem); ok {
+				// Simple case-insensitive search
+				if strings.Contains(strings.ToLower(topicItem.name), strings.ToLower(query)) {
+					filteredItems = append(filteredItems, item)
+				}
+			}
+		}
+		
+		m.topicList.SetItems(filteredItems)
+		m.searchBar.SetResultCount(len(filteredItems))
+		m.searchMode = false
+		m.searchBar.Blur()
+		
+		if len(filteredItems) == 0 {
+			m.statusMessage = fmt.Sprintf("No topics found for: %s", query)
+		} else {
+			m.statusMessage = fmt.Sprintf("Found %d topics for: %s", len(filteredItems), query)
+		}
+		
+		return m, nil
+
+	case clearSearchMsg:
+		// Clear search and reset topic list
+		m.topicList.ResetFilter()
+		m.searchBar.SetResultCount(0)
+		m.searchMode = false
+		m.searchBar.Blur()
+		m.statusMessage = "Search cleared"
+		return m, nil
 	}
 
 	return m, tea.Batch(cmds...)
@@ -211,9 +259,13 @@ func (m *MainPageModel) View() string {
 
 	statusBar := statusStyle.Render(status)
 
+	// Search bar
+	searchBar := m.searchBar.View()
+
 	// Main content with proper styling
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
+		searchBar,
 		m.topicList.View(),
 	)
 
@@ -228,8 +280,9 @@ func (m *MainPageModel) View() string {
 	)
 }
 
-// Timer tick message for periodic updates
-type timerTickMsg time.Time
+// Custom message types
+type searchTopicsMsg string
+type clearSearchMsg struct{}
 
 func (m MainPageModel) updateTimer() tea.Msg {
 	time.Sleep(5 * time.Second)
