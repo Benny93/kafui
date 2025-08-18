@@ -50,11 +50,11 @@ var (
 	mainContentStyle = lipgloss.NewStyle().
 				Padding(0, 1)
 
-	sidebarStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(1, 2).
-			Width(30) // Fixed width for sidebar
+	topicPageSidebarStyle = lipgloss.NewStyle().
+				BorderStyle(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(1, 2).
+				Width(30) // Fixed width for sidebar
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFFFFF")).
@@ -322,14 +322,14 @@ func (m *TopicPageModel) View() string {
 		mainWidth := m.width - sidebarWidth - 4 // Account for margins and borders
 
 		// Set widths
-		sidebarStyle = sidebarStyle.Width(sidebarWidth)
+		topicPageSidebarStyle = topicPageSidebarStyle.Width(sidebarWidth)
 		mainContentStyle = mainContentStyle.Width(mainWidth)
 
 		// Create the layout with main content on left and sidebar on right
 		layout = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			mainContentStyle.Render(mainContent),
-			sidebarStyle.Render(topicInfo),
+			topicPageSidebarStyle.Render(topicInfo),
 		)
 	} else {
 		// Fallback layout when width is not set
@@ -457,43 +457,43 @@ func (m *TopicPageModel) startConsuming() tea.Cmd {
 	// Create context for consumption
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelConsumption = cancel
-	
+
 	// Set loading to true initially
 	m.loading = true
-	
+
 	// Return a command that will start consumption
 	return func() tea.Msg {
 		// Set consuming flag
 		m.consuming = true
-		
+
 		// Start consumption in a goroutine
 		go func() {
 			handlerFunc := func(msg api.Message) {
 				// Instead of processing directly, send a message to the program
 				// This ensures consistent behavior between mock and real modes
 				// messageConsumed := messageConsumedMsg(msg) // Not used in mock mode
-				
+
 				// Directly update the model (not thread-safe but works for mock)
 				key := m.getMessageKey(fmt.Sprint(msg.Partition), fmt.Sprint(msg.Offset))
 				m.consumedMessages[key] = msg
 				m.messages = append(m.messages, msg)
-				
+
 				// Sort messages by offset
 				sort.Slice(m.messages, func(i, j int) bool {
 					return m.messages[i].Offset < m.messages[j].Offset
 				})
-				
+
 				// Update filtered messages and table
 				m.filterMessages()
 				m.updateTable()
-				
+
 				// Auto-scroll to bottom if not paused
 				if !m.paused {
 					if len(m.filteredMessages) > 0 {
 						m.messageTable.GotoBottom()
 					}
 				}
-				
+
 				m.statusMessage = fmt.Sprintf("Consumed %d messages", len(m.messages))
 				m.lastUpdate = time.Now()
 			}
@@ -508,7 +508,7 @@ func (m *TopicPageModel) startConsuming() tea.Cmd {
 				m.statusMessage = fmt.Sprintf("Consumption error: %v", err)
 			}
 		}()
-		
+
 		// Return a message indicating consumption has started
 		return startConsumingMsg{}
 	}

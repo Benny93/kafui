@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -15,22 +16,57 @@ import (
 )
 
 var (
-	titleStyle = lipgloss.NewStyle().
+	// Base colors
+	subtleColor = lipgloss.AdaptiveColor{Light: "240", Dark: "244"}
+	accentColor = lipgloss.AdaptiveColor{Light: "205", Dark: "205"}
+
+	// Header styles
+	headerStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Background(lipgloss.Color("#1a1a1a")).
+			Align(lipgloss.Center).
 			Padding(0, 1)
 
-	statusStyle = lipgloss.NewStyle().
+	// Search bar style
+	mainPageSearchBarStyle = lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(subtleColor).
+				Padding(0, 1).
+				MarginBottom(1)
+
+	// Sidebar styles
+	mainPageSidebarStyle = lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(subtleColor).
+				Padding(1, 2).
+				MarginLeft(1)
+
+	mainPageTitleStyle = lipgloss.NewStyle().
+				Foreground(accentColor).
+				Bold(true).
+				Align(lipgloss.Center)
+
+	mainPageContextStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("250")).
+				PaddingTop(1)
+
+	// Footer styles
+	footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Background(lipgloss.Color("#3c3c3c")).
+			Align(lipgloss.Center).
 			Padding(0, 1)
 
-	// List styles
-	docStyle = lipgloss.NewStyle().Margin(1, 2)
+	// Status bar styles
+	mainStatusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(lipgloss.Color("#2a2a2a")).
+			Align(lipgloss.Left).
+			Padding(0, 1)
 
-	// Custom colors
-	highlightColor = lipgloss.Color("205")
+	// Using package-level constant
+	_ = highlightColor
 )
 
 type MainPageModel struct {
@@ -50,15 +86,64 @@ type MainPageModel struct {
 	err             error
 }
 
-func NewMainPage(ds api.KafkaDataSource) MainPageModel {
-	// Initialize topic list with custom delegate
-	delegate := list.NewDefaultDelegate()
+type customDelegate struct {
+	styles     list.DefaultItemStyles
+	itemStyles map[int]lipgloss.Style
+}
+
+func newCustomDelegate() list.ItemDelegate {
+	delegate := customDelegate{
+		itemStyles: make(map[int]lipgloss.Style),
+	}
+
+	delegate.styles = list.NewDefaultItemStyles()
 	selectedStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("205")).
 		Foreground(lipgloss.Color("0"))
 
-	delegate.Styles.SelectedTitle = selectedStyle
-	delegate.Styles.SelectedDesc = selectedStyle
+	delegate.styles.SelectedTitle = selectedStyle
+	delegate.styles.SelectedDesc = selectedStyle
+
+	return &delegate
+}
+
+func (d *customDelegate) Height() int { return 1 }
+
+func (d *customDelegate) Spacing() int { return 0 }
+
+func (d *customDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
+
+func (d *customDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	var name, partitions, replication string
+
+	if i, ok := item.(resourceListItem); ok {
+		name = i.resourceItem.GetID()
+		details := i.resourceItem.GetDetails()
+		if p, ok := details["partitions"]; ok {
+			partitions = fmt.Sprintf("Partitions: %s", p)
+		}
+		if r, ok := details["replication"]; ok {
+			replication = fmt.Sprintf("Replication: %s", r)
+		}
+	} else if i, ok := item.(topicItem); ok {
+		name = i.name
+		partitions = fmt.Sprintf("Partitions: %d", i.topic.NumPartitions)
+		replication = fmt.Sprintf("Replication: %d", i.topic.ReplicationFactor)
+	}
+
+	itemStyle := d.styles.NormalTitle
+	if index == m.Index() {
+		itemStyle = d.styles.SelectedTitle
+	}
+
+	// Create a single row with columns
+	row := fmt.Sprintf("%-40s %-20s %-20s", name, partitions, replication)
+	fmt.Fprint(w, itemStyle.Render(row))
+}
+
+func NewMainPage(ds api.KafkaDataSource) MainPageModel {
+	// Initialize topic list with custom delegate
+	delegate := newCustomDelegate()
 
 	topicList := list.New([]list.Item{}, delegate, 0, 0)
 	topicList.Title = "Kafka Topics"
@@ -119,8 +204,15 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.topicList.SetSize(msg.Width, msg.Height-4)
-		m.searchBar.SetWidth(msg.Width)
+
+		// Calculate available space for content
+		sidebarWidth := 30
+		mainContentWidth := msg.Width - sidebarWidth - 4 // Account for margins and borders
+		contentHeight := msg.Height - 8                  // Account for header, status bar, footer and margins
+
+		// Update list and search bar dimensions
+		m.topicList.SetSize(mainContentWidth-4, contentHeight-3) // Account for borders and margins
+		m.searchBar.SetWidth(mainContentWidth - 4)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -246,10 +338,10 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle search query
 		query := string(msg)
 		m.statusMessage = fmt.Sprintf("Searching for: %s", query)
-		
+
 		// Filter the topic list
 		filteredItems := []list.Item{}
-		
+
 		for _, item := range m.allItems {
 			// Check if it's a topicItem (legacy) or resourceListItem (new)
 			if topicItem, ok := item.(topicItem); ok {
@@ -264,18 +356,18 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		
+
 		m.topicList.SetItems(filteredItems)
 		m.searchBar.SetResultCount(len(filteredItems))
 		m.searchMode = false
 		m.searchBar.Blur()
-		
+
 		if len(filteredItems) == 0 {
 			m.statusMessage = fmt.Sprintf("No items found for: %s", query)
 		} else {
 			m.statusMessage = fmt.Sprintf("Showing %d of %d items", len(filteredItems), len(m.allItems))
 		}
-		
+
 		return m, nil
 
 	case clearSearchMsg:
@@ -295,38 +387,87 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *MainPageModel) View() string {
+func (m MainPageModel) View() string {
 	if m.width == 0 {
 		return "Loading..."
 	}
 
-	// Status bar
-	status := fmt.Sprintf("%s %s Last update: %s",
+	// Header with app title
+	header := headerStyle.Width(m.width).Render("Kafui - Kafka UI")
+
+	// Status bar with spinner and last update
+	statusText := fmt.Sprintf("%s %s Last update: %s",
 		m.spinner.View(),
 		m.statusMessage,
 		m.lastUpdate.Format("15:04:05"),
 	)
+	statusBar := mainStatusStyle.Width(m.width).Render(statusText)
 
-	statusBar := statusStyle.Render(status)
-
-	// Search bar
-	searchBar := m.searchBar.View()
-
-	// Main content with proper styling
-	content := lipgloss.JoinVertical(
+	// Create the sidebar with ASCII art and context
+	asciiTitle := `
+ _        __ 
+| |__    / _|_   _ _ __ 
+| '_ \  | |_| | | | '__|
+| | | | |  _| |_| | |   
+|_| |_| |_|  \__,_|_|   
+`
+	currentContext := m.dataSource.GetContext()
+	sidebarContent := lipgloss.JoinVertical(
 		lipgloss.Left,
-		searchBar,
-		m.topicList.View(),
+		mainPageTitleStyle.Render(asciiTitle),
+		"",
+		mainPageContextStyle.Render("Current Context:"),
+		mainPageContextStyle.Render(currentContext),
 	)
 
-	// Wrap in document style
-	doc := docStyle.Render(content)
+	// Calculate content widths
+	sidebarWidth := 30
+	mainContentWidth := m.width - sidebarWidth - 4 // Account for margins and padding
 
-	// Add status bar at the bottom
+	// Search bar with rounded corners
+	searchBar := mainPageSearchBarStyle.
+		Width(mainContentWidth).
+		Render(m.searchBar.View())
+
+	// Main list with topics
+	tableContent := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(subtleColor).
+		Width(mainContentWidth).
+		Height(m.height - 8). // Account for header, status, search and footer
+		Render(m.topicList.View())
+
+	// Main content area combining search and table
+	mainArea := lipgloss.JoinVertical(
+		lipgloss.Left,
+		searchBar,
+		tableContent,
+	)
+
+	// Sidebar with fixed width and height to match content
+	sidebar := mainPageSidebarStyle.
+		Width(sidebarWidth).
+		Height(m.height - 8). // Match main content height
+		Render(sidebarContent)
+
+	// Join main content and sidebar horizontally
+	mainSection := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		mainArea,
+		sidebar,
+	)
+
+	// Footer with key bindings
+	helpText := "q: quit • /: search • enter: select • ↑/k: up • ↓/j: down"
+	footer := footerStyle.Width(m.width).Render(helpText)
+
+	// Combine all sections vertically
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		doc,
+		header,
 		statusBar,
+		mainSection,
+		footer,
 	)
 }
 
@@ -334,14 +475,14 @@ func (m *MainPageModel) View() string {
 func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 	m.currentResource = m.resourceManager.GetResource(resourceType)
 	m.topicList.Title = m.currentResource.GetName()
-	
+
 	// Load data for the new resource
 	items, err := m.currentResource.GetData()
 	if err != nil {
 		m.statusMessage = fmt.Sprintf("Error loading %s: %v", m.currentResource.GetName(), err)
 		return
 	}
-	
+
 	// Convert resource items to list items
 	listItems := make([]list.Item, 0, len(items))
 	for _, item := range items {
@@ -349,14 +490,14 @@ func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 			resourceItem: item,
 		})
 	}
-	
+
 	// Sort items by ID (name)
 	sort.Slice(listItems, func(i, j int) bool {
 		item1 := listItems[i].(resourceListItem)
 		item2 := listItems[j].(resourceListItem)
 		return item1.resourceItem.GetID() < item2.resourceItem.GetID()
 	})
-	
+
 	m.topicList.SetItems(listItems)
 	m.allItems = listItems
 	m.statusMessage = fmt.Sprintf("Showing %d of %d %s", len(listItems), len(listItems), m.currentResource.GetName())
@@ -393,7 +534,7 @@ func (m *MainPageModel) loadTopics() tea.Msg {
 	for name := range topics {
 		topicNames = append(topicNames, name)
 	}
-	
+
 	// Sort topic names
 	sort.Strings(topicNames)
 
