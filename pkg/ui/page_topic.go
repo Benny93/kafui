@@ -45,6 +45,21 @@ var (
 	selectedMessageStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color("205")).
 				Foreground(lipgloss.Color("0"))
+
+	// New styles for the improved layout
+	mainContentStyle = lipgloss.NewStyle().
+				Padding(0, 1)
+
+	sidebarStyle = lipgloss.NewStyle().
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Padding(1, 2).
+			Width(30) // Fixed width for sidebar
+
+	helpStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(lipgloss.Color("#3c3c3c")).
+			Padding(0, 1)
 )
 
 type TopicPageModel struct {
@@ -137,9 +152,9 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Adjust table height based on window size
+		// Adjust table height based on window size, accounting for help bar
 		if msg.Height > 10 {
-			m.messageTable.SetHeight(msg.Height - 15)
+			m.messageTable.SetHeight(msg.Height - 12) // Leave space for controls, help, etc.
 		}
 		return m, nil
 
@@ -272,9 +287,6 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *TopicPageModel) View() string {
-	// Topic info section
-	topicInfo := m.renderTopicInfo()
-
 	// Controls section
 	controls := m.renderControls()
 
@@ -287,38 +299,69 @@ func (m *TopicPageModel) View() string {
 		searchView = m.searchInput.View()
 	}
 
-	// Status bar
-	status := m.renderStatusBar()
+	// Topic info section (will be in sidebar)
+	topicInfo := m.renderTopicInfo()
 
-	// Combine all sections
-	content := lipgloss.JoinVertical(
+	// Combine main content (messages and controls)
+	mainContent := lipgloss.JoinVertical(
 		lipgloss.Left,
-		topicInfo,
 		controls,
 		messages,
 		searchView,
 	)
 
+	// Create layout with main content and sidebar
+	var layout string
+	if m.width > 0 {
+		// Calculate widths for main content and sidebar
+		sidebarWidth := 30
+		if sidebarWidth > m.width/3 {
+			sidebarWidth = m.width / 3
+		}
+		mainWidth := m.width - sidebarWidth - 4 // Account for margins and borders
+
+		// Set widths
+		sidebarStyle = sidebarStyle.Width(sidebarWidth)
+		mainContentStyle = mainContentStyle.Width(mainWidth)
+
+		// Create the layout with main content on left and sidebar on right
+		layout = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			mainContentStyle.Render(mainContent),
+			sidebarStyle.Render(topicInfo),
+		)
+	} else {
+		// Fallback layout when width is not set
+		layout = lipgloss.JoinVertical(
+			lipgloss.Left,
+			mainContent,
+			topicInfo,
+		)
+	}
+
+	// Help footer with key bindings
+	helpText := m.renderHelp()
+	helpBar := helpStyle.Render(helpText)
+
 	// Wrap in document style
 	var doc string
 	if m.width > 0 {
-		doc = lipgloss.NewStyle().Margin(1, 2).Render(content)
+		doc = lipgloss.NewStyle().Margin(1, 2).Render(layout)
 	} else {
-		// Even when width is not set, we should still render the content
-		doc = content
+		doc = layout
 	}
 
-	// Add status bar at the bottom
+	// Add help bar at the bottom
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		doc,
-		status,
+		helpBar,
 	)
 }
 
 func (m *TopicPageModel) renderTopicInfo() string {
 	info := fmt.Sprintf(
-		"Topic: %s\nPartitions: %d\nReplication Factor: %d\nMessages: %d",
+		"TOPIC DETAILS\n\nName: %s\nPartitions: %d\nReplication Factor: %d\nMessages: %d",
 		m.topicName,
 		m.topicDetails.NumPartitions,
 		m.topicDetails.ReplicationFactor,
@@ -327,7 +370,7 @@ func (m *TopicPageModel) renderTopicInfo() string {
 
 	// Format config entries if any
 	if len(m.topicDetails.ConfigEntries) > 0 {
-		configLines := []string{"Configuration:"}
+		configLines := []string{"\nConfiguration:"}
 		for key, value := range m.topicDetails.ConfigEntries {
 			if value != nil {
 				configLines = append(configLines, fmt.Sprintf("  %s: %s", key, *value))
@@ -335,33 +378,33 @@ func (m *TopicPageModel) renderTopicInfo() string {
 				configLines = append(configLines, fmt.Sprintf("  %s: <nil>", key))
 			}
 		}
-		info += "\n" + strings.Join(configLines, "\n")
+		info += strings.Join(configLines, "\n")
 	}
 
-	return topicInfoStyle.Render(info)
+	return info
 }
 
 func (m *TopicPageModel) renderControls() string {
 	controls := fmt.Sprintf(
-		"Format: %s | Partition: All | Follow: %t | Paused: %t",
+		"CONSUMPTION CONTROLS\n\nFormat: %s | Partition: All | Follow: %t | Paused: %t",
 		"JSON", // Default format
 		m.consumeFlags.Follow,
 		m.paused,
 	)
 
-	return controlPanelStyle.Render(controls)
+	return controls
 }
 
 func (m *TopicPageModel) renderMessages() string {
 	if m.loading {
-		return messageListStyle.Render(fmt.Sprintf("%s Loading messages...", m.spinner.View()))
+		return fmt.Sprintf("%s Loading messages...", m.spinner.View())
 	}
 
 	if len(m.filteredMessages) == 0 {
-		return messageListStyle.Render("No messages available. Press Space to start consumption.")
+		return "No messages available. Press Space to start consumption."
 	}
 
-	return messageTableStyle.Render(m.messageTable.View())
+	return m.messageTable.View()
 }
 
 func (m *TopicPageModel) renderStatusBar() string {
@@ -376,6 +419,30 @@ func (m *TopicPageModel) renderStatusBar() string {
 	}
 
 	return statusBarStyle.Render(status)
+}
+
+func (m *TopicPageModel) renderHelp() string {
+	// Define key bindings
+	keyBindings := []struct {
+		key  string
+		desc string
+	}{
+		{"↑/↓", "Navigate messages"},
+		{"Enter", "View message details"},
+		{"Space", "Pause/resume consumption"},
+		{"/", "Search messages"},
+		{"Esc", "Exit search/clear selection"},
+		{"q/Esc", "Back to topics"},
+		{"Ctrl+C", "Quit"},
+	}
+
+	// Format help text
+	helpParts := make([]string, len(keyBindings))
+	for i, binding := range keyBindings {
+		helpParts[i] = fmt.Sprintf("%s: %s", binding.key, binding.desc)
+	}
+
+	return strings.Join(helpParts, " | ")
 }
 
 // Message handling
