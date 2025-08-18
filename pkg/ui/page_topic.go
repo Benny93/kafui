@@ -266,6 +266,7 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case startConsumingMsg:
 		m.consuming = true
+		m.loading = false
 		m.statusMessage = "Starting message consumption..."
 		return m, nil
 
@@ -457,21 +458,20 @@ func (m *TopicPageModel) startConsuming() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelConsumption = cancel
 	
+	// Set loading to true initially
+	m.loading = true
+	
 	// Return a command that will start consumption
 	return func() tea.Msg {
 		// Set consuming flag
 		m.consuming = true
-		m.loading = false // Set loading to false immediately since we're starting consumption
 		
 		// Start consumption in a goroutine
 		go func() {
 			handlerFunc := func(msg api.Message) {
-				// Process the message directly in mock mode
-				// In a real implementation, we would send this as a message to the program
-				// But for mock mode, we'll update the model directly
-				
-				// Add a small delay to make mock consumption visible
-				time.Sleep(50 * time.Millisecond)
+				// Instead of processing directly, send a message to the program
+				// This ensures consistent behavior between mock and real modes
+				// messageConsumed := messageConsumedMsg(msg) // Not used in mock mode
 				
 				// Directly update the model (not thread-safe but works for mock)
 				key := m.getMessageKey(fmt.Sprint(msg.Partition), fmt.Sprint(msg.Offset))
