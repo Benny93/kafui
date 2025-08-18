@@ -20,6 +20,7 @@ type Model struct {
 	currentPage  page
 	mainPage     *MainPageModel
 	topicPage    *TopicPageModel
+	detailPage   *DetailPageModel
 	width        int
 	height       int
 }// Custom key mappings
@@ -102,6 +103,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentPage = mainPage
 			}
 		}
+		// Clean up detail page when leaving
+		if m.currentPage != detailPage && m.detailPage != nil {
+			m.detailPage = nil
+		}
 		return m, nil
 	}
 
@@ -162,7 +167,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		
 	case detailPage:
-		// TODO: Implement detail page
+		// Handle navigation to detail page from topic page
+		if msg, ok := msg.(pageChangeMsg); ok && page(msg) == detailPage {
+			// Check if we have a selected message in the topic page
+			if m.topicPage != nil && m.topicPage.selectedMessage != nil {
+				detailPage := NewDetailPage(m.topicPage.topicName, *m.topicPage.selectedMessage)
+				m.detailPage = &detailPage
+			}
+		}
+		
+		if m.detailPage != nil {
+			var cmd tea.Cmd
+			detailModel, cmd := m.detailPage.Update(msg)
+			if updatedDetailPage, ok := detailModel.(*DetailPageModel); ok {
+				m.detailPage = updatedDetailPage
+			}
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -178,7 +199,10 @@ func (m Model) View() string {
 		}
 		return "Topic page not initialized"
 	case detailPage:
-		return "Detail page (to be implemented)"
+		if m.detailPage != nil {
+			return m.detailPage.View()
+		}
+		return "Detail page not initialized"
 	default:
 		return "Unknown page"
 	}
