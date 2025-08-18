@@ -103,6 +103,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentPage = mainPage
 			}
 		}
+		// Initialize detail page if needed
+		if m.currentPage == detailPage && m.detailPage == nil {
+			// Check if we have a selected message in the topic page
+			if m.topicPage != nil && m.topicPage.selectedMessage != nil {
+				detailPage := NewDetailPage(m.topicPage.topicName, *m.topicPage.selectedMessage)
+				m.detailPage = &detailPage
+			}
+		}
 		// Clean up detail page when leaving
 		if m.currentPage != detailPage && m.detailPage != nil {
 			m.detailPage = nil
@@ -164,18 +172,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.topicPage = updatedTopicPage
 			}
 			cmds = append(cmds, cmd)
-		}
-		
-	case detailPage:
-		// Handle navigation to detail page from topic page
-		if msg, ok := msg.(pageChangeMsg); ok && page(msg) == detailPage {
-			// Check if we have a selected message in the topic page
-			if m.topicPage != nil && m.topicPage.selectedMessage != nil {
-				detailPage := NewDetailPage(m.topicPage.topicName, *m.topicPage.selectedMessage)
-				m.detailPage = &detailPage
+			
+			// Check if we need to navigate to detail page
+			if pageMsg, ok := msg.(pageChangeMsg); ok && page(pageMsg) == detailPage {
+				// Initialize detail page with selected message
+				if m.topicPage.selectedMessage != nil {
+					detailPageModel := NewDetailPage(m.topicPage.topicName, *m.topicPage.selectedMessage)
+					m.detailPage = &detailPageModel
+					m.currentPage = detailPage
+				}
 			}
 		}
 		
+	case detailPage:
 		if m.detailPage != nil {
 			var cmd tea.Cmd
 			detailModel, cmd := m.detailPage.Update(msg)
