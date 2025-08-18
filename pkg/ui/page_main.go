@@ -43,6 +43,7 @@ type MainPageModel struct {
 	height        int
 	loading       bool
 	searchMode    bool
+	allItems      []list.Item // Store all items for filtering
 	err           error
 }
 
@@ -90,6 +91,7 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 		lastUpdate:    time.Now(),
 		statusMessage: "Welcome to Kafui",
 		searchMode:    false,
+		allItems:      []list.Item{},
 	}
 }
 
@@ -118,20 +120,20 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "/":
-			if !m.searchMode {
-				m.searchMode = true
-				m.statusMessage = "Search mode: Type to filter topics"
-				cmds = append(cmds, m.searchBar.Focus())
-				return m, tea.Batch(cmds...)
-			}
+			// Focus search bar
+			m.searchMode = true
+			m.statusMessage = "Search mode: Type to filter topics"
+			cmds = append(cmds, m.searchBar.Focus())
+			return m, tea.Batch(cmds...)
 		case "esc":
+			// If search bar is focused, blur it and return focus to list
 			if m.searchMode {
 				m.searchMode = false
 				m.searchBar.Blur()
 				m.searchBar.SetValue("")
-				m.statusMessage = "Search cancelled"
 				// Reset the topic list to show all items
-				m.topicList.ResetFilter()
+				m.topicList.SetItems(m.allItems)
+				m.statusMessage = "Search cancelled"
 				return m, nil
 			}
 		case "enter":
@@ -142,7 +144,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, func() tea.Msg {
 					return searchTopicsMsg(query)
 				}
-			} else if m.topicList.SelectedItem() != nil {
+			} else if m.topicList.SelectedItem() != nil && !m.searchMode {
 				// Let the main UI model handle navigation to topic page
 				return m, func() tea.Msg {
 					return pageChangeMsg(topicPage)
@@ -178,6 +180,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		items := []list.Item(msg)
 		m.topicList.SetItems(items)
+		m.allItems = items // Store all items for filtering
 		m.statusMessage = fmt.Sprintf("Loaded %d topics", len(items))
 		return m, tea.Batch(
 			m.spinner.Tick,
@@ -207,10 +210,9 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMessage = fmt.Sprintf("Searching for: %s", query)
 		
 		// Filter the topic list
-		allItems := m.topicList.Items()
 		filteredItems := []list.Item{}
 		
-		for _, item := range allItems {
+		for _, item := range m.allItems {
 			if topicItem, ok := item.(topicItem); ok {
 				// Simple case-insensitive search
 				if strings.Contains(strings.ToLower(topicItem.name), strings.ToLower(query)) {
@@ -234,7 +236,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clearSearchMsg:
 		// Clear search and reset topic list
-		m.topicList.ResetFilter()
+		m.topicList.SetItems(m.allItems)
 		m.searchBar.SetResultCount(0)
 		m.searchMode = false
 		m.searchBar.Blur()
