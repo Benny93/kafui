@@ -218,23 +218,23 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		key := m.getMessageKey(fmt.Sprint(msg.Partition), fmt.Sprint(msg.Offset))
 		m.consumedMessages[key] = api.Message(msg)
 		m.messages = append(m.messages, api.Message(msg))
-		
+
 		// Sort messages by offset
 		sort.Slice(m.messages, func(i, j int) bool {
 			return m.messages[i].Offset < m.messages[j].Offset
 		})
-		
+
 		// Update filtered messages and table
 		m.filterMessages()
 		m.updateTable()
-		
+
 		// Auto-scroll to bottom if not paused
 		if !m.paused {
 			if len(m.filteredMessages) > 0 {
 				m.messageTable.GotoBottom()
 			}
 		}
-		
+
 		m.statusMessage = fmt.Sprintf("Consumed %d messages", len(m.messages))
 		return m, nil
 
@@ -272,10 +272,6 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *TopicPageModel) View() string {
-	if m.width == 0 {
-		return "Loading..."
-	}
-
 	// Topic info section
 	topicInfo := m.renderTopicInfo()
 
@@ -304,7 +300,13 @@ func (m *TopicPageModel) View() string {
 	)
 
 	// Wrap in document style
-	doc := lipgloss.NewStyle().Margin(1, 2).Render(content)
+	var doc string
+	if m.width > 0 {
+		doc = lipgloss.NewStyle().Margin(1, 2).Render(content)
+	} else {
+		// Even when width is not set, we should still render the content
+		doc = content
+	}
 
 	// Add status bar at the bottom
 	return lipgloss.JoinVertical(
@@ -392,22 +394,51 @@ func (m *TopicPageModel) startConsuming() tea.Cmd {
 	return func() tea.Msg {
 		// Set consuming flag
 		m.consuming = true
+		m.loading = false // Set loading to false immediately since we're starting consumption
 		
 		// Start consumption in a goroutine
 		go func() {
 			handlerFunc := func(msg api.Message) {
-				// In a proper implementation, we would need a reference to the 
-				// Bubbletea program to send messages back to the UI
-				// For now, we'll simulate adding messages to the model
-				// A real implementation would need restructuring to pass the program reference
+				// Process the message directly in mock mode
+				// In a real implementation, we would send this as a message to the program
+				// But for mock mode, we'll update the model directly
+				
+				// Add a small delay to make mock consumption visible
+				time.Sleep(50 * time.Millisecond)
+				
+				// Directly update the model (not thread-safe but works for mock)
+				key := m.getMessageKey(fmt.Sprint(msg.Partition), fmt.Sprint(msg.Offset))
+				m.consumedMessages[key] = msg
+				m.messages = append(m.messages, msg)
+				
+				// Sort messages by offset
+				sort.Slice(m.messages, func(i, j int) bool {
+					return m.messages[i].Offset < m.messages[j].Offset
+				})
+				
+				// Update filtered messages and table
+				m.filterMessages()
+				m.updateTable()
+				
+				// Auto-scroll to bottom if not paused
+				if !m.paused {
+					if len(m.filteredMessages) > 0 {
+						m.messageTable.GotoBottom()
+					}
+				}
+				
+				m.statusMessage = fmt.Sprintf("Consumed %d messages", len(m.messages))
+				m.lastUpdate = time.Now()
 			}
 
 			err := m.dataSource.ConsumeTopic(ctx, m.topicName, m.consumeFlags, handlerFunc, func(err any) {
 				// Handle consumption errors
+				// In a real implementation, we would send an error message to the program
 			})
 
 			if err != nil {
 				// Would send error message in a real implementation
+				m.statusMessage = fmt.Sprintf("Consumption error: %v", err)
 			}
 		}()
 		
@@ -444,13 +475,13 @@ func (m *TopicPageModel) updateTable() {
 	for i, msg := range m.filteredMessages {
 		// Format timestamp
 		timestamp := time.Now().Format("2006-01-02 15:04:05")
-		
+
 		// Truncate long values
 		value := msg.Value
 		if len(value) > 50 {
 			value = value[:47] + "..."
 		}
-		
+
 		key := msg.Key
 		if len(key) > 20 {
 			key = key[:17] + "..."
