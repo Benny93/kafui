@@ -118,11 +118,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if we need to navigate to topic page
 		if m.mainPage.topicList.SelectedItem() != nil {
 			if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
-				m.currentPage = topicPage
-				topic := m.mainPage.topicList.SelectedItem().(topicItem)
-				tp := NewTopicPage(m.dataSource, topic.name, topic.topic)
-				m.topicPage = &tp
-				cmds = append(cmds, m.topicPage.Init())
+				// Check what type of resource is currently selected
+				selectedItem := m.mainPage.topicList.SelectedItem()
+				
+				// Try to cast to topicItem first (legacy compatibility)
+				if topic, ok := selectedItem.(topicItem); ok {
+					m.currentPage = topicPage
+					tp := NewTopicPage(m.dataSource, topic.name, topic.topic)
+					m.topicPage = &tp
+					cmds = append(cmds, m.topicPage.Init())
+				} else if resourceItem, ok := selectedItem.(resourceListItem); ok {
+					// Handle resourceListItem
+					// For now, only navigate to topic page if it's a topic resource
+					// In the future, we might want to handle other resource types differently
+					if m.mainPage.currentResource.GetType() == TopicResourceType {
+						// Extract topic information from resource item
+						// This is a simplified approach - in a real implementation, 
+						// we would need to properly map resource items to topics
+						m.currentPage = topicPage
+						// Create a dummy topic for now
+						topic := api.Topic{
+							NumPartitions: 1,
+							ReplicationFactor: 1,
+							ReplicaAssignment: make(map[int32][]int32),
+							ConfigEntries: make(map[string]*string),
+						}
+						tp := NewTopicPage(m.dataSource, resourceItem.resourceItem.GetID(), topic)
+						m.topicPage = &tp
+						cmds = append(cmds, m.topicPage.Init())
+					}
+				}
 			}
 		}
 		

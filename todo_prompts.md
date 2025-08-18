@@ -121,23 +121,15 @@ Required Features:
    - Schema resources
    - Custom resource types
 
-2. Resource Operations
-   - Resource creation
-   - Resource deletion
-   - Resource updates
-   - Batch operations
-
-3. User Interface
-   - Resource tree view
-   - Resource details panel
-   - Action menus
-   - Status indicators
 
 4. Integration
    - Data source connections
    - Error handling
    - Progress feedback
    - State persistence
+
+The main page should allow the user to use the search bar to switch between resouces and the table of the mainpage should display the current resouce (for example list of topics for the topic resource)
+Similar to the legacy implementation in pkg\kafui\resource_topic.go
 
 Implement this as a modular system that can be integrated into different pages while maintaining the Bubbletea architecture.
 ```
