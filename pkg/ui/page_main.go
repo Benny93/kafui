@@ -33,18 +33,20 @@ var (
 )
 
 type MainPageModel struct {
-	dataSource    api.KafkaDataSource
-	topicList     list.Model
-	searchBar     components.SearchBarModel
-	spinner       spinner.Model
-	statusMessage string
-	lastUpdate    time.Time
-	width         int
-	height        int
-	loading       bool
-	searchMode    bool
-	allItems      []list.Item // Store all items for filtering
-	err           error
+	dataSource      api.KafkaDataSource
+	topicList       list.Model
+	searchBar       components.SearchBarModel
+	spinner         spinner.Model
+	statusMessage   string
+	lastUpdate      time.Time
+	width           int
+	height          int
+	loading         bool
+	searchMode      bool
+	allItems        []list.Item // Store all items for filtering
+	resourceManager *ResourceManager
+	currentResource Resource
+	err             error
 }
 
 func NewMainPage(ds api.KafkaDataSource) MainPageModel {
@@ -67,6 +69,10 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 	topicList.FilterInput.Prompt = "search: "
 	topicList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(highlightColor)
 
+	// Initialize resource manager
+	resourceManager := NewResourceManager(ds)
+	currentResource := resourceManager.GetResource(TopicResourceType)
+
 	// Initialize search bar
 	searchBar := components.NewSearchBar(
 		components.WithPlaceholder("Press / to search topics..."),
@@ -84,14 +90,16 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	return MainPageModel{
-		dataSource:    ds,
-		topicList:     topicList,
-		searchBar:     searchBar,
-		spinner:       sp,
-		lastUpdate:    time.Now(),
-		statusMessage: "Welcome to Kafui",
-		searchMode:    false,
-		allItems:      []list.Item{},
+		dataSource:      ds,
+		topicList:       topicList,
+		searchBar:       searchBar,
+		spinner:         sp,
+		lastUpdate:      time.Now(),
+		statusMessage:   "Welcome to Kafui",
+		searchMode:      false,
+		allItems:        []list.Item{},
+		resourceManager: resourceManager,
+		currentResource: currentResource,
 	}
 }
 
@@ -138,11 +146,40 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			if m.searchMode && m.searchBar.Value() != "" {
-				// Add search to history and trigger search
-				query := m.searchBar.Value()
-				m.searchBar.SetValue("")
-				return m, func() tea.Msg {
-					return searchTopicsMsg(query)
+				// Check if the search text matches a resource type
+				searchText := strings.ToLower(m.searchBar.Value())
+				switch searchText {
+				case "topics", "topic":
+					m.switchToResource(TopicResourceType)
+					m.searchMode = false
+					m.searchBar.Blur()
+					m.searchBar.SetValue("")
+					return m, nil
+				case "consumers", "consumer", "groups", "consumer-groups":
+					m.switchToResource(ConsumerGroupResourceType)
+					m.searchMode = false
+					m.searchBar.Blur()
+					m.searchBar.SetValue("")
+					return m, nil
+				case "schemas", "schema":
+					m.switchToResource(SchemaResourceType)
+					m.searchMode = false
+					m.searchBar.Blur()
+					m.searchBar.SetValue("")
+					return m, nil
+				case "contexts", "context":
+					m.switchToResource(ContextResourceType)
+					m.searchMode = false
+					m.searchBar.Blur()
+					m.searchBar.SetValue("")
+					return m, nil
+				default:
+					// Add search to history and trigger search
+					query := m.searchBar.Value()
+					m.searchBar.SetValue("")
+					return m, func() tea.Msg {
+						return searchTopicsMsg(query)
+					}
 				}
 			} else if m.topicList.SelectedItem() != nil && !m.searchMode {
 				// Let the main UI model handle navigation to topic page
@@ -242,6 +279,10 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.searchBar.Blur()
 		m.statusMessage = "Search cleared"
 		return m, nil
+	case switchResourceMsg:
+		// Switch to a different resource type
+		m.switchToResource(ResourceType(msg))
+		return m, nil
 	}
 
 	return m, tea.Batch(cmds...)
@@ -282,9 +323,44 @@ func (m *MainPageModel) View() string {
 	)
 }
 
+// switchToResource switches the current view to a different resource type
+func (m *MainPageModel) switchToResource(resourceType ResourceType) {
+	m.currentResource = m.resourceManager.GetResource(resourceType)
+	m.topicList.Title = m.currentResource.GetName()
+	
+	// Load data for the new resource
+	items, err := m.currentResource.GetData()
+	if err != nil {
+		m.statusMessage = fmt.Sprintf("Error loading %s: %v", m.currentResource.GetName(), err)
+		return
+	}
+	
+	// Convert resource items to list items
+	listItems := make([]list.Item, 0, len(items))
+	for _, item := range items {
+		listItems = append(listItems, resourceListItem{
+			resourceItem: item,
+		})
+	}
+	
+	m.topicList.SetItems(listItems)
+	m.allItems = listItems
+	m.statusMessage = fmt.Sprintf("Showing %d %s", len(listItems), m.currentResource.GetName())
+}
+
+// resourceListItem wraps a ResourceItem to implement list.Item interface
+type resourceListItem struct {
+	resourceItem ResourceItem
+}
+
+func (r resourceListItem) FilterValue() string {
+	return r.resourceItem.GetID()
+}
+
 // Custom message types
 type searchTopicsMsg string
 type clearSearchMsg struct{}
+type switchResourceMsg ResourceType
 
 func (m MainPageModel) updateTimer() tea.Msg {
 	time.Sleep(5 * time.Second)
