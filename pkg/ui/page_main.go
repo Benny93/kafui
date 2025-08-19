@@ -16,78 +16,12 @@ import (
 )
 
 var (
-	// Colors
-	subtle    = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
-	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
-	info      = lipgloss.AdaptiveColor{Light: "#4A90E2", Dark: "#4A90E2"}
-	warning   = lipgloss.AdaptiveColor{Light: "#F5A623", Dark: "#F5A623"}
-
-	// Border styles
-	roundedBorder = lipgloss.Border{
-		Top:         "",
-		Bottom:      "",
-		Left:        "",
-		Right:       "",
-		TopLeft:     "",
-		TopRight:    "",
-		BottomLeft:  "",
-		BottomRight: "",
-	}
-
-	// Header styles
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(highlight).
-			Padding(0, 1).
-			MarginBottom(1)
-
-	// Main layout styles
-	layoutStyle = lipgloss.NewStyle().
-			Padding(1, 2)
-
-	// Content panel styles
-	mainPanelStyle = lipgloss.NewStyle().
-			BorderStyle(roundedBorder).
-			BorderForeground(subtle).
-			Padding(1, 1)
-
-	sidebarPanelStyle = lipgloss.NewStyle().
-				BorderStyle(roundedBorder).
-				BorderForeground(subtle).
-				Padding(1, 2)
-
 	// Main page search bar style (different from global)
 	mainPageSearchBarStyle = lipgloss.NewStyle().
-			BorderStyle(roundedBorder).
-			BorderForeground(info).
+			BorderStyle(RoundedBorder).
+			BorderForeground(Info).
 			Padding(0, 1).
 			MarginBottom(1)
-
-	// Footer styles
-	footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(subtle).
-			Padding(0, 1)
-
-	// Text styles
-	subtitleStyle = lipgloss.NewStyle().
-			Foreground(special).
-			Bold(true).
-			MarginBottom(1)
-
-	infoStyle = lipgloss.NewStyle().
-			Foreground(subtle).
-			Italic(true)
-
-	// Resource type indicator
-	resourceTypeStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFFFFF")).
-				Background(info).
-				Bold(true).
-				Padding(0, 1).
-				MarginRight(1)
 )
 
 type MainPageModel struct {
@@ -118,8 +52,8 @@ func (m MainPageModel) View() string {
 	contentHeight := m.height - 8              // Account for header and footer (removed status bar)
 
 	// Header section
-	resourceIndicator := resourceTypeStyle.Render(strings.ToUpper(string(m.currentResource.GetType())))
-	header := headerStyle.
+	resourceIndicator := ResourceTypeStyle.Render(strings.ToUpper(m.currentResource.GetType().String()))
+	header := HeaderStyle.
 		Width(m.width).
 		Render(fmt.Sprintf("%sKafui - Kafka UI", resourceIndicator))
 
@@ -128,7 +62,7 @@ func (m MainPageModel) View() string {
 		Width(contentWidth).
 		Render(m.searchBar.View())
 
-	listSection := mainPanelStyle.
+	listSection := MainPanelStyle.
 		Width(contentWidth).
 		Height(contentHeight - 3). // Account for search bar
 		Render(m.topicList.View())
@@ -142,18 +76,18 @@ func (m MainPageModel) View() string {
 	// Sidebar with context information
 	sidebarContent := lipgloss.JoinVertical(
 		lipgloss.Left,
-		titleStyle.Render("CONTEXT"),
-		infoStyle.Render(m.dataSource.GetContext()),
+		TitleStyle.Render("CONTEXT"),
+		InfoStyle.Render(m.dataSource.GetContext()),
 		lipgloss.NewStyle().MarginTop(2).Render(""),
-		subtitleStyle.Render("RESOURCES"),
+		SubtitleStyle.Render("RESOURCES"),
 		lipgloss.NewStyle().MarginBottom(1).Render("Press to switch:"),
 		m.renderResourceButtons(),
 		lipgloss.NewStyle().MarginTop(2).Render(""),
-		subtitleStyle.Render("SHORTCUTS"),
+		SubtitleStyle.Render("SHORTCUTS"),
 		m.renderShortcuts(),
 	)
 
-	sidebar := sidebarPanelStyle.
+	sidebar := SidebarPanelStyle.
 		Width(sidebarWidth).
 		Height(contentHeight).
 		Render(sidebarContent)
@@ -167,13 +101,13 @@ func (m MainPageModel) View() string {
 	)
 
 	// Footer with key bindings
-	footer := footerStyle.Width(m.width).Render(m.renderFooter())
+	footer := FooterStyle.Width(m.width).Render(m.renderFooter())
 
 	// Combine all sections
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		layoutStyle.Render(body),
+		LayoutStyle.Render(body),
 		footer,
 	)
 }
@@ -192,10 +126,10 @@ func (m MainPageModel) renderResourceButtons() string {
 
 	buttons := make([]string, len(resources))
 	for i, res := range resources {
-		style := infoStyle
+		style := InfoStyle
 		if m.currentResource.GetType() == res.typ {
 			style = lipgloss.NewStyle().
-				Foreground(special).
+				Foreground(Special).
 				Bold(true)
 		}
 		
@@ -331,9 +265,9 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 	topicList.SetShowHelp(true)
 	topicList.SetFilteringEnabled(false) // We'll handle filtering ourselves
 	topicList.SetShowFilter(false)
-	topicList.Styles.Title = titleStyle
+	topicList.Styles.Title = TitleStyle
 	topicList.FilterInput.Prompt = "search: "
-	topicList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(highlight)
+	topicList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(Highlight)
 
 	// Initialize resource manager
 	resourceManager := NewResourceManager(ds)

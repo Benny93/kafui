@@ -17,49 +17,10 @@ import (
 )
 
 var (
-	topicInfoStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(1, 2)
-
-	messageTableStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-
-	messageListStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-
-	controlPanelStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-
-	statusBarStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.Color("#3c3c3c")).
-			Padding(0, 1)
-
+	// Topic page specific styles
 	selectedMessageStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("205")).
-				Foreground(lipgloss.Color("0"))
-
-	// New styles for the improved layout
-	mainContentStyle = lipgloss.NewStyle().
-				Padding(0, 1)
-
-	topicPageSidebarStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(1, 2).
-				Width(30) // Fixed width for sidebar
-
-	helpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.Color("#3c3c3c")).
-			Padding(0, 1)
+		Background(lipgloss.Color("205")).
+		Foreground(lipgloss.Color("0"))
 )
 
 type TopicPageModel struct {
@@ -105,7 +66,7 @@ func NewTopicPage(ds api.KafkaDataSource, topicName string, topicDetails api.Top
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(Subtle).
 		BorderBottom(true).
 		Bold(true)
 	s.Selected = selectedMessageStyle
@@ -152,10 +113,12 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Adjust table height based on window size, accounting for help bar
-		if msg.Height > 10 {
-			m.messageTable.SetHeight(msg.Height - 12) // Leave space for controls, help, etc.
-		}
+
+		// Calculate available space for content
+		contentHeight := msg.Height - 8 // Account for header and footer
+
+		// Update table dimensions
+		m.messageTable.SetHeight(contentHeight - 6) // Account for controls and search
 		return m, nil
 
 	case tea.KeyMsg:
@@ -288,81 +251,90 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *TopicPageModel) View() string {
-	// Controls section
-	controls := m.renderControls()
 
-	// Messages section
-	messages := m.renderMessages()
+	// Calculate layout dimensions
+	sidebarWidth := 35
+	contentWidth := m.width - sidebarWidth - 6 // Account for padding and borders
+	contentHeight := m.height - 8              // Account for header and footer
 
-	// Search input (if in search mode)
-	var searchView string
+	// Header section
+	resourceIndicator := ResourceTypeStyle.Render("TOPIC")
+	header := HeaderStyle.
+		Width(m.width).
+		Render(fmt.Sprintf("%sKafui - Topic: %s", resourceIndicator, m.topicName))
+
+	// Main content area with controls, messages, and search
+	controlsSection := MainPanelStyle.
+		Width(contentWidth).
+		Render(m.renderControls())
+
+	messagesSection := MainPanelStyle.
+		Width(contentWidth).
+		Height(contentHeight - 6). // Account for controls and search
+		Render(m.renderMessages())
+
+	var searchSection string
 	if m.searchMode {
-		searchView = m.searchInput.View()
+		searchSection = MainPanelStyle.
+			Width(contentWidth).
+			Render(m.searchInput.View())
 	}
 
-	// Topic info section (will be in sidebar)
-	topicInfo := m.renderTopicInfo()
+	// Combine main content sections
+	var mainContent string
+	if m.searchMode {
+		mainContent = lipgloss.JoinVertical(
+			lipgloss.Left,
+			controlsSection,
+			messagesSection,
+			searchSection,
+		)
+	} else {
+		mainContent = lipgloss.JoinVertical(
+			lipgloss.Left,
+			controlsSection,
+			messagesSection,
+		)
+	}
 
-	// Combine main content (messages and controls)
-	mainContent := lipgloss.JoinVertical(
+	// Sidebar with topic information
+	sidebarContent := lipgloss.JoinVertical(
 		lipgloss.Left,
-		controls,
-		messages,
-		searchView,
+		TitleStyle.Render("TOPIC INFO"),
+		m.renderTopicInfo(),
+		lipgloss.NewStyle().MarginTop(2).Render(""),
+		SubtitleStyle.Render("SHORTCUTS"),
+		m.renderShortcuts(),
 	)
 
-	// Create layout with main content and sidebar
-	var layout string
-	if m.width > 0 {
-		// Calculate widths for main content and sidebar
-		sidebarWidth := 30
-		if sidebarWidth > m.width/3 {
-			sidebarWidth = m.width / 3
-		}
-		mainWidth := m.width - sidebarWidth - 4 // Account for margins and borders
+	sidebar := SidebarPanelStyle.
+		Width(sidebarWidth).
+		Height(contentHeight).
+		Render(sidebarContent)
 
-		// Set widths
-		topicPageSidebarStyle = topicPageSidebarStyle.Width(sidebarWidth)
-		mainContentStyle = mainContentStyle.Width(mainWidth)
+	// Combine main content and sidebar
+	body := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		mainContent,
+		lipgloss.NewStyle().Width(2).Render(""), // Spacer
+		sidebar,
+	)
 
-		// Create the layout with main content on left and sidebar on right
-		layout = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			mainContentStyle.Render(mainContent),
-			topicPageSidebarStyle.Render(topicInfo),
-		)
-	} else {
-		// Fallback layout when width is not set
-		layout = lipgloss.JoinVertical(
-			lipgloss.Left,
-			mainContent,
-			topicInfo,
-		)
-	}
+	// Footer with key bindings
+	footer := FooterStyle.Width(m.width).Render(m.renderFooter())
 
-	// Help footer with key bindings
-	helpText := m.renderHelp()
-	helpBar := helpStyle.Render(helpText)
-
-	// Wrap in document style
-	var doc string
-	if m.width > 0 {
-		doc = lipgloss.NewStyle().Margin(1, 2).Render(layout)
-	} else {
-		doc = layout
-	}
-
-	// Add help bar at the bottom
+	// Combine all sections
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		doc,
-		helpBar,
+		header,
+		LayoutStyle.Render(body),
+		footer,
 	)
 }
 
 func (m *TopicPageModel) renderTopicInfo() string {
 	info := fmt.Sprintf(
-		"TOPIC DETAILS\n\nName: %s\nPartitions: %d\nReplication Factor: %d\nMessages: %d",
+		"Name: %s\nPartitions: %d\nReplication Factor: %d\nMessages: %d",
 		m.topicName,
 		m.topicDetails.NumPartitions,
 		m.topicDetails.ReplicationFactor,
@@ -382,18 +354,18 @@ func (m *TopicPageModel) renderTopicInfo() string {
 		info += strings.Join(configLines, "\n")
 	}
 
-	return info
+	return InfoStyle.Render(info)
 }
 
 func (m *TopicPageModel) renderControls() string {
 	controls := fmt.Sprintf(
-		"CONSUMPTION CONTROLS\n\nFormat: %s | Partition: All | Follow: %t | Paused: %t",
+		"Format: %s | Partition: All | Follow: %t | Paused: %t",
 		"JSON", // Default format
 		m.consumeFlags.Follow,
 		m.paused,
 	)
 
-	return controls
+	return InfoStyle.Render(controls)
 }
 
 func (m *TopicPageModel) renderMessages() string {
@@ -419,31 +391,63 @@ func (m *TopicPageModel) renderStatusBar() string {
 		status = fmt.Sprintf("Error: %v", m.err)
 	}
 
-	return statusBarStyle.Render(status)
+	return FooterStyle.Render(status)
 }
 
-func (m *TopicPageModel) renderHelp() string {
-	// Define key bindings
-	keyBindings := []struct {
-		key  string
-		desc string
-	}{
-		{"↑/↓", "Navigate messages"},
-		{"Enter", "View message details"},
-		{"Space", "Pause/resume consumption"},
-		{"/", "Search messages"},
-		{"Esc", "Exit search/clear selection"},
-		{"q/Esc", "Back to topics"},
-		{"Ctrl+C", "Quit"},
+func (m *TopicPageModel) renderShortcuts() string {
+	shortcuts := []string{
+		"↑/↓   Navigate messages",
+		"Enter   View details",
+		"Space   Pause/resume",
+		"/       Search messages",
+		"Esc     Exit search",
+		"q/Esc   Back to topics",
 	}
 
-	// Format help text
-	helpParts := make([]string, len(keyBindings))
-	for i, binding := range keyBindings {
-		helpParts[i] = fmt.Sprintf("%s: %s", binding.key, binding.desc)
+	return lipgloss.JoinVertical(lipgloss.Left, shortcuts...)
+}
+
+func (m *TopicPageModel) renderFooter() string {
+	// Left side: Selection information
+	selected := "None"
+	if len(m.filteredMessages) > 0 {
+		cursor := m.messageTable.Cursor()
+		if cursor >= 0 && cursor < len(m.filteredMessages) {
+			selected = fmt.Sprintf("Offset: %d", m.filteredMessages[cursor].Offset)
+		}
+	}
+	leftInfo := fmt.Sprintf("Selected: %s  •  %d messages total", selected, len(m.messages))
+
+	// Right side: Status information
+	rightInfo := fmt.Sprintf("%s %s  •  Last update: %s",
+		m.spinner.View(),
+		m.statusMessage,
+		m.lastUpdate.Format("15:04:05"),
+	)
+
+	// Calculate available width for each side
+	totalWidth := m.width - 4 // Account for padding
+	leftWidth := len(leftInfo)
+	rightWidth := len(rightInfo)
+
+	// If both fit, use them with proper spacing
+	if leftWidth+rightWidth+3 <= totalWidth {
+		spacer := strings.Repeat(" ", totalWidth-leftWidth-rightWidth)
+		return leftInfo + spacer + rightInfo
 	}
 
-	return strings.Join(helpParts, " | ")
+	// If they don't fit, truncate the left side
+	maxLeftWidth := totalWidth - rightWidth - 3
+	if maxLeftWidth > 20 {
+		if len(leftInfo) > maxLeftWidth {
+			leftInfo = leftInfo[:maxLeftWidth-3] + "..."
+		}
+		spacer := strings.Repeat(" ", totalWidth-len(leftInfo)-rightWidth)
+		return leftInfo + spacer + rightInfo
+	}
+
+	// Fallback: just show the right info if space is very limited
+	return rightInfo
 }
 
 // Message handling
