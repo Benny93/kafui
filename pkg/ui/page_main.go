@@ -20,17 +20,19 @@ var (
 	subtle    = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
 	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
 	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
+	info      = lipgloss.AdaptiveColor{Light: "#4A90E2", Dark: "#4A90E2"}
+	warning   = lipgloss.AdaptiveColor{Light: "#F5A623", Dark: "#F5A623"}
 
 	// Border styles
 	roundedBorder = lipgloss.Border{
-		Top:         "─",
-		Bottom:      "─",
-		Left:        "│",
-		Right:       "│",
-		TopLeft:     "╭",
-		TopRight:    "╮",
-		BottomLeft:  "╰",
-		BottomRight: "╯",
+		Top:         "",
+		Bottom:      "",
+		Left:        "",
+		Right:       "",
+		TopLeft:     "",
+		TopRight:    "",
+		BottomLeft:  "",
+		BottomRight: "",
 	}
 
 	// Header styles
@@ -38,62 +40,54 @@ var (
 			Bold(true).
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Background(highlight).
-			BorderStyle(roundedBorder).
-			BorderForeground(subtle).
 			Padding(0, 1).
 			MarginBottom(1)
 
-	// Search bar style
-	mainPageSearchBarStyle = lipgloss.NewStyle().
-				BorderStyle(roundedBorder).
-				BorderForeground(subtle).
-				Padding(0, 1).
-				MarginBottom(1)
+	// Main layout styles
+	layoutStyle = lipgloss.NewStyle().
+			Padding(1, 2)
 
-	// Main content styles
-	mainTableStyle = lipgloss.NewStyle().
+	// Content panel styles
+	mainPanelStyle = lipgloss.NewStyle().
 			BorderStyle(roundedBorder).
 			BorderForeground(subtle).
 			Padding(1, 1)
 
-	// Divider style
-	verticalDividerStyle = lipgloss.NewStyle().
-				Foreground(subtle).
-				SetString("│").
-				PaddingLeft(1).
-				PaddingRight(1)
-
-	// Sidebar styles
-	mainPageSidebarStyle = lipgloss.NewStyle().
+	sidebarPanelStyle = lipgloss.NewStyle().
 				BorderStyle(roundedBorder).
 				BorderForeground(subtle).
 				Padding(1, 2)
 
-	mainPageTitleStyle = lipgloss.NewStyle().
-				Foreground(highlight).
-				Bold(true).
-				Align(lipgloss.Center)
-
-	mainPageContextStyle = lipgloss.NewStyle().
-				Foreground(special).
-				PaddingTop(1)
+	// Main page search bar style (different from global)
+	mainPageSearchBarStyle = lipgloss.NewStyle().
+			BorderStyle(roundedBorder).
+			BorderForeground(info).
+			Padding(0, 1).
+			MarginBottom(1)
 
 	// Footer styles
 	footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Background(subtle).
-			BorderStyle(roundedBorder).
-			BorderForeground(subtle).
-			Padding(0, 1).
-			Align(lipgloss.Center)
+			Padding(0, 1)
 
-	// Status bar styles
-	mainStatusStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(subtle).
-			Align(lipgloss.Left).
-			Padding(0, 1) // Using package-level constant
-	_ = highlightColor
+	// Text styles
+	subtitleStyle = lipgloss.NewStyle().
+			Foreground(special).
+			Bold(true).
+			MarginBottom(1)
+
+	infoStyle = lipgloss.NewStyle().
+			Foreground(subtle).
+			Italic(true)
+
+	// Resource type indicator
+	resourceTypeStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(info).
+				Bold(true).
+				Padding(0, 1).
+				MarginRight(1)
 )
 
 type MainPageModel struct {
@@ -107,10 +101,147 @@ type MainPageModel struct {
 	height          int
 	loading         bool
 	searchMode      bool
-	allItems        []list.Item // Store all items for filtering
+	allItems        []list.Item
 	resourceManager *ResourceManager
 	currentResource Resource
 	err             error
+}
+
+func (m MainPageModel) View() string {
+	if m.width == 0 {
+		return "Loading..."
+	}
+
+	// Calculate layout dimensions
+	sidebarWidth := 35
+	contentWidth := m.width - sidebarWidth - 6 // Account for padding and borders
+	contentHeight := m.height - 10             // Account for header, status, and footer
+
+	// Header section
+	resourceIndicator := resourceTypeStyle.Render(strings.ToUpper(string(m.currentResource.GetType())))
+	header := headerStyle.
+		Width(m.width).
+		Render(fmt.Sprintf("%sKafui - Kafka UI", resourceIndicator))
+
+	// Status bar
+	statusText := fmt.Sprintf("%s %s | Last update: %s",
+		m.spinner.View(),
+		m.statusMessage,
+		m.lastUpdate.Format("15:04:05"),
+	)
+	statusBar := statusBarStyle.Width(m.width).Render(statusText)
+
+	// Main content area with search and list
+	searchSection := mainPageSearchBarStyle.
+		Width(contentWidth).
+		Render(m.searchBar.View())
+
+	listSection := mainPanelStyle.
+		Width(contentWidth).
+		Height(contentHeight - 3). // Account for search bar
+		Render(m.topicList.View())
+
+	mainContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		searchSection,
+		listSection,
+	)
+
+	// Sidebar with context information
+	sidebarContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		titleStyle.Render("CONTEXT"),
+		infoStyle.Render(m.dataSource.GetContext()),
+		lipgloss.NewStyle().MarginTop(2).Render(""),
+		subtitleStyle.Render("RESOURCES"),
+		lipgloss.NewStyle().MarginBottom(1).Render("Press to switch:"),
+		m.renderResourceButtons(),
+		lipgloss.NewStyle().MarginTop(2).Render(""),
+		subtitleStyle.Render("SHORTCUTS"),
+		m.renderShortcuts(),
+	)
+
+	sidebar := sidebarPanelStyle.
+		Width(sidebarWidth).
+		Height(contentHeight).
+		Render(sidebarContent)
+
+	// Combine main content and sidebar
+	body := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		mainContent,
+		lipgloss.NewStyle().Width(2).Render(""), // Spacer
+		sidebar,
+	)
+
+	// Footer with key bindings
+	footer := footerStyle.Width(m.width).Render(m.renderFooter())
+
+	// Combine all sections
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		statusBar,
+		layoutStyle.Render(body),
+		footer,
+	)
+}
+
+func (m MainPageModel) renderResourceButtons() string {
+	resources := []struct {
+		name string
+		key  string
+		typ  ResourceType
+	}{
+		{"Topics", "F1", TopicResourceType},
+		{"Consumer Groups", "F2", ConsumerGroupResourceType},
+		{"Schemas", "F3", SchemaResourceType},
+		{"Contexts", "F4", ContextResourceType},
+	}
+
+	buttons := make([]string, len(resources))
+	for i, res := range resources {
+		style := infoStyle
+		if m.currentResource.GetType() == res.typ {
+			style = lipgloss.NewStyle().
+				Foreground(special).
+				Bold(true)
+		}
+		
+		buttons[i] = style.Render(fmt.Sprintf("%s %s", res.key, res.name))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, buttons...)
+}
+
+func (m MainPageModel) renderShortcuts() string {
+	shortcuts := []string{
+		"↑/↓   Navigate items",
+		"Enter   Select item",
+		"/       Search",
+		"Esc     Cancel search",
+		"q       Quit",
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, shortcuts...)
+}
+
+func (m MainPageModel) renderFooter() string {
+	// Show different help text based on current mode
+	if m.searchMode {
+		return "Type to search  Enter: confirm  Esc: cancel"
+	}
+	
+	selected := "None"
+	if item := m.topicList.SelectedItem(); item != nil {
+		if rItem, ok := item.(resourceListItem); ok {
+			selected = rItem.resourceItem.GetID()
+		} else if tItem, ok := item.(topicItem); ok {
+			selected = tItem.name
+		}
+	}
+	
+	return fmt.Sprintf("Selected: %s  %d items total", selected, len(m.allItems))
 }
 
 type customDelegate struct {
@@ -180,7 +311,7 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 	topicList.SetShowFilter(false)
 	topicList.Styles.Title = titleStyle
 	topicList.FilterInput.Prompt = "search: "
-	topicList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(highlightColor)
+	topicList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(highlight)
 
 	// Initialize resource manager
 	resourceManager := NewResourceManager(ds)
@@ -233,9 +364,9 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 		// Calculate available space for content
-		sidebarWidth := 30
-		mainContentWidth := msg.Width - sidebarWidth - 4 // Account for margins and borders
-		contentHeight := msg.Height - 8                  // Account for header, status bar, footer and margins
+		sidebarWidth := 35
+		mainContentWidth := msg.Width - sidebarWidth - 6 // Account for margins and borders
+		contentHeight := msg.Height - 10                 // Account for header, status bar, footer and margins
 
 		// Update list and search bar dimensions
 		m.topicList.SetSize(mainContentWidth-4, contentHeight-3) // Account for borders and margins
@@ -414,112 +545,6 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m MainPageModel) View() string {
-	if m.width == 0 {
-		return "Loading..."
-	}
-
-	// Start building document
-	doc := strings.Builder{}
-
-	// Header with app title
-	header := headerStyle.
-		Width(m.width).
-		Render("Kafui - Kafka UI")
-	doc.WriteString(header + "\n")
-
-	// Status bar with spinner and update time
-	statusText := fmt.Sprintf("%s %s Last update: %s",
-		m.spinner.View(),
-		m.statusMessage,
-		m.lastUpdate.Format("15:04:05"),
-	)
-	statusBar := mainStatusStyle.Width(m.width).Render(statusText)
-	doc.WriteString(statusBar + "\n")
-
-	// Calculate content widths
-	sidebarWidth := 30
-	mainContentWidth := m.width - sidebarWidth - 4 // Account for margins and padding
-
-	// Calculate available content height
-	contentHeight := m.height - 8 // Account for header, status bar, and footer
-
-	// Create main content area
-	searchBar := mainPageSearchBarStyle.
-		Width(mainContentWidth).
-		Render(m.searchBar.View())
-
-	// Table with rounded borders and consistent style
-	tableContent := mainTableStyle.
-		Width(mainContentWidth).
-		Height(contentHeight - 3). // Account for search bar and margins
-		Render(m.topicList.View())
-
-	mainContent := lipgloss.JoinVertical(
-		lipgloss.Left,
-		searchBar,
-		tableContent,
-	)
-
-	// Create sidebar with ASCII art and context info
-	asciiTitle := `
- _        __ 
-| |__    / _|_   _ _ __ 
-| '_ \  | |_| | | | '__|
-| | | | |  _| |_| | |   
-|_| |_| |_|  \__,_|_|   
-`
-	currentContext := m.dataSource.GetContext()
-	sidebarContent := lipgloss.JoinVertical(
-		lipgloss.Left,
-		mainPageTitleStyle.Render(asciiTitle),
-		lipgloss.NewStyle().
-			MarginTop(1).
-			MarginBottom(1).
-			Border(lipgloss.NormalBorder(), true, true, true, true).
-			BorderForeground(subtle).
-			Padding(0, 1).
-			Render("Context Information"),
-		mainPageContextStyle.Render(currentContext),
-	)
-
-	// Create full-height vertical divider
-	divider := verticalDividerStyle.
-		Height(contentHeight).
-		String()
-
-	// Sidebar with consistent style and full height
-	sidebar := mainPageSidebarStyle.
-		Width(sidebarWidth).
-		Height(contentHeight).
-		Render(sidebarContent)
-
-	// Join content, divider, and sidebar horizontally
-	fullContent := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		mainContent,
-		divider,
-		sidebar,
-	)
-
-	// Place main section with proper alignment
-	mainSection := lipgloss.Place(
-		m.width,
-		contentHeight,
-		lipgloss.Left,
-		lipgloss.Top,
-		fullContent,
-	)
-	doc.WriteString(mainSection + "\n")
-
-	// Footer with key bindings
-	helpText := "q: quit • /: search • enter: select • ↑/k: up • ↓/j: down"
-	footer := footerStyle.Width(m.width).Render(helpText)
-	doc.WriteString(footer)
-
-	return doc.String()
-}
-
 // switchToResource switches the current view to a different resource type
 func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 	m.currentResource = m.resourceManager.GetResource(resourceType)
@@ -598,3 +623,4 @@ func (m *MainPageModel) loadTopics() tea.Msg {
 
 	return topicListMsg(items)
 }
+
