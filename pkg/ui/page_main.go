@@ -115,21 +115,13 @@ func (m MainPageModel) View() string {
 	// Calculate layout dimensions
 	sidebarWidth := 35
 	contentWidth := m.width - sidebarWidth - 6 // Account for padding and borders
-	contentHeight := m.height - 10             // Account for header, status, and footer
+	contentHeight := m.height - 8              // Account for header and footer (removed status bar)
 
 	// Header section
 	resourceIndicator := resourceTypeStyle.Render(strings.ToUpper(string(m.currentResource.GetType())))
 	header := headerStyle.
 		Width(m.width).
 		Render(fmt.Sprintf("%sKafui - Kafka UI", resourceIndicator))
-
-	// Status bar
-	statusText := fmt.Sprintf("%s %s | Last update: %s",
-		m.spinner.View(),
-		m.statusMessage,
-		m.lastUpdate.Format("15:04:05"),
-	)
-	statusBar := statusBarStyle.Width(m.width).Render(statusText)
 
 	// Main content area with search and list
 	searchSection := mainPageSearchBarStyle.
@@ -181,7 +173,6 @@ func (m MainPageModel) View() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		statusBar,
 		layoutStyle.Render(body),
 		footer,
 	)
@@ -232,6 +223,7 @@ func (m MainPageModel) renderFooter() string {
 		return "Type to search  Enter: confirm  Esc: cancel"
 	}
 	
+	// Left side: Selection information
 	selected := "None"
 	if item := m.topicList.SelectedItem(); item != nil {
 		if rItem, ok := item.(resourceListItem); ok {
@@ -240,8 +232,38 @@ func (m MainPageModel) renderFooter() string {
 			selected = tItem.name
 		}
 	}
+	leftInfo := fmt.Sprintf("Selected: %s  •  %d items total", selected, len(m.allItems))
 	
-	return fmt.Sprintf("Selected: %s  %d items total", selected, len(m.allItems))
+	// Right side: Status information
+	rightInfo := fmt.Sprintf("%s %s  •  Last update: %s",
+		m.spinner.View(),
+		m.statusMessage,
+		m.lastUpdate.Format("15:04:05"),
+	)
+	
+	// Calculate available width for each side
+	totalWidth := m.width - 4 // Account for padding
+	leftWidth := len(leftInfo)
+	rightWidth := len(rightInfo)
+	
+	// If both fit, use them with proper spacing
+	if leftWidth + rightWidth + 3 <= totalWidth {
+		spacer := strings.Repeat(" ", totalWidth - leftWidth - rightWidth)
+		return leftInfo + spacer + rightInfo
+	}
+	
+	// If they don't fit, truncate the left side
+	maxLeftWidth := totalWidth - rightWidth - 3
+	if maxLeftWidth > 20 {
+		if len(leftInfo) > maxLeftWidth {
+			leftInfo = leftInfo[:maxLeftWidth-3] + "..."
+		}
+		spacer := strings.Repeat(" ", totalWidth - len(leftInfo) - rightWidth)
+		return leftInfo + spacer + rightInfo
+	}
+	
+	// Fallback: just show the right info if space is very limited
+	return rightInfo
 }
 
 type customDelegate struct {
@@ -366,7 +388,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Calculate available space for content
 		sidebarWidth := 35
 		mainContentWidth := msg.Width - sidebarWidth - 6 // Account for margins and borders
-		contentHeight := msg.Height - 10                 // Account for header, status bar, footer and margins
+		contentHeight := msg.Height - 8                  // Account for header, footer and margins (removed status bar)
 
 		// Update list and search bar dimensions
 		m.topicList.SetSize(mainContentWidth-4, contentHeight-3) // Account for borders and margins
