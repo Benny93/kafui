@@ -149,7 +149,12 @@ func (m DetailPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the detail page
 func (m DetailPageModel) View() string {
 	if m.width == 0 {
-		return "Loading..."
+		// Set default dimensions if not initialized
+		m.width = 80
+		m.height = 24
+		m.viewport.Width = m.width - 4
+		m.viewport.Height = m.height - 10
+		m.updateContent()
 	}
 
 	// Create the layout

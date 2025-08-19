@@ -17,9 +17,9 @@ import (
 
 var (
 	// Colors
-	subtle = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
+	subtle    = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
 	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	special = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
+	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 
 	// Border styles
 	roundedBorder = lipgloss.Border{
@@ -35,58 +35,64 @@ var (
 
 	// Header styles
 	headerStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Background(highlight).
-		BorderStyle(roundedBorder).
-		BorderForeground(subtle).
-		Padding(0, 1).
-		MarginBottom(1)
+			Bold(true).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(highlight).
+			BorderStyle(roundedBorder).
+			BorderForeground(subtle).
+			Padding(0, 1).
+			MarginBottom(1)
 
 	// Search bar style
 	mainPageSearchBarStyle = lipgloss.NewStyle().
-		BorderStyle(roundedBorder).
-		BorderForeground(subtle).
-		Padding(0, 1).
-		MarginBottom(1)
+				BorderStyle(roundedBorder).
+				BorderForeground(subtle).
+				Padding(0, 1).
+				MarginBottom(1)
 
 	// Main content styles
 	mainTableStyle = lipgloss.NewStyle().
-		BorderStyle(roundedBorder).
-		BorderForeground(subtle).
-		Padding(1, 1)
+			BorderStyle(roundedBorder).
+			BorderForeground(subtle).
+			Padding(1, 1)
+
+	// Divider style
+	verticalDividerStyle = lipgloss.NewStyle().
+				Foreground(subtle).
+				SetString("│").
+				PaddingLeft(1).
+				PaddingRight(1)
 
 	// Sidebar styles
 	mainPageSidebarStyle = lipgloss.NewStyle().
-		BorderStyle(roundedBorder).
-		BorderForeground(subtle).
-		Padding(1, 2).
-		MarginLeft(1)
+				BorderStyle(roundedBorder).
+				BorderForeground(subtle).
+				Padding(1, 2)
 
 	mainPageTitleStyle = lipgloss.NewStyle().
-		Foreground(highlight).
-		Bold(true).
-		Align(lipgloss.Center)
+				Foreground(highlight).
+				Bold(true).
+				Align(lipgloss.Center)
 
 	mainPageContextStyle = lipgloss.NewStyle().
-		Foreground(special).
-		PaddingTop(1)
+				Foreground(special).
+				PaddingTop(1)
 
 	// Footer styles
 	footerStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Background(subtle).
-		BorderStyle(roundedBorder).
-		BorderForeground(subtle).
-		Padding(0, 1).
-		Align(lipgloss.Center)
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(subtle).
+			BorderStyle(roundedBorder).
+			BorderForeground(subtle).
+			Padding(0, 1).
+			Align(lipgloss.Center)
 
 	// Status bar styles
 	mainStatusStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Background(subtle).
-		Align(lipgloss.Left).
-		Padding(0, 1)	// Using package-level constant
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(subtle).
+			Align(lipgloss.Left).
+			Padding(0, 1) // Using package-level constant
 	_ = highlightColor
 )
 
@@ -435,6 +441,9 @@ func (m MainPageModel) View() string {
 	sidebarWidth := 30
 	mainContentWidth := m.width - sidebarWidth - 4 // Account for margins and padding
 
+	// Calculate available content height
+	contentHeight := m.height - 8 // Account for header, status bar, and footer
+
 	// Create main content area
 	searchBar := mainPageSearchBarStyle.
 		Width(mainContentWidth).
@@ -443,7 +452,7 @@ func (m MainPageModel) View() string {
 	// Table with rounded borders and consistent style
 	tableContent := mainTableStyle.
 		Width(mainContentWidth).
-		Height(m.height - 11). // Account for all other elements
+		Height(contentHeight - 3). // Account for search bar and margins
 		Render(m.topicList.View())
 
 	mainContent := lipgloss.JoinVertical(
@@ -474,23 +483,32 @@ func (m MainPageModel) View() string {
 		mainPageContextStyle.Render(currentContext),
 	)
 
-	// Sidebar with consistent style
+	// Create full-height vertical divider
+	divider := verticalDividerStyle.
+		Height(contentHeight).
+		String()
+
+	// Sidebar with consistent style and full height
 	sidebar := mainPageSidebarStyle.
 		Width(sidebarWidth).
-		Height(m.height - 11).
+		Height(contentHeight).
 		Render(sidebarContent)
+
+	// Join content, divider, and sidebar horizontally
+	fullContent := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		mainContent,
+		divider,
+		sidebar,
+	)
 
 	// Place main section with proper alignment
 	mainSection := lipgloss.Place(
 		m.width,
-		m.height-8,
+		contentHeight,
 		lipgloss.Left,
 		lipgloss.Top,
-		lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			mainContent,
-			sidebar,
-		),
+		fullContent,
 	)
 	doc.WriteString(mainSection + "\n")
 
