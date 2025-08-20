@@ -8,6 +8,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/datasource/mock"
+	"github.com/Benny93/kafui/pkg/ui/components"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
@@ -112,8 +113,16 @@ func TestMainPageModelRenderResourceButtons(t *testing.T) {
 			// Switch to the resource type
 			model.switchToResource(resourceType)
 			
-			// Render resource buttons
-			buttons := model.renderResourceButtons()
+			// Update sidebar with proper configuration
+			model.sidebar.UpdateConfig(components.SidebarConfig{
+				Context:         "test-context",
+				CurrentResource: components.ResourceType(resourceType),
+				ShowResources:   true,
+				ShowShortcuts:   false,
+			})
+			
+			// Render resource buttons using the sidebar component
+			buttons := model.sidebar.RenderResourceButtons()
 			
 			// Use docStyle to render and print
 			doc := strings.Builder{}
@@ -136,8 +145,15 @@ func TestMainPageModelRenderShortcuts(t *testing.T) {
 	// Create main page model
 	model := NewMainPage(mockDS)
 	
-	// Render shortcuts
-	shortcuts := model.renderShortcuts()
+	// Configure sidebar to show shortcuts
+	model.sidebar.UpdateConfig(components.SidebarConfig{
+		Context:       "test-context",
+		ShowResources: false,
+		ShowShortcuts: true,
+	})
+	
+	// Render shortcuts using the sidebar component
+	shortcuts := model.sidebar.RenderShortcuts()
 	
 	// Use docStyle to render and print
 	doc := strings.Builder{}
@@ -226,8 +242,26 @@ func TestMainPageModelRenderFooter(t *testing.T) {
 				model.topicList.Select(0)
 			}
 			
-			// Render footer
-			footer := model.renderFooter()
+			// Update footer configuration
+			selectedItem := "None"
+			if tt.selectedItem != nil {
+				if tItem, ok := tt.selectedItem.(topicItem); ok {
+					selectedItem = tItem.name
+				}
+			}
+			
+			model.footer.UpdateConfig(components.FooterConfig{
+				Width:         tt.width,
+				SearchMode:    tt.searchMode,
+				SelectedItem:  selectedItem,
+				TotalItems:    len(mockItems),
+				StatusMessage: "Test status",
+				LastUpdate:    time.Now(),
+				Spinner:       model.spinner,
+			})
+			
+			// Render footer using the footer component
+			footer := model.footer.Render()
 			
 			// Use docStyle to render and print
 			doc := strings.Builder{}

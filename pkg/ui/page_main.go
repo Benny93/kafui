@@ -39,6 +39,12 @@ type MainPageModel struct {
 	resourceManager *ResourceManager
 	currentResource Resource
 	err             error
+	
+	// Reusable components
+	layout      *components.Layout
+	sidebar     *components.Sidebar
+	footer      *components.Footer
+	mainContent *components.MainContent
 }
 
 func (m MainPageModel) View() string {
@@ -46,159 +52,63 @@ func (m MainPageModel) View() string {
 		return "Loading..."
 	}
 
-	// Calculate layout dimensions
-	sidebarWidth := 35
-	contentWidth := m.width - sidebarWidth - 6 // Account for padding and borders
-	contentHeight := m.height - 8              // Account for header and footer (removed status bar)
+	// Update layout configuration
+	m.layout.UpdateConfig(components.LayoutConfig{
+		Width:        m.width,
+		Height:       m.height,
+		SidebarWidth: 35,
+		ShowSidebar:  true,
+		HeaderTitle:  "Kafui - Kafka UI",
+		ResourceType: strings.ToUpper(m.currentResource.GetType().String()),
+	})
 
-	// Header section
-	resourceIndicator := ResourceTypeStyle.Render(strings.ToUpper(m.currentResource.GetType().String()))
-	header := HeaderStyle.
-		Width(m.width).
-		Render(fmt.Sprintf("%sKafui - Kafka UI", resourceIndicator))
+	// Calculate dimensions
+	contentWidth, contentHeight, _ := m.layout.CalculateDimensions()
 
-	// Main content area with search and list
-	searchSection := mainPageSearchBarStyle.
-		Width(contentWidth).
-		Render(m.searchBar.View())
+	// Update main content
+	m.mainContent.SetDimensions(contentWidth, contentHeight)
+	m.mainContent.SetSearchBar(m.searchBar)
+	m.mainContent.SetList(m.topicList)
+	m.mainContent.SetShowSearch(true)
 
-	listSection := MainPanelStyle.
-		Width(contentWidth).
-		Height(contentHeight - 3). // Account for search bar
-		Render(m.topicList.View())
+	// Update sidebar
+	m.sidebar.UpdateConfig(components.SidebarConfig{
+		Context:         m.dataSource.GetContext(),
+		CurrentResource: components.ResourceType(m.currentResource.GetType()),
+		ShowResources:   true,
+		ShowShortcuts:   true,
+	})
 
-	mainContent := lipgloss.JoinVertical(
-		lipgloss.Left,
-		searchSection,
-		listSection,
-	)
-
-	// Sidebar with context information
-	sidebarContent := lipgloss.JoinVertical(
-		lipgloss.Left,
-		TitleStyle.Render("CONTEXT"),
-		InfoStyle.Render(m.dataSource.GetContext()),
-		lipgloss.NewStyle().MarginTop(2).Render(""),
-		SubtitleStyle.Render("RESOURCES"),
-		lipgloss.NewStyle().MarginBottom(1).Render("Press to switch:"),
-		m.renderResourceButtons(),
-		lipgloss.NewStyle().MarginTop(2).Render(""),
-		SubtitleStyle.Render("SHORTCUTS"),
-		m.renderShortcuts(),
-	)
-
-	sidebar := SidebarPanelStyle.
-		Width(sidebarWidth).
-		Height(contentHeight).
-		Render(sidebarContent)
-
-	// Combine main content and sidebar
-	body := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		mainContent,
-		lipgloss.NewStyle().Width(2).Render(""), // Spacer
-		sidebar,
-	)
-
-	// Footer with key bindings
-	footer := FooterStyle.Width(m.width).Render(m.renderFooter())
-
-	// Combine all sections
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		LayoutStyle.Render(body),
-		footer,
-	)
-}
-
-func (m MainPageModel) renderResourceButtons() string {
-	resources := []struct {
-		name string
-		key  string
-		typ  ResourceType
-	}{
-		{"Topics", "F1", TopicResourceType},
-		{"Consumer Groups", "F2", ConsumerGroupResourceType},
-		{"Schemas", "F3", SchemaResourceType},
-		{"Contexts", "F4", ContextResourceType},
-	}
-
-	buttons := make([]string, len(resources))
-	for i, res := range resources {
-		style := InfoStyle
-		if m.currentResource.GetType() == res.typ {
-			style = lipgloss.NewStyle().
-				Foreground(Special).
-				Bold(true)
-		}
-		
-		buttons[i] = style.Render(fmt.Sprintf("%s %s", res.key, res.name))
-	}
-
-	return lipgloss.JoinVertical(lipgloss.Left, buttons...)
-}
-
-func (m MainPageModel) renderShortcuts() string {
-	shortcuts := []string{
-		"↑/↓   Navigate items",
-		"Enter   Select item",
-		"/       Search",
-		"Esc     Cancel search",
-		"q       Quit",
-	}
-
-	return lipgloss.JoinVertical(lipgloss.Left, shortcuts...)
-}
-
-func (m MainPageModel) renderFooter() string {
-	// Show different help text based on current mode
-	if m.searchMode {
-		return "Type to search  Enter: confirm  Esc: cancel"
-	}
-	
-	// Left side: Selection information
-	selected := "None"
+	// Update footer
+	selectedItem := "None"
 	if item := m.topicList.SelectedItem(); item != nil {
 		if rItem, ok := item.(resourceListItem); ok {
-			selected = rItem.resourceItem.GetID()
+			selectedItem = rItem.resourceItem.GetID()
 		} else if tItem, ok := item.(topicItem); ok {
-			selected = tItem.name
+			selectedItem = tItem.name
 		}
 	}
-	leftInfo := fmt.Sprintf("Selected: %s  •  %d items total", selected, len(m.allItems))
-	
-	// Right side: Status information
-	rightInfo := fmt.Sprintf("%s %s  •  Last update: %s",
-		m.spinner.View(),
-		m.statusMessage,
-		m.lastUpdate.Format("15:04:05"),
+
+	m.footer.UpdateConfig(components.FooterConfig{
+		Width:         m.width,
+		SearchMode:    m.searchMode,
+		SelectedItem:  selectedItem,
+		TotalItems:    len(m.allItems),
+		StatusMessage: m.statusMessage,
+		LastUpdate:    m.lastUpdate,
+		Spinner:       m.spinner,
+	})
+
+	// Render complete layout
+	return m.layout.RenderComplete(
+		m.mainContent.Render(),
+		m.sidebar.Render(),
+		m.footer.Render(),
 	)
-	
-	// Calculate available width for each side
-	totalWidth := m.width - 4 // Account for padding
-	leftWidth := len(leftInfo)
-	rightWidth := len(rightInfo)
-	
-	// If both fit, use them with proper spacing
-	if leftWidth + rightWidth + 3 <= totalWidth {
-		spacer := strings.Repeat(" ", totalWidth - leftWidth - rightWidth)
-		return leftInfo + spacer + rightInfo
-	}
-	
-	// If they don't fit, truncate the left side
-	maxLeftWidth := totalWidth - rightWidth - 3
-	if maxLeftWidth > 20 {
-		if len(leftInfo) > maxLeftWidth {
-			leftInfo = leftInfo[:maxLeftWidth-3] + "..."
-		}
-		spacer := strings.Repeat(" ", totalWidth - len(leftInfo) - rightWidth)
-		return leftInfo + spacer + rightInfo
-	}
-	
-	// Fallback: just show the right info if space is very limited
-	return rightInfo
 }
+
+// Note: renderResourceButtons, renderShortcuts, and renderFooter methods have been
+// moved to reusable components in the components package
 
 type customDelegate struct {
 	styles     list.DefaultItemStyles
@@ -289,6 +199,12 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
+	// Initialize reusable components
+	layout := components.NewLayout(components.LayoutConfig{})
+	sidebar := components.NewSidebar(components.SidebarConfig{})
+	footer := components.NewFooter(components.FooterConfig{})
+	mainContent := components.NewMainContent(components.MainContentConfig{})
+
 	return MainPageModel{
 		dataSource:      ds,
 		topicList:       topicList,
@@ -300,6 +216,10 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 		allItems:        []list.Item{},
 		resourceManager: resourceManager,
 		currentResource: currentResource,
+		layout:          layout,
+		sidebar:         sidebar,
+		footer:          footer,
+		mainContent:     mainContent,
 	}
 }
 
