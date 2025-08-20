@@ -2,7 +2,6 @@ package components
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -56,6 +55,7 @@ type SearchBarModel struct {
 	onClear         func() tea.Msg
 	onResourceSwitch func(resource string) tea.Msg // New callback for resource switching
 	searchSuggestions []string // Suggestions for search mode
+	fuzzyMatcher    *FuzzyMatcher // Fuzzy matching engine
 }
 
 // SearchBarOption is a function that configures a SearchBarModel
@@ -122,6 +122,7 @@ func NewSearchBar(options ...SearchBarOption) SearchBarModel {
 		width:           0,
 		focused:         false,
 		isResourceMode:  false,
+		fuzzyMatcher:    NewFuzzyMatcher(false), // Case-insensitive fuzzy matching
 	}
 
 	// Apply options
@@ -145,6 +146,8 @@ func (sb SearchBarModel) Init() tea.Cmd {
 // Focus focuses the search bar
 func (sb *SearchBarModel) Focus() tea.Cmd {
 	sb.focused = true
+	// Update suggestions when focusing
+	sb.updateDynamicSuggestions()
 	return sb.textInput.Focus()
 }
 
@@ -215,6 +218,15 @@ func (sb *SearchBarModel) EnterResourceMode() {
 	sb.textInput.SetSuggestions(resourceSuggestions)
 }
 
+// GetResourceSuggestions returns all available resource suggestions
+func (sb *SearchBarModel) GetResourceSuggestions() []string {
+	return []string{
+		"topics", "topic", "consumer-groups", "consumers", 
+		"consumer", "groups", "cg", "schemas", "schema", 
+		"contexts", "context", "ctx",
+	}
+}
+
 // EnterSearchMode enters normal search mode
 func (sb *SearchBarModel) EnterSearchMode() {
 	sb.isResourceMode = false
@@ -223,7 +235,11 @@ func (sb *SearchBarModel) EnterSearchMode() {
 	sb.textInput.SetValue("")
 	
 	// Set search suggestions if available
-	sb.textInput.SetSuggestions(sb.searchSuggestions)
+	if sb.focused {
+		sb.updateDynamicSuggestions()
+	} else {
+		sb.textInput.SetSuggestions(sb.searchSuggestions)
+	}
 }
 
 // SetSearchSuggestions updates the suggestions for search mode
@@ -231,7 +247,31 @@ func (sb *SearchBarModel) SetSearchSuggestions(suggestions []string) {
 	sb.searchSuggestions = suggestions
 	// Update suggestions if currently in search mode
 	if !sb.isResourceMode && sb.focused {
-		sb.textInput.SetSuggestions(suggestions)
+		sb.updateDynamicSuggestions()
+	}
+}
+
+// updateDynamicSuggestions updates suggestions based on current input using fuzzy matching
+func (sb *SearchBarModel) updateDynamicSuggestions() {
+	currentValue := sb.textInput.Value()
+	
+	if sb.isResourceMode {
+		// For resource mode, use fuzzy matching on resource suggestions
+		resourceSuggestions := sb.GetResourceSuggestions()
+		if currentValue == "" {
+			sb.textInput.SetSuggestions(resourceSuggestions)
+		} else {
+			fuzzyMatches := sb.fuzzyMatcher.GetMatchedStrings(currentValue, resourceSuggestions, 8)
+			sb.textInput.SetSuggestions(fuzzyMatches)
+		}
+	} else {
+		// For search mode, use fuzzy matching on search suggestions
+		if currentValue == "" {
+			sb.textInput.SetSuggestions(sb.searchSuggestions)
+		} else {
+			fuzzyMatches := sb.fuzzyMatcher.GetMatchedStrings(currentValue, sb.searchSuggestions, 8)
+			sb.textInput.SetSuggestions(fuzzyMatches)
+		}
 	}
 }
 
@@ -332,21 +372,24 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			return sb, nil
 
 		case "tab":
-			// Handle tab completion
+			// Handle tab completion with fuzzy matching
 			if sb.isResourceMode {
-				// Auto-complete resource names
+				// Auto-complete resource names using fuzzy matching
 				currentValue := sb.textInput.Value()
-				resourceSuggestions := []string{
-					"topics", "topic", "consumer-groups", "consumers", 
-					"consumer", "groups", "cg", "schemas", "schema", 
-					"contexts", "context", "ctx",
+				if len(currentValue) > 0 {
+					resourceSuggestions := sb.GetResourceSuggestions()
+					bestMatch := sb.fuzzyMatcher.GetBestMatch(currentValue, resourceSuggestions)
+					if bestMatch != "" {
+						sb.textInput.SetValue(bestMatch)
+					}
 				}
-				
-				// Find the first suggestion that starts with current input
-				for _, suggestion := range resourceSuggestions {
-					if len(currentValue) > 0 && strings.HasPrefix(suggestion, strings.ToLower(currentValue)) {
-						sb.textInput.SetValue(suggestion)
-						break
+			} else {
+				// Auto-complete search terms using fuzzy matching
+				currentValue := sb.textInput.Value()
+				if len(currentValue) > 0 && len(sb.searchSuggestions) > 0 {
+					bestMatch := sb.fuzzyMatcher.GetBestMatch(currentValue, sb.searchSuggestions)
+					if bestMatch != "" {
+						sb.textInput.SetValue(bestMatch)
 					}
 				}
 			}
@@ -356,8 +399,14 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 
 	// Handle text input updates
 	var cmd tea.Cmd
+	oldValue := sb.textInput.Value()
 	sb.textInput, cmd = sb.textInput.Update(msg)
 	cmds = append(cmds, cmd)
+	
+	// Update suggestions dynamically when text changes
+	if sb.focused && sb.textInput.Value() != oldValue {
+		sb.updateDynamicSuggestions()
+	}
 
 	return sb, tea.Batch(cmds...)
 }
