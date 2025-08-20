@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -54,6 +55,7 @@ type SearchBarModel struct {
 	onSearch        func(query string) tea.Msg
 	onClear         func() tea.Msg
 	onResourceSwitch func(resource string) tea.Msg // New callback for resource switching
+	searchSuggestions []string // Suggestions for search mode
 }
 
 // SearchBarOption is a function that configures a SearchBarModel
@@ -94,12 +96,20 @@ func WithOnResourceSwitch(fn func(resource string) tea.Msg) SearchBarOption {
 	}
 }
 
+// WithSearchSuggestions sets the suggestions for search mode
+func WithSearchSuggestions(suggestions []string) SearchBarOption {
+	return func(sb *SearchBarModel) {
+		sb.searchSuggestions = suggestions
+	}
+}
+
 // NewSearchBar creates a new search bar component
 func NewSearchBar(options ...SearchBarOption) SearchBarModel {
 	ti := textinput.New()
 	ti.Placeholder = "Search..."
 	ti.CharLimit = 156
 	ti.Width = 30
+	ti.ShowSuggestions = true // Enable suggestions
 
 	sb := SearchBarModel{
 		textInput:       ti,
@@ -186,6 +196,23 @@ func (sb *SearchBarModel) EnterResourceMode() {
 	sb.searchMode = ResourceSearch
 	sb.textInput.Placeholder = "Enter resource type (topics, consumer-groups, schemas, contexts)..."
 	sb.textInput.SetValue("")
+	
+	// Set up auto-completion suggestions for resource types
+	resourceSuggestions := []string{
+		"topics",
+		"topic",
+		"consumer-groups",
+		"consumers", 
+		"consumer",
+		"groups",
+		"cg",
+		"schemas",
+		"schema",
+		"contexts",
+		"context",
+		"ctx",
+	}
+	sb.textInput.SetSuggestions(resourceSuggestions)
 }
 
 // EnterSearchMode enters normal search mode
@@ -194,6 +221,18 @@ func (sb *SearchBarModel) EnterSearchMode() {
 	sb.searchMode = SimpleSearch
 	sb.textInput.Placeholder = sb.placeholder
 	sb.textInput.SetValue("")
+	
+	// Set search suggestions if available
+	sb.textInput.SetSuggestions(sb.searchSuggestions)
+}
+
+// SetSearchSuggestions updates the suggestions for search mode
+func (sb *SearchBarModel) SetSearchSuggestions(suggestions []string) {
+	sb.searchSuggestions = suggestions
+	// Update suggestions if currently in search mode
+	if !sb.isResourceMode && sb.focused {
+		sb.textInput.SetSuggestions(suggestions)
+	}
 }
 
 // IsResourceMode returns whether the search bar is in resource mode
@@ -241,6 +280,9 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			sb.isResourceMode = false
 			sb.searchMode = SimpleSearch
 			sb.textInput.Placeholder = sb.placeholder
+			
+			// Clear suggestions when exiting
+			sb.textInput.SetSuggestions([]string{})
 
 			// Trigger clear callback if provided
 			if sb.onClear != nil {
@@ -290,9 +332,23 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			return sb, nil
 
 		case "tab":
-			// TODO: Implement completion for resource names
+			// Handle tab completion
 			if sb.isResourceMode {
-				// Could implement auto-completion for resource types
+				// Auto-complete resource names
+				currentValue := sb.textInput.Value()
+				resourceSuggestions := []string{
+					"topics", "topic", "consumer-groups", "consumers", 
+					"consumer", "groups", "cg", "schemas", "schema", 
+					"contexts", "context", "ctx",
+				}
+				
+				// Find the first suggestion that starts with current input
+				for _, suggestion := range resourceSuggestions {
+					if len(currentValue) > 0 && strings.HasPrefix(suggestion, strings.ToLower(currentValue)) {
+						sb.textInput.SetValue(suggestion)
+						break
+					}
+				}
 			}
 			return sb, nil
 		}

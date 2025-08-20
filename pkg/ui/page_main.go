@@ -195,6 +195,7 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 		components.WithOnResourceSwitch(func(resource string) tea.Msg {
 			return switchResourceByNameMsg(resource)
 		}),
+		components.WithSearchSuggestions([]string{}), // Will be populated dynamically
 	)
 
 	// Initialize spinner
@@ -446,10 +447,14 @@ func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 
 	// Convert resource items to list items
 	listItems := make([]list.Item, 0, len(items))
+	searchSuggestions := make([]string, 0, len(items))
+	
 	for _, item := range items {
 		listItems = append(listItems, resourceListItem{
 			resourceItem: item,
 		})
+		// Add item ID to search suggestions
+		searchSuggestions = append(searchSuggestions, item.GetID())
 	}
 
 	// Sort items by ID (name)
@@ -459,8 +464,15 @@ func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 		return item1.resourceItem.GetID() < item2.resourceItem.GetID()
 	})
 
+	// Sort suggestions as well
+	sort.Strings(searchSuggestions)
+
 	m.topicList.SetItems(listItems)
 	m.allItems = listItems
+	
+	// Update search suggestions for the new resource
+	m.searchBar.SetSearchSuggestions(searchSuggestions)
+	
 	m.statusMessage = fmt.Sprintf("Showing %d of %d %s", len(listItems), len(listItems), m.currentResource.GetName())
 }
 
@@ -501,13 +513,20 @@ func (m *MainPageModel) loadTopics() tea.Msg {
 	sort.Strings(topicNames)
 
 	items := make([]list.Item, 0, len(topics))
+	searchSuggestions := make([]string, 0, len(topics))
+	
 	for _, name := range topicNames {
 		topic := topics[name]
 		items = append(items, topicItem{
 			name:  name,
 			topic: topic,
 		})
+		// Add topic name to search suggestions
+		searchSuggestions = append(searchSuggestions, name)
 	}
+
+	// Update search suggestions with topic names
+	m.searchBar.SetSearchSuggestions(searchSuggestions)
 
 	return topicListMsg(items)
 }
