@@ -1,7 +1,6 @@
 package components
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -71,7 +70,7 @@ func (s *Sidebar) RenderContext() string {
 	)
 }
 
-// RenderResourceButtons renders the resource selection buttons
+// RenderResourceButtons renders the current resource indicator
 func (s *Sidebar) RenderResourceButtons() string {
 	if !s.config.ShowResources {
 		return ""
@@ -79,13 +78,12 @@ func (s *Sidebar) RenderResourceButtons() string {
 	
 	resources := []struct {
 		name string
-		key  string
 		typ  ResourceType
 	}{
-		{"Topics", "F1", TopicResourceType},
-		{"Consumer Groups", "F2", ConsumerGroupResourceType},
-		{"Schemas", "F3", SchemaResourceType},
-		{"Contexts", "F4", ContextResourceType},
+		{"Topics", TopicResourceType},
+		{"Consumer Groups", ConsumerGroupResourceType},
+		{"Schemas", SchemaResourceType},
+		{"Contexts", ContextResourceType},
 	}
 
 	buttons := make([]string, len(resources))
@@ -97,13 +95,13 @@ func (s *Sidebar) RenderResourceButtons() string {
 				Bold(true)
 		}
 		
-		buttons[i] = style.Render(fmt.Sprintf("%s %s", res.key, res.name))
+		buttons[i] = style.Render(res.name)
 	}
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		SubtitleStyle.Render("RESOURCES"),
-		lipgloss.NewStyle().MarginBottom(1).Render("Press to switch:"),
+		SubtitleStyle.Render("CURRENT RESOURCE"),
+		lipgloss.NewStyle().MarginBottom(1).Render("Use : to switch"),
 		lipgloss.JoinVertical(lipgloss.Left, buttons...),
 		lipgloss.NewStyle().MarginTop(2).Render(""),
 	)
@@ -118,8 +116,9 @@ func (s *Sidebar) RenderShortcuts() string {
 	shortcuts := []string{
 		"↑/↓   Navigate items",
 		"Enter   Select item",
-		"/       Search",
-		"Esc     Cancel search",
+		"/       Search items",
+		":       Switch resource",
+		"Esc     Cancel/clear",
 		"q       Quit",
 	}
 

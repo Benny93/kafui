@@ -185,12 +185,15 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 
 	// Initialize search bar
 	searchBar := components.NewSearchBar(
-		components.WithPlaceholder("Press / to search topics..."),
+		components.WithPlaceholder("Press / to search, : to switch resource..."),
 		components.WithOnSearch(func(query string) tea.Msg {
 			return searchTopicsMsg(query)
 		}),
 		components.WithOnClear(func() tea.Msg {
 			return clearSearchMsg{}
+		}),
+		components.WithOnResourceSwitch(func(resource string) tea.Msg {
+			return switchResourceByNameMsg(resource)
 		}),
 	)
 
@@ -252,12 +255,25 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// Handle general key presses
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
 			return m, tea.Quit
+		case "q":
+			// Only quit if not in search mode (to allow typing 'q' in search terms)
+			if !m.searchMode {
+				return m, tea.Quit
+			}
 		case "/":
-			// Focus search bar
+			// Focus search bar for normal search
 			m.searchMode = true
-			m.statusMessage = "Search mode: Type to filter topics"
+			m.searchBar.EnterSearchMode()
+			m.statusMessage = "Search mode: Type to filter items"
+			cmds = append(cmds, m.searchBar.Focus())
+			return m, tea.Batch(cmds...)
+		case ":":
+			// Focus search bar for resource switching
+			m.searchMode = true
+			m.searchBar.EnterResourceMode()
+			m.statusMessage = "Resource mode: Type resource name (topics, consumer-groups, schemas, contexts)"
 			cmds = append(cmds, m.searchBar.Focus())
 			return m, tea.Batch(cmds...)
 		case "esc":
@@ -272,43 +288,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "enter":
-			if m.searchMode && m.searchBar.Value() != "" {
-				// Check if the search text matches a resource type
-				searchText := strings.ToLower(m.searchBar.Value())
-				switch searchText {
-				case "topics", "topic":
-					m.switchToResource(TopicResourceType)
-					m.searchMode = false
-					m.searchBar.Blur()
-					m.searchBar.SetValue("")
-					return m, nil
-				case "consumers", "consumer", "groups", "consumer-groups":
-					m.switchToResource(ConsumerGroupResourceType)
-					m.searchMode = false
-					m.searchBar.Blur()
-					m.searchBar.SetValue("")
-					return m, nil
-				case "schemas", "schema":
-					m.switchToResource(SchemaResourceType)
-					m.searchMode = false
-					m.searchBar.Blur()
-					m.searchBar.SetValue("")
-					return m, nil
-				case "contexts", "context":
-					m.switchToResource(ContextResourceType)
-					m.searchMode = false
-					m.searchBar.Blur()
-					m.searchBar.SetValue("")
-					return m, nil
-				default:
-					// Add search to history and trigger search
-					query := m.searchBar.Value()
-					m.searchBar.SetValue("")
-					return m, func() tea.Msg {
-						return searchTopicsMsg(query)
-					}
-				}
-			} else if m.topicList.SelectedItem() != nil && !m.searchMode {
+			if m.topicList.SelectedItem() != nil && !m.searchMode {
 				// Let the main UI model handle navigation to topic page
 				return m, func() tea.Msg {
 					return pageChangeMsg(topicPage)
@@ -416,6 +396,37 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Switch to a different resource type
 		m.switchToResource(ResourceType(msg))
 		return m, nil
+	case switchResourceByNameMsg:
+		// Switch to a resource type by name
+		resourceName := strings.ToLower(string(msg))
+		var resourceType ResourceType
+		var found bool
+		
+		switch resourceName {
+		case "topics", "topic":
+			resourceType = TopicResourceType
+			found = true
+		case "consumer-groups", "consumers", "consumer", "groups", "cg":
+			resourceType = ConsumerGroupResourceType
+			found = true
+		case "schemas", "schema":
+			resourceType = SchemaResourceType
+			found = true
+		case "contexts", "context", "ctx":
+			resourceType = ContextResourceType
+			found = true
+		}
+		
+		if found {
+			m.switchToResource(resourceType)
+			m.searchMode = false
+			m.searchBar.Blur()
+			m.searchBar.SetValue("")
+			m.statusMessage = fmt.Sprintf("Switched to %s", m.currentResource.GetName())
+		} else {
+			m.statusMessage = fmt.Sprintf("Unknown resource type: %s. Try: topics, consumer-groups, schemas, contexts", resourceName)
+		}
+		return m, nil
 	}
 
 	return m, tea.Batch(cmds...)
@@ -466,6 +477,7 @@ func (r resourceListItem) FilterValue() string {
 type searchTopicsMsg string
 type clearSearchMsg struct{}
 type switchResourceMsg ResourceType
+type switchResourceByNameMsg string
 
 func (m MainPageModel) updateTimer() tea.Msg {
 	time.Sleep(5 * time.Second)

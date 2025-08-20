@@ -28,7 +28,7 @@ func TestMainPageModelView(t *testing.T) {
 			expected: []string{
 				"Kafui - Kafka UI",
 				"CONTEXT",
-				"RESOURCES",
+				"CURRENT RESOURCE",
 				"SHORTCUTS",
 				"Selected:",
 				"Last update:",
@@ -41,7 +41,7 @@ func TestMainPageModelView(t *testing.T) {
 			expected: []string{
 				"Kafui - Kafka UI",
 				"CONTEXT",
-				"RESOURCES",
+				"CURRENT RESOURCE",
 			},
 		},
 		{
@@ -129,11 +129,12 @@ func TestMainPageModelRenderResourceButtons(t *testing.T) {
 			doc.WriteString(buttons)
 			fmt.Println(docStyle.Render(doc.String()))
 			
-			// Verify all resource types are present
-			assert.Contains(t, buttons, "F1 Topics")
-			assert.Contains(t, buttons, "F2 Consumer Groups")
-			assert.Contains(t, buttons, "F3 Schemas")
-			assert.Contains(t, buttons, "F4 Contexts")
+			// Verify all resource types are present (without F-keys)
+			assert.Contains(t, buttons, "Topics")
+			assert.Contains(t, buttons, "Consumer Groups")
+			assert.Contains(t, buttons, "Schemas")
+			assert.Contains(t, buttons, "Contexts")
+			assert.Contains(t, buttons, "Use : to switch")
 		})
 	}
 }
@@ -164,8 +165,9 @@ func TestMainPageModelRenderShortcuts(t *testing.T) {
 	expectedShortcuts := []string{
 		"↑/↓   Navigate items",
 		"Enter   Select item",
-		"/       Search",
-		"Esc     Cancel search",
+		"/       Search items",
+		":       Switch resource",
+		"Esc     Cancel/clear",
 		"q       Quit",
 	}
 	

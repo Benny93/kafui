@@ -35,21 +35,25 @@ const (
 	SimpleSearch SearchMode = iota
 	AdvancedSearch
 	RegexSearch
+	ResourceSearch // New mode for resource switching
 )
 
 // SearchBarModel represents the search bar component
 type SearchBarModel struct {
-	textInput     textinput.Model
-	searchHistory []string
-	historyIndex  int
-	searchMode    SearchMode
-	placeholder   string
-	resultCount   int
-	errorMessage  string
-	width         int
-	focused       bool
-	onSearch      func(query string) tea.Msg
-	onClear       func() tea.Msg
+	textInput       textinput.Model
+	searchHistory   []string
+	resourceHistory []string
+	historyIndex    int
+	searchMode      SearchMode
+	placeholder     string
+	resultCount     int
+	errorMessage    string
+	width           int
+	focused         bool
+	isResourceMode  bool // New field to track if we're in resource switching mode
+	onSearch        func(query string) tea.Msg
+	onClear         func() tea.Msg
+	onResourceSwitch func(resource string) tea.Msg // New callback for resource switching
 }
 
 // SearchBarOption is a function that configures a SearchBarModel
@@ -83,6 +87,13 @@ func WithOnClear(fn func() tea.Msg) SearchBarOption {
 	}
 }
 
+// WithOnResourceSwitch sets the callback function for resource switching
+func WithOnResourceSwitch(fn func(resource string) tea.Msg) SearchBarOption {
+	return func(sb *SearchBarModel) {
+		sb.onResourceSwitch = fn
+	}
+}
+
 // NewSearchBar creates a new search bar component
 func NewSearchBar(options ...SearchBarOption) SearchBarModel {
 	ti := textinput.New()
@@ -91,14 +102,16 @@ func NewSearchBar(options ...SearchBarOption) SearchBarModel {
 	ti.Width = 30
 
 	sb := SearchBarModel{
-		textInput:     ti,
-		searchHistory: []string{},
-		historyIndex:  -1,
-		searchMode:    SimpleSearch,
-		placeholder:   "Search...",
-		resultCount:   0,
-		width:         0,
-		focused:       false,
+		textInput:       ti,
+		searchHistory:   []string{},
+		resourceHistory: []string{},
+		historyIndex:    -1,
+		searchMode:      SimpleSearch,
+		placeholder:     "Search...",
+		resultCount:     0,
+		width:           0,
+		focused:         false,
+		isResourceMode:  false,
 	}
 
 	// Apply options
@@ -167,6 +180,27 @@ func (sb *SearchBarModel) SetWidth(width int) {
 	sb.textInput.Width = width - 10 // Account for padding and icon
 }
 
+// EnterResourceMode enters resource switching mode
+func (sb *SearchBarModel) EnterResourceMode() {
+	sb.isResourceMode = true
+	sb.searchMode = ResourceSearch
+	sb.textInput.Placeholder = "Enter resource type (topics, consumer-groups, schemas, contexts)..."
+	sb.textInput.SetValue("")
+}
+
+// EnterSearchMode enters normal search mode
+func (sb *SearchBarModel) EnterSearchMode() {
+	sb.isResourceMode = false
+	sb.searchMode = SimpleSearch
+	sb.textInput.Placeholder = sb.placeholder
+	sb.textInput.SetValue("")
+}
+
+// IsResourceMode returns whether the search bar is in resource mode
+func (sb SearchBarModel) IsResourceMode() bool {
+	return sb.isResourceMode
+}
+
 // Update handles messages for the search bar
 func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -176,22 +210,37 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 		switch msg.String() {
 		case "enter":
 			if sb.textInput.Value() != "" {
-				// Add to history
-				sb.searchHistory = append(sb.searchHistory, sb.textInput.Value())
-				sb.historyIndex = -1 // Reset history index
+				if sb.isResourceMode {
+					// Handle resource switching
+					resource := sb.textInput.Value()
+					sb.resourceHistory = append(sb.resourceHistory, resource)
+					sb.historyIndex = -1 // Reset history index
 
-				// Trigger search callback if provided
-				if sb.onSearch != nil {
-					return sb, func() tea.Msg { return sb.onSearch(sb.textInput.Value()) }
+					// Trigger resource switch callback if provided
+					if sb.onResourceSwitch != nil {
+						return sb, func() tea.Msg { return sb.onResourceSwitch(resource) }
+					}
+				} else {
+					// Handle normal search
+					sb.searchHistory = append(sb.searchHistory, sb.textInput.Value())
+					sb.historyIndex = -1 // Reset history index
+
+					// Trigger search callback if provided
+					if sb.onSearch != nil {
+						return sb, func() tea.Msg { return sb.onSearch(sb.textInput.Value()) }
+					}
 				}
 			}
 			return sb, nil
 
 		case "esc":
-			// Clear search or exit
+			// Clear search or exit - always reset to normal search mode
 			sb.textInput.SetValue("")
 			sb.resultCount = 0
 			sb.ClearError()
+			sb.isResourceMode = false
+			sb.searchMode = SimpleSearch
+			sb.textInput.Placeholder = sb.placeholder
 
 			// Trigger clear callback if provided
 			if sb.onClear != nil {
@@ -200,25 +249,39 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			return sb, nil
 
 		case "up":
-			// Navigate search history
-			if len(sb.searchHistory) > 0 {
+			// Navigate appropriate history based on mode
+			var history []string
+			if sb.isResourceMode {
+				history = sb.resourceHistory
+			} else {
+				history = sb.searchHistory
+			}
+			
+			if len(history) > 0 {
 				if sb.historyIndex == -1 {
-					sb.historyIndex = len(sb.searchHistory) - 1
+					sb.historyIndex = len(history) - 1
 				} else if sb.historyIndex > 0 {
 					sb.historyIndex--
 				}
-				sb.textInput.SetValue(sb.searchHistory[sb.historyIndex])
+				sb.textInput.SetValue(history[sb.historyIndex])
 			}
 			return sb, nil
 
 		case "down":
-			// Navigate search history
-			if len(sb.searchHistory) > 0 {
+			// Navigate appropriate history based on mode
+			var history []string
+			if sb.isResourceMode {
+				history = sb.resourceHistory
+			} else {
+				history = sb.searchHistory
+			}
+			
+			if len(history) > 0 {
 				if sb.historyIndex == -1 {
 					// Do nothing
-				} else if sb.historyIndex < len(sb.searchHistory)-1 {
+				} else if sb.historyIndex < len(history)-1 {
 					sb.historyIndex++
-					sb.textInput.SetValue(sb.searchHistory[sb.historyIndex])
+					sb.textInput.SetValue(history[sb.historyIndex])
 				} else {
 					sb.historyIndex = -1
 					sb.textInput.SetValue("")
@@ -227,7 +290,10 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			return sb, nil
 
 		case "tab":
-			// TODO: Implement completion
+			// TODO: Implement completion for resource names
+			if sb.isResourceMode {
+				// Could implement auto-completion for resource types
+			}
 			return sb, nil
 		}
 	}
@@ -242,14 +308,24 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 
 // View renders the search bar
 func (sb SearchBarModel) View() string {
-	// Build the search bar components
-	searchIcon := searchIconStyle.Render("🔍")
+	// Build the search bar components with different icons based on mode
+	var searchIcon string
+	if sb.isResourceMode {
+		searchIcon = searchIconStyle.Render(":")
+	} else {
+		searchIcon = searchIconStyle.Render("🔍")
+	}
+	
 	input := searchInputStyle.Render(sb.textInput.View())
 
 	// Result count display
 	var resultCount string
 	if sb.resultCount > 0 {
-		resultCount = resultCountStyle.Render(fmt.Sprintf("%d results", sb.resultCount))
+		if sb.isResourceMode {
+			resultCount = resultCountStyle.Render("resource mode")
+		} else {
+			resultCount = resultCountStyle.Render(fmt.Sprintf("%d results", sb.resultCount))
+		}
 	}
 
 	// Error display
@@ -276,6 +352,11 @@ func (sb SearchBarModel) View() string {
 type SearchMsg struct {
 	Query string
 	Mode  SearchMode
+}
+
+// ResourceSwitchMsg is a message type for resource switching events
+type ResourceSwitchMsg struct {
+	Resource string
 }
 
 // ClearMsg is a message type for clear events
