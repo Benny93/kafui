@@ -9,6 +9,8 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/components"
+	"github.com/Benny93/kafui/pkg/ui/shared"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -18,10 +20,10 @@ import (
 var (
 	// Main page search bar style (different from global)
 	mainPageSearchBarStyle = lipgloss.NewStyle().
-			BorderStyle(RoundedBorder).
-			BorderForeground(Info).
-			Padding(0, 1).
-			MarginBottom(1)
+		BorderStyle(RoundedBorder).
+		BorderForeground(Info).
+		Padding(0, 1).
+		MarginBottom(1)
 )
 
 type MainPageModel struct {
@@ -39,7 +41,7 @@ type MainPageModel struct {
 	resourceManager *ResourceManager
 	currentResource Resource
 	err             error
-	
+
 	// Reusable components
 	layout      *components.Layout
 	sidebar     *components.Sidebar
@@ -254,6 +256,25 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Log key event details
+		shared.DebugLog("Key Event - Type: %v, String: %s, SearchMode: %v", msg.Type, msg.String(), m.searchMode)
+
+		switch {
+
+		case key.Matches(msg, keys.Back):
+			shared.DebugLog("Back Key Event - Type: %v, String: %s, SearchMode: %v", msg.Type, msg.String(), m.searchMode)
+			// If search bar is focused, blur it and return focus to list
+			if m.searchMode {
+				m.searchMode = false
+				m.searchBar.Blur()
+				m.searchBar.SetValue("")
+				// Reset the topic list to show all items
+				m.topicList.SetItems(m.allItems)
+				m.statusMessage = "Search cancelled"
+				return m, nil
+			}
+		}
+
 		// Handle general key presses
 		switch msg.String() {
 		case "ctrl+c":
@@ -277,17 +298,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = "Resource mode: Type resource name (topics, consumer-groups, schemas, contexts)"
 			cmds = append(cmds, m.searchBar.Focus())
 			return m, tea.Batch(cmds...)
-		case "esc":
-			// If search bar is focused, blur it and return focus to list
-			if m.searchMode {
-				m.searchMode = false
-				m.searchBar.Blur()
-				m.searchBar.SetValue("")
-				// Reset the topic list to show all items
-				m.topicList.SetItems(m.allItems)
-				m.statusMessage = "Search cancelled"
-				return m, nil
-			}
+
 		case "enter":
 			if m.topicList.SelectedItem() != nil && !m.searchMode {
 				// Let the main UI model handle navigation to topic page
@@ -299,9 +310,11 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// If in search mode, let the search bar handle keys
 		if m.searchMode {
+			debugLog("Handling key in search mode - Key: %s", msg.String())
 			var cmd tea.Cmd
 			m.searchBar, cmd = m.searchBar.Update(msg)
 			cmds = append(cmds, cmd)
+			debugLog("Search bar update complete, commands: %v", cmd != nil)
 			return m, tea.Batch(cmds...)
 		} else {
 			// Normal navigation
@@ -402,7 +415,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		resourceName := strings.ToLower(string(msg))
 		var resourceType ResourceType
 		var found bool
-		
+
 		switch resourceName {
 		case "topics", "topic":
 			resourceType = TopicResourceType
@@ -417,7 +430,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			resourceType = ContextResourceType
 			found = true
 		}
-		
+
 		if found {
 			m.switchToResource(resourceType)
 			m.searchMode = false
@@ -448,7 +461,7 @@ func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 	// Convert resource items to list items
 	listItems := make([]list.Item, 0, len(items))
 	searchSuggestions := make([]string, 0, len(items))
-	
+
 	for _, item := range items {
 		listItems = append(listItems, resourceListItem{
 			resourceItem: item,
@@ -469,10 +482,10 @@ func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 
 	m.topicList.SetItems(listItems)
 	m.allItems = listItems
-	
+
 	// Update search suggestions for the new resource
 	m.searchBar.SetSearchSuggestions(searchSuggestions)
-	
+
 	m.statusMessage = fmt.Sprintf("Showing %d of %d %s", len(listItems), len(listItems), m.currentResource.GetName())
 }
 
@@ -514,7 +527,7 @@ func (m *MainPageModel) loadTopics() tea.Msg {
 
 	items := make([]list.Item, 0, len(topics))
 	searchSuggestions := make([]string, 0, len(topics))
-	
+
 	for _, name := range topicNames {
 		topic := topics[name]
 		items = append(items, topicItem{
@@ -530,4 +543,3 @@ func (m *MainPageModel) loadTopics() tea.Msg {
 
 	return topicListMsg(items)
 }
-

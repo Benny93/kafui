@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -16,14 +17,14 @@ const (
 
 // Model represents the main application state
 type Model struct {
-	dataSource   api.KafkaDataSource
-	currentPage  page
-	mainPage     *MainPageModel
-	topicPage    *TopicPageModel
-	detailPage   *DetailPageModel
-	width        int
-	height       int
-}// Custom key mappings
+	dataSource  api.KafkaDataSource
+	currentPage page
+	mainPage    *MainPageModel
+	topicPage   *TopicPageModel
+	detailPage  *DetailPageModel
+	width       int
+	height      int
+} // Custom key mappings
 type keyMap struct {
 	Search    key.Binding
 	TopicMode key.Binding
@@ -78,6 +79,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case key.Matches(msg, keys.Back):
+			shared.DebugLog("Root UI handling ESC key - CurrentPage: %v", m.currentPage)
+
+			// If we're on the main page, let the main page handle the Back key first
+			// (e.g., to exit search mode)
+			if m.currentPage == mainPage {
+				// Let the main page handle the Back key
+				mainModel, cmd := m.mainPage.Update(msg)
+				if updatedMainPage, ok := mainModel.(*MainPageModel); ok {
+					m.mainPage = updatedMainPage
+				}
+				return m, cmd
+			}
+
+			// Otherwise handle as back navigation for sub-pages
 			if m.currentPage > mainPage {
 				m.currentPage--
 				// Clean up topic page when leaving
@@ -87,7 +102,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		
+
 	case pageChangeMsg:
 		m.currentPage = page(msg)
 		// Initialize topic page if needed
@@ -127,13 +142,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mainPage = updatedMainPage
 		}
 		cmds = append(cmds, cmd)
-		
+
 		// Check if we need to navigate to topic page
 		if m.mainPage.topicList.SelectedItem() != nil {
 			if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
 				// Check what type of resource is currently selected
 				selectedItem := m.mainPage.topicList.SelectedItem()
-				
+
 				// Try to cast to topicItem first (legacy compatibility)
 				if topic, ok := selectedItem.(topicItem); ok {
 					m.currentPage = topicPage
@@ -146,15 +161,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// In the future, we might want to handle other resource types differently
 					if m.mainPage.currentResource.GetType() == TopicResourceType {
 						// Extract topic information from resource item
-						// This is a simplified approach - in a real implementation, 
+						// This is a simplified approach - in a real implementation,
 						// we would need to properly map resource items to topics
 						m.currentPage = topicPage
 						// Create a dummy topic for now
 						topic := api.Topic{
-							NumPartitions: 1,
+							NumPartitions:     1,
 							ReplicationFactor: 1,
 							ReplicaAssignment: make(map[int32][]int32),
-							ConfigEntries: make(map[string]*string),
+							ConfigEntries:     make(map[string]*string),
 						}
 						tp := NewTopicPage(m.dataSource, resourceItem.resourceItem.GetID(), topic)
 						m.topicPage = &tp
@@ -163,7 +178,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		
+
 	case topicPage:
 		if m.topicPage != nil {
 			var cmd tea.Cmd
@@ -172,7 +187,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.topicPage = updatedTopicPage
 			}
 			cmds = append(cmds, cmd)
-			
+
 			// Check if we need to navigate to detail page
 			if pageMsg, ok := msg.(pageChangeMsg); ok && page(pageMsg) == detailPage {
 				// Initialize detail page with selected message
@@ -183,7 +198,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		
+
 	case detailPage:
 		if m.detailPage != nil {
 			var cmd tea.Cmd
@@ -216,5 +231,3 @@ func (m Model) View() string {
 		return "Unknown page"
 	}
 }
-
-

@@ -3,6 +3,7 @@ package components
 import (
 	"fmt"
 
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -40,22 +41,22 @@ const (
 
 // SearchBarModel represents the search bar component
 type SearchBarModel struct {
-	textInput       textinput.Model
-	searchHistory   []string
-	resourceHistory []string
-	historyIndex    int
-	searchMode      SearchMode
-	placeholder     string
-	resultCount     int
-	errorMessage    string
-	width           int
-	focused         bool
-	isResourceMode  bool // New field to track if we're in resource switching mode
-	onSearch        func(query string) tea.Msg
-	onClear         func() tea.Msg
-	onResourceSwitch func(resource string) tea.Msg // New callback for resource switching
-	searchSuggestions []string // Suggestions for search mode
-	fuzzyMatcher    *FuzzyMatcher // Fuzzy matching engine
+	textInput         textinput.Model
+	searchHistory     []string
+	resourceHistory   []string
+	historyIndex      int
+	searchMode        SearchMode
+	placeholder       string
+	resultCount       int
+	errorMessage      string
+	width             int
+	focused           bool
+	isResourceMode    bool // New field to track if we're in resource switching mode
+	onSearch          func(query string) tea.Msg
+	onClear           func() tea.Msg
+	onResourceSwitch  func(resource string) tea.Msg // New callback for resource switching
+	searchSuggestions []string                      // Suggestions for search mode
+	fuzzyMatcher      *FuzzyMatcher                 // Fuzzy matching engine
 }
 
 // SearchBarOption is a function that configures a SearchBarModel
@@ -199,13 +200,13 @@ func (sb *SearchBarModel) EnterResourceMode() {
 	sb.searchMode = ResourceSearch
 	sb.textInput.Placeholder = "Enter resource type (topics, consumer-groups, schemas, contexts)..."
 	sb.textInput.SetValue("")
-	
+
 	// Set up auto-completion suggestions for resource types
 	resourceSuggestions := []string{
 		"topics",
 		"topic",
 		"consumer-groups",
-		"consumers", 
+		"consumers",
 		"consumer",
 		"groups",
 		"cg",
@@ -221,8 +222,8 @@ func (sb *SearchBarModel) EnterResourceMode() {
 // GetResourceSuggestions returns all available resource suggestions
 func (sb *SearchBarModel) GetResourceSuggestions() []string {
 	return []string{
-		"topics", "topic", "consumer-groups", "consumers", 
-		"consumer", "groups", "cg", "schemas", "schema", 
+		"topics", "topic", "consumer-groups", "consumers",
+		"consumer", "groups", "cg", "schemas", "schema",
 		"contexts", "context", "ctx",
 	}
 }
@@ -233,7 +234,7 @@ func (sb *SearchBarModel) EnterSearchMode() {
 	sb.searchMode = SimpleSearch
 	sb.textInput.Placeholder = sb.placeholder
 	sb.textInput.SetValue("")
-	
+
 	// Set search suggestions if available
 	if sb.focused {
 		sb.updateDynamicSuggestions()
@@ -254,7 +255,7 @@ func (sb *SearchBarModel) SetSearchSuggestions(suggestions []string) {
 // updateDynamicSuggestions updates suggestions based on current input using fuzzy matching
 func (sb *SearchBarModel) updateDynamicSuggestions() {
 	currentValue := sb.textInput.Value()
-	
+
 	if sb.isResourceMode {
 		// For resource mode, use fuzzy matching on resource suggestions
 		resourceSuggestions := sb.GetResourceSuggestions()
@@ -286,6 +287,7 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		shared.DebugLog("SearchBar received key event - Key: %s, Focused: %v, ResourceMode: %v", msg.String(), sb.focused, sb.isResourceMode)
 		switch msg.String() {
 		case "enter":
 			if sb.textInput.Value() != "" {
@@ -313,6 +315,7 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			return sb, nil
 
 		case "esc":
+			shared.DebugLog("SearchBar handling ESC key - Focused: %v, ResourceMode: %v", sb.focused, sb.isResourceMode)
 			// Clear search or exit - always reset to normal search mode
 			sb.textInput.SetValue("")
 			sb.resultCount = 0
@@ -320,7 +323,7 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			sb.isResourceMode = false
 			sb.searchMode = SimpleSearch
 			sb.textInput.Placeholder = sb.placeholder
-			
+
 			// Clear suggestions when exiting
 			sb.textInput.SetSuggestions([]string{})
 
@@ -338,7 +341,7 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			} else {
 				history = sb.searchHistory
 			}
-			
+
 			if len(history) > 0 {
 				if sb.historyIndex == -1 {
 					sb.historyIndex = len(history) - 1
@@ -357,7 +360,7 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			} else {
 				history = sb.searchHistory
 			}
-			
+
 			if len(history) > 0 {
 				if sb.historyIndex == -1 {
 					// Do nothing
@@ -402,7 +405,7 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 	oldValue := sb.textInput.Value()
 	sb.textInput, cmd = sb.textInput.Update(msg)
 	cmds = append(cmds, cmd)
-	
+
 	// Update suggestions dynamically when text changes
 	if sb.focused && sb.textInput.Value() != oldValue {
 		sb.updateDynamicSuggestions()
@@ -420,7 +423,7 @@ func (sb SearchBarModel) View() string {
 	} else {
 		searchIcon = searchIconStyle.Render("🔍")
 	}
-	
+
 	input := searchInputStyle.Render(sb.textInput.View())
 
 	// Result count display
