@@ -45,6 +45,16 @@ type TopicPageModel struct {
 	selectedMessage   *api.Message
 	err               error
 	cancelConsumption context.CancelFunc
+	msgChan           <-chan api.Message
+	errChan           <-chan error
+	
+	// Error handling and retry logic
+	retryCount        int
+	maxRetries        int
+	retryDelay        time.Duration
+	lastError         error
+	errorHistory      []error
+	connectionStatus  string
 }
 
 func NewTopicPage(ds api.KafkaDataSource, topicName string, topicDetails api.Topic) TopicPageModel {
@@ -96,10 +106,18 @@ func NewTopicPage(ds api.KafkaDataSource, topicName string, topicDetails api.Top
 		statusMessage:    "Topic page initialized",
 		searchInput:      ti,
 		filteredMessages: []api.Message{},
+		
+		// Initialize error handling
+		maxRetries:       3,
+		retryDelay:       time.Second * 2,
+		errorHistory:     make([]error, 0),
+		connectionStatus: "disconnected",
 	}
 }
 
 func (m *TopicPageModel) Init() tea.Cmd {
+	// Set initial loading state
+	m.loading = true
 	return tea.Batch(
 		m.startConsuming(),
 		m.spinner.Tick,
@@ -156,6 +174,16 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMessage = "Consumption resumed"
 			}
 			return m, nil
+		case "r":
+			// Manual retry connection
+			if !m.consuming || m.connectionStatus == "failed" {
+				m.retryCount = 0 // Reset retry count for manual retry
+				m.consuming = true
+				m.connectionStatus = "connecting"
+				m.statusMessage = "Manually retrying connection..."
+				return m, m.startConsuming()
+			}
+			return m, nil
 		case "enter":
 			// View message details
 			if len(m.filteredMessages) > 0 {
@@ -192,10 +220,31 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case messageConsumedMsg:
-		// Add new message to the list
-		key := m.getMessageKey(fmt.Sprint(msg.Partition), fmt.Sprint(msg.Offset))
-		m.consumedMessages[key] = api.Message(msg)
-		m.messages = append(m.messages, api.Message(msg))
+		message := api.Message(msg)
+		
+		// Handle status messages separately
+		if message.Key == "__status__" {
+			switch message.Value {
+			case "connecting":
+				m.connectionStatus = "connecting"
+				m.statusMessage = "Connecting to Kafka..."
+			case "connected":
+				m.connectionStatus = "connected"
+				m.retryCount = 0 // Reset retry count on successful connection
+				m.statusMessage = "Successfully connected to Kafka"
+			}
+			
+			// Continue listening for more messages
+			if m.consuming && m.msgChan != nil {
+				return m, m.listenForMessages(m.msgChan)
+			}
+			return m, nil
+		}
+		
+		// Process regular messages
+		key := m.getMessageKey(fmt.Sprint(message.Partition), fmt.Sprint(message.Offset))
+		m.consumedMessages[key] = message
+		m.messages = append(m.messages, message)
 
 		// Sort messages by offset
 		sort.Slice(m.messages, func(i, j int) bool {
@@ -214,6 +263,11 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.statusMessage = fmt.Sprintf("Consumed %d messages", len(m.messages))
+		
+		// Continue listening for more messages if still consuming
+		if m.consuming && m.msgChan != nil {
+			return m, m.listenForMessages(m.msgChan)
+		}
 		return m, nil
 
 	case spinner.TickMsg:
@@ -228,14 +282,77 @@ func (m *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case startConsumingMsg:
+		// Store the cancellation function and channels
+		m.cancelConsumption = msg.cancel
+		m.msgChan = msg.msgChan
+		m.errChan = msg.errChan
 		m.consuming = true
 		m.loading = false
 		m.statusMessage = "Starting message consumption..."
-		return m, nil
+		
+		// Start listening to channels
+		return m, tea.Batch(
+			m.listenForMessages(msg.msgChan),
+			m.listenForErrors(msg.errChan),
+		)
 
 	case consumeErrorMsg:
+		err := error(msg)
+		m.lastError = err
+		m.errorHistory = append(m.errorHistory, err)
+		
+		// Keep only last 10 errors in history
+		if len(m.errorHistory) > 10 {
+			m.errorHistory = m.errorHistory[1:]
+		}
+		
+		// Check if we should retry
+		if m.retryCount < m.maxRetries && m.consuming {
+			m.retryCount++
+			m.connectionStatus = "retrying"
+			m.statusMessage = fmt.Sprintf("Connection error (attempt %d/%d): %v", 
+				m.retryCount, m.maxRetries, err)
+			
+			// Schedule retry with exponential backoff
+			retryDelay := m.retryDelay * time.Duration(m.retryCount)
+			return m, tea.Batch(
+				m.scheduleRetry(m.retryCount, retryDelay),
+				m.listenForErrors(m.errChan), // Continue listening for errors
+			)
+		} else {
+			// Max retries reached or not consuming
+			m.consuming = false
+			m.connectionStatus = "failed"
+			m.statusMessage = fmt.Sprintf("Max retries reached. Last error: %v", err)
+			
+			return m, func() tea.Msg {
+				return maxRetriesReachedMsg{
+					lastError: err,
+					attempts:  m.retryCount,
+				}
+			}
+		}
+
+	case retryConsumptionMsg:
+		m.statusMessage = fmt.Sprintf("Retrying connection (attempt %d/%d)...", 
+			msg.attempt, m.maxRetries)
+		
+		// Reset channels and restart consumption
+		return m, m.startConsuming()
+
+	case connectionStatusMsg:
+		m.connectionStatus = string(msg)
+		if m.connectionStatus == "connected" {
+			m.retryCount = 0 // Reset retry count on successful connection
+			m.statusMessage = "Successfully connected to Kafka"
+		}
+		return m, nil
+
+	case maxRetriesReachedMsg:
 		m.consuming = false
-		m.statusMessage = fmt.Sprintf("Consumption error: %v", msg)
+		m.connectionStatus = "failed"
+		m.statusMessage = fmt.Sprintf("Failed to connect after %d attempts. Last error: %v", 
+			msg.attempts, msg.lastError)
 		return m, nil
 	}
 
@@ -400,6 +517,7 @@ func (m *TopicPageModel) renderShortcuts() string {
 		"Enter   View details",
 		"Space   Pause/resume",
 		"/       Search messages",
+		"r       Retry connection",
 		"Esc     Exit search",
 		"q/Esc   Back to topics",
 	}
@@ -408,7 +526,7 @@ func (m *TopicPageModel) renderShortcuts() string {
 }
 
 func (m *TopicPageModel) renderFooter() string {
-	// Left side: Selection information
+	// Left side: Selection and connection information
 	selected := "None"
 	if len(m.filteredMessages) > 0 {
 		cursor := m.messageTable.Cursor()
@@ -416,14 +534,42 @@ func (m *TopicPageModel) renderFooter() string {
 			selected = fmt.Sprintf("Offset: %d", m.filteredMessages[cursor].Offset)
 		}
 	}
-	leftInfo := fmt.Sprintf("Selected: %s  •  %d messages total", selected, len(m.messages))
+	
+	// Connection status indicator
+	var statusIndicator string
+	switch m.connectionStatus {
+	case "connected":
+		statusIndicator = "🟢"
+	case "connecting":
+		statusIndicator = "🟡"
+	case "retrying":
+		statusIndicator = "🟠"
+	case "failed":
+		statusIndicator = "🔴"
+	default:
+		statusIndicator = "⚪"
+	}
+	
+	leftInfo := fmt.Sprintf("%s %s  •  Selected: %s  •  %d messages", 
+		statusIndicator, m.connectionStatus, selected, len(m.messages))
 
-	// Right side: Status information
-	rightInfo := fmt.Sprintf("%s %s  •  Last update: %s",
-		m.spinner.View(),
-		m.statusMessage,
-		m.lastUpdate.Format("15:04:05"),
-	)
+	// Right side: Status and error information
+	var rightInfo string
+	if m.lastError != nil && m.connectionStatus != "connected" {
+		errorType := m.categorizeError(m.lastError)
+		rightInfo = fmt.Sprintf("%s [%s] %s  •  %s",
+			m.spinner.View(),
+			errorType,
+			m.statusMessage,
+			m.lastUpdate.Format("15:04:05"),
+		)
+	} else {
+		rightInfo = fmt.Sprintf("%s %s  •  %s",
+			m.spinner.View(),
+			m.statusMessage,
+			m.lastUpdate.Format("15:04:05"),
+		)
+	}
 
 	// Calculate available width for each side
 	totalWidth := m.width - 4 // Account for padding
@@ -456,65 +602,89 @@ func (m *TopicPageModel) getMessageKey(partition string, offset string) string {
 }
 
 // Message consumption
-// startConsuming returns a Cmd that starts the message consumption
+// startConsuming returns a Cmd that starts the message consumption with proper channel pattern
 func (m *TopicPageModel) startConsuming() tea.Cmd {
-	// Create context for consumption
-	ctx, cancel := context.WithCancel(context.Background())
-	m.cancelConsumption = cancel
-
-	// Set loading to true initially
-	m.loading = true
-
-	// Return a command that will start consumption
 	return func() tea.Msg {
-		// Set consuming flag
-		m.consuming = true
-
+		// Create context for consumption
+		ctx, cancel := context.WithCancel(context.Background())
+		
+		// Create channels for thread-safe communication
+		msgChan := make(chan api.Message, 100)    // Buffered channel for messages
+		errChan := make(chan error, 1)            // Channel for errors
+		
 		// Start consumption in a goroutine
 		go func() {
+			defer close(msgChan)
+			defer close(errChan)
+			
+			// Send connection status update
+			select {
+			case msgChan <- api.Message{
+				Key:   "__status__",
+				Value: "connecting",
+			}:
+			case <-ctx.Done():
+				return
+			}
+			
 			handlerFunc := func(msg api.Message) {
-				// Instead of processing directly, send a message to the program
-				// This ensures consistent behavior between mock and real modes
-				// messageConsumed := messageConsumedMsg(msg) // Not used in mock mode
-
-				// Directly update the model (not thread-safe but works for mock)
-				key := m.getMessageKey(fmt.Sprint(msg.Partition), fmt.Sprint(msg.Offset))
-				m.consumedMessages[key] = msg
-				m.messages = append(m.messages, msg)
-
-				// Sort messages by offset
-				sort.Slice(m.messages, func(i, j int) bool {
-					return m.messages[i].Offset < m.messages[j].Offset
-				})
-
-				// Update filtered messages and table
-				m.filterMessages()
-				m.updateTable()
-
-				// Auto-scroll to bottom if not paused
-				if !m.paused {
-					if len(m.filteredMessages) > 0 {
-						m.messageTable.GotoBottom()
+				select {
+				case msgChan <- msg:
+					// Message sent successfully
+					// Send connection status on first successful message
+					select {
+					case msgChan <- api.Message{
+						Key:   "__status__",
+						Value: "connected",
+					}:
+					case <-ctx.Done():
+						return
 					}
+				case <-ctx.Done():
+					// Context cancelled, stop sending
+					return
 				}
-
-				m.statusMessage = fmt.Sprintf("Consumed %d messages", len(m.messages))
-				m.lastUpdate = time.Now()
 			}
 
-			err := m.dataSource.ConsumeTopic(ctx, m.topicName, m.consumeFlags, handlerFunc, func(err any) {
-				// Handle consumption errors
-				// In a real implementation, we would send an error message to the program
-			})
+			errorHandler := func(err any) {
+				if e, ok := err.(error); ok {
+					// Categorize and enhance error information
+					errorType := m.categorizeError(e)
+					enhancedErr := fmt.Errorf("[%s] %w", errorType, e)
+					
+					select {
+					case errChan <- enhancedErr:
+						// Error sent successfully
+					case <-ctx.Done():
+						// Context cancelled, stop sending
+						return
+					}
+				}
+			}
 
+			// Attempt to start consumption
+			err := m.dataSource.ConsumeTopic(ctx, m.topicName, m.consumeFlags, handlerFunc, errorHandler)
 			if err != nil {
-				// Would send error message in a real implementation
-				m.statusMessage = fmt.Sprintf("Consumption error: %v", err)
+				// Categorize and enhance error information
+				errorType := m.categorizeError(err)
+				enhancedErr := fmt.Errorf("[%s] %w", errorType, err)
+				
+				select {
+				case errChan <- enhancedErr:
+					// Error sent successfully
+				case <-ctx.Done():
+					// Context cancelled, ignore
+				}
 			}
 		}()
 
-		// Return a message indicating consumption has started
-		return startConsumingMsg{}
+		// Return consumption setup with channels
+		return startConsumingMsg{
+			ctx:     ctx,
+			cancel:  cancel,
+			msgChan: msgChan,
+			errChan: errChan,
+		}
 	}
 }
 
@@ -570,7 +740,83 @@ func (m *TopicPageModel) updateTable() {
 	m.messageTable.SetRows(rows)
 }
 
+// Channel listening commands for thread-safe communication
+func (m *TopicPageModel) listenForMessages(msgChan <-chan api.Message) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case msg, ok := <-msgChan:
+			if !ok {
+				// Channel closed, consumption ended
+				return consumeErrorMsg(fmt.Errorf("message channel closed"))
+			}
+			return messageConsumedMsg(msg)
+		}
+	}
+}
+
+func (m *TopicPageModel) listenForErrors(errChan <-chan error) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case err, ok := <-errChan:
+			if !ok {
+				// Channel closed, no more errors
+				return nil
+			}
+			return consumeErrorMsg(err)
+		}
+	}
+}
+
+// Retry scheduling with exponential backoff
+func (m *TopicPageModel) scheduleRetry(attempt int, delay time.Duration) tea.Cmd {
+	return tea.Tick(delay, func(t time.Time) tea.Msg {
+		return retryConsumptionMsg{
+			attempt: attempt,
+			delay:   delay,
+		}
+	})
+}
+
+// Enhanced error categorization
+func (m *TopicPageModel) categorizeError(err error) string {
+	if err == nil {
+		return "none"
+	}
+	
+	errStr := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(errStr, "connection"):
+		return "connection"
+	case strings.Contains(errStr, "timeout"):
+		return "timeout"
+	case strings.Contains(errStr, "authentication"):
+		return "auth"
+	case strings.Contains(errStr, "authorization"):
+		return "permission"
+	case strings.Contains(errStr, "topic"):
+		return "topic"
+	case strings.Contains(errStr, "partition"):
+		return "partition"
+	default:
+		return "unknown"
+	}
+}
+
 // Custom message types
 type messageConsumedMsg api.Message
-type startConsumingMsg struct{}
-type consumeErrorMsg any
+type startConsumingMsg struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	msgChan <-chan api.Message
+	errChan <-chan error
+}
+type consumeErrorMsg error
+type retryConsumptionMsg struct {
+	attempt int
+	delay   time.Duration
+}
+type connectionStatusMsg string
+type maxRetriesReachedMsg struct {
+	lastError error
+	attempts  int
+}
