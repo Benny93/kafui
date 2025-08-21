@@ -231,9 +231,9 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 
 func (m *MainPageModel) Init() tea.Cmd {
 	return tea.Batch(
-		m.loadTopics,
+		m.loadTopics(),
 		m.spinner.Tick,
-		m.updateTimer,
+		m.updateTimer(),
 	)
 }
 
@@ -300,7 +300,17 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 
 		case "enter":
-			if m.topicList.SelectedItem() != nil && !m.searchMode {
+			shared.DebugLog("Enter Key event - Type: %v, String: %s, SearchMode: %v", msg.Type, msg.String(), m.searchMode)
+
+			// If in search mode, let the search bar handle the enter key
+			if m.searchMode {
+				var cmd tea.Cmd
+				m.searchBar, cmd = m.searchBar.Update(msg)
+				cmds = append(cmds, cmd)
+				return m, tea.Batch(cmds...)
+			}
+			// If not in search mode and an item is selected, navigate to topic page
+			if m.topicList.SelectedItem() != nil {
 				// Let the main UI model handle navigation to topic page
 				return m, func() tea.Msg {
 					return pageChangeMsg(topicPage)
@@ -339,10 +349,20 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		items := []list.Item(msg)
 		m.topicList.SetItems(items)
 		m.allItems = items // Store all items for filtering
+		
+		// Update search suggestions with topic names
+		searchSuggestions := make([]string, 0, len(items))
+		for _, item := range items {
+			if topicItem, ok := item.(topicItem); ok {
+				searchSuggestions = append(searchSuggestions, topicItem.name)
+			}
+		}
+		m.searchBar.SetSearchSuggestions(searchSuggestions)
+		
 		m.statusMessage = fmt.Sprintf("Showing %d of %d topics", len(items), len(items))
 		return m, tea.Batch(
 			m.spinner.Tick,
-			m.updateTimer,
+			m.updateTimer(),
 		)
 
 	case spinner.TickMsg:
@@ -352,9 +372,10 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case timerTickMsg:
 		m.lastUpdate = time.Now()
-		cmds = append(cmds, m.updateTimer)
+		cmds = append(cmds, m.updateTimer())
 		if !m.loading {
-			cmds = append(cmds, m.loadTopics)
+			m.loading = true
+			cmds = append(cmds, m.loadTopics())
 		}
 
 	case errorMsg:
@@ -504,42 +525,41 @@ type clearSearchMsg struct{}
 type switchResourceMsg ResourceType
 type switchResourceByNameMsg string
 
-func (m MainPageModel) updateTimer() tea.Msg {
-	time.Sleep(5 * time.Second)
-	return timerTickMsg(time.Now())
+func (m MainPageModel) updateTimer() tea.Cmd {
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		return timerTickMsg(t)
+	})
 }
 
-func (m *MainPageModel) loadTopics() tea.Msg {
-	m.loading = true
-	topics, err := m.dataSource.GetTopics()
-	if err != nil {
-		return errorMsg(err)
+func (m *MainPageModel) loadTopics() tea.Cmd {
+	return func() tea.Msg {
+		topics, err := m.dataSource.GetTopics()
+		if err != nil {
+			return errorMsg(err)
+		}
+
+		// Create a slice of topic names for sorting
+		topicNames := make([]string, 0, len(topics))
+		for name := range topics {
+			topicNames = append(topicNames, name)
+		}
+
+		// Sort topic names
+		sort.Strings(topicNames)
+
+		items := make([]list.Item, 0, len(topics))
+		searchSuggestions := make([]string, 0, len(topics))
+
+		for _, name := range topicNames {
+			topic := topics[name]
+			items = append(items, topicItem{
+				name:  name,
+				topic: topic,
+			})
+			// Add topic name to search suggestions
+			searchSuggestions = append(searchSuggestions, name)
+		}
+
+		return topicListMsg(items)
 	}
-
-	// Create a slice of topic names for sorting
-	topicNames := make([]string, 0, len(topics))
-	for name := range topics {
-		topicNames = append(topicNames, name)
-	}
-
-	// Sort topic names
-	sort.Strings(topicNames)
-
-	items := make([]list.Item, 0, len(topics))
-	searchSuggestions := make([]string, 0, len(topics))
-
-	for _, name := range topicNames {
-		topic := topics[name]
-		items = append(items, topicItem{
-			name:  name,
-			topic: topic,
-		})
-		// Add topic name to search suggestions
-		searchSuggestions = append(searchSuggestions, name)
-	}
-
-	// Update search suggestions with topic names
-	m.searchBar.SetSearchSuggestions(searchSuggestions)
-
-	return topicListMsg(items)
 }
