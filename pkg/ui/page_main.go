@@ -39,6 +39,10 @@ type MainPageModel struct {
 	resourceManager *ResourceManager
 	currentResource Resource
 	err             error
+	// Filter state tracking
+	isFiltered      bool
+	currentFilter   string
+	filteredItems   []list.Item
 
 	// Reusable components
 	layout      *components.Layout
@@ -241,10 +245,14 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 		allItems:        []list.Item{},
 		resourceManager: resourceManager,
 		currentResource: currentResource,
-		layout:          layout,
-		sidebar:         sidebar,
-		footer:          footer,
-		mainContent:     mainContent,
+		// Initialize filter state
+		isFiltered:    false,
+		currentFilter: "",
+		filteredItems: []list.Item{},
+		layout:        layout,
+		sidebar:       sidebar,
+		footer:        footer,
+		mainContent:   mainContent,
 	}
 }
 
@@ -280,9 +288,19 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case topicListMsg:
 		m.loading = false
 		items := []list.Item(msg)
-		m.resourcesList.SetItems(items)
-		m.allItems = items // Store all items for filtering
-
+		
+		// Only update if we're currently showing topics (not if we've switched to another resource)
+		if m.currentResource.GetType() != TopicResourceType {
+			// Ignore topic updates when viewing other resources
+			return m, tea.Batch(
+				m.spinner.Tick,
+				m.updateTimer(),
+			)
+		}
+		
+		// Store the new items as our base data
+		m.allItems = items
+		
 		// Update search suggestions with topic names
 		searchSuggestions := make([]string, 0, len(items))
 		for _, item := range items {
@@ -291,8 +309,30 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.searchBar.SetSearchSuggestions(searchSuggestions)
-
-		m.statusMessage = fmt.Sprintf("Showing %d of %d topics", len(items), len(items))
+		
+		// If we're currently filtered, reapply the filter to new data
+		if m.isFiltered && m.currentFilter != "" {
+			// Reapply current filter
+			filteredItems := []list.Item{}
+			for _, item := range items {
+				if topicItem, ok := item.(topicItem); ok {
+					if strings.Contains(strings.ToLower(topicItem.name), strings.ToLower(m.currentFilter)) {
+						highlightedItem := CreateHighlightedItem(item, m.currentFilter)
+						filteredItems = append(filteredItems, highlightedItem)
+					}
+				}
+			}
+			// Apply natural sorting to filtered results
+			SortResourceListNaturally(filteredItems)
+			m.filteredItems = filteredItems
+			m.resourcesList.SetItems(filteredItems)
+			m.statusMessage = fmt.Sprintf("Showing %d of %d topics (filtered by: %s)", len(filteredItems), len(items), m.currentFilter)
+		} else {
+			// No filter active, show all items
+			m.resourcesList.SetItems(items)
+			m.statusMessage = fmt.Sprintf("Showing %d of %d topics", len(items), len(items))
+		}
+		
 		return m, tea.Batch(
 			m.spinner.Tick,
 			m.updateTimer(),
@@ -308,7 +348,13 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.updateTimer())
 		if !m.loading {
 			m.loading = true
-			cmds = append(cmds, m.loadTopics())
+			// Load data for current resource type instead of always loading topics
+			if m.currentResource.GetType() == TopicResourceType {
+				cmds = append(cmds, m.loadTopics())
+			} else {
+				// For other resource types, refresh the current resource
+				cmds = append(cmds, m.loadCurrentResource())
+			}
 		}
 
 	case errorMsg:
@@ -327,6 +373,50 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case switchResourceByNameMsg:
 		return m.HandleSwitchResourceByName(msg)
+		
+	case currentResourceListMsg:
+		m.loading = false
+		// Only update if the message is for the current resource type
+		if msg.resourceType == m.currentResource.GetType() {
+			// Store the new items as our base data
+			m.allItems = msg.items
+			
+			// Update search suggestions
+			searchSuggestions := make([]string, 0, len(msg.items))
+			for _, item := range msg.items {
+				if resourceItem, ok := item.(resourceListItem); ok {
+					searchSuggestions = append(searchSuggestions, resourceItem.resourceItem.GetID())
+				}
+			}
+			m.searchBar.SetSearchSuggestions(searchSuggestions)
+			
+			// If we're currently filtered, reapply the filter to new data
+			if m.isFiltered && m.currentFilter != "" {
+				// Reapply current filter
+				filteredItems := []list.Item{}
+				for _, item := range msg.items {
+					if resourceItem, ok := item.(resourceListItem); ok {
+						if strings.Contains(strings.ToLower(resourceItem.resourceItem.GetID()), strings.ToLower(m.currentFilter)) {
+							highlightedItem := CreateHighlightedItem(item, m.currentFilter)
+							filteredItems = append(filteredItems, highlightedItem)
+						}
+					}
+				}
+				// Apply natural sorting to filtered results
+				SortResourceListNaturally(filteredItems)
+				m.filteredItems = filteredItems
+				m.resourcesList.SetItems(filteredItems)
+				m.statusMessage = fmt.Sprintf("Showing %d of %d %s (filtered by: %s)", len(filteredItems), len(msg.items), m.currentResource.GetName(), m.currentFilter)
+			} else {
+				// No filter active, show all items
+				m.resourcesList.SetItems(msg.items)
+				m.statusMessage = fmt.Sprintf("Showing %d of %d %s", len(msg.items), len(msg.items), m.currentResource.GetName())
+			}
+		}
+		return m, tea.Batch(
+			m.spinner.Tick,
+			m.updateTimer(),
+		)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -336,6 +426,11 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 	m.currentResource = m.resourceManager.GetResource(resourceType)
 	m.resourcesList.Title = m.currentResource.GetName()
+
+	// Reset filter state when switching resources
+	m.isFiltered = false
+	m.currentFilter = ""
+	m.filteredItems = []list.Item{}
 
 	// Load data for the new resource
 	items, err := m.currentResource.GetData()
@@ -385,6 +480,10 @@ type searchTopicsMsg string
 type clearSearchMsg struct{}
 type switchResourceMsg ResourceType
 type switchResourceByNameMsg string
+type currentResourceListMsg struct {
+	resourceType ResourceType
+	items        []list.Item
+}
 
 func (m MainPageModel) updateTimer() tea.Cmd {
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
@@ -422,5 +521,31 @@ func (m *MainPageModel) loadTopics() tea.Cmd {
 		}
 
 		return topicListMsg(items)
+	}
+}
+
+func (m *MainPageModel) loadCurrentResource() tea.Cmd {
+	return func() tea.Msg {
+		// Load data for the current resource
+		items, err := m.currentResource.GetData()
+		if err != nil {
+			return errorMsg(err)
+		}
+
+		// Convert resource items to list items
+		listItems := make([]list.Item, 0, len(items))
+		for _, item := range items {
+			listItems = append(listItems, resourceListItem{
+				resourceItem: item,
+			})
+		}
+
+		// Sort items using natural sorting
+		SortResourceListNaturally(listItems)
+
+		return currentResourceListMsg{
+			resourceType: m.currentResource.GetType(),
+			items:        listItems,
+		}
 	}
 }

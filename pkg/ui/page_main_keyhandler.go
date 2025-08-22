@@ -27,6 +27,10 @@ func (m *MainPageModel) HandleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.searchBar.SetValue("")
 			// Reset the resources list to show all items (without highlighting)
 			m.resourcesList.SetItems(m.allItems)
+			// Reset filter state
+			m.isFiltered = false
+			m.currentFilter = ""
+			m.filteredItems = []list.Item{}
 			m.statusMessage = "Search cancelled"
 			return m, nil
 		}
@@ -128,6 +132,10 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 	query := string(msg)
 	m.statusMessage = fmt.Sprintf("Searching for: %s", query)
 
+	// Track filter state
+	m.isFiltered = true
+	m.currentFilter = query
+
 	// Filter the resources list
 	filteredItems := []list.Item{}
 
@@ -153,6 +161,8 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 	// Apply natural sorting to filtered results
 	SortResourceListNaturally(filteredItems)
 
+	// Store filtered items
+	m.filteredItems = filteredItems
 	m.resourcesList.SetItems(filteredItems)
 	m.searchBar.SetResultCount(len(filteredItems))
 	// Exit search mode and focus resources list
@@ -162,7 +172,7 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 	if len(filteredItems) == 0 {
 		m.statusMessage = fmt.Sprintf("No items found for: %s", query)
 	} else {
-		m.statusMessage = fmt.Sprintf("Showing %d of %d items (filtered)", len(filteredItems), len(m.allItems))
+		m.statusMessage = fmt.Sprintf("Showing %d of %d items (filtered by: %s)", len(filteredItems), len(m.allItems), query)
 		// Focus first item in filtered list if available
 		if len(filteredItems) > 0 {
 			m.resourcesList.Select(0)
@@ -179,6 +189,10 @@ func (m *MainPageModel) HandleClearSearch(msg clearSearchMsg) (tea.Model, tea.Cm
 	m.searchBar.SetResultCount(0)
 	m.searchMode = false
 	m.searchBar.Blur()
+	// Reset filter state
+	m.isFiltered = false
+	m.currentFilter = ""
+	m.filteredItems = []list.Item{}
 	m.statusMessage = fmt.Sprintf("Showing %d of %d resources", len(m.allItems), len(m.allItems))
 	return m, nil
 }
