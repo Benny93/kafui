@@ -88,11 +88,19 @@ func (m *MainPageModel) HandleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		// If not in search mode and an item is selected, navigate to topic page
+		// If not in search mode and an item is selected, navigate to appropriate page
 		if m.resourcesList.SelectedItem() != nil {
-			// Let the main UI model handle navigation to topic page
-			return m, func() tea.Msg {
-				return pageChangeMsg(topicPage)
+			// Check the current resource type to determine navigation
+			if m.currentResource.GetType() == TopicResourceType {
+				// Navigate to topic page for topics
+				return m, func() tea.Msg {
+					return pageChangeMsg(topicPage)
+				}
+			} else {
+				// Navigate to resource detail page for other resources
+				return m, func() tea.Msg {
+					return pageChangeMsg(resourceDetailPage)
+				}
 			}
 		}
 	}

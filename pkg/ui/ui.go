@@ -13,17 +13,19 @@ const (
 	mainPage page = iota
 	topicPage
 	detailPage
+	resourceDetailPage
 )
 
 // Model represents the main application state
 type Model struct {
-	dataSource  api.KafkaDataSource
-	currentPage page
-	mainPage    *MainPageModel
-	topicPage   *TopicPageModel
-	detailPage  *DetailPageModel
-	width       int
-	height      int
+	dataSource         api.KafkaDataSource
+	currentPage        page
+	mainPage           *MainPageModel
+	topicPage          *TopicPageModel
+	detailPage         *DetailPageModel
+	resourceDetailPage *ResourceDetailPageModel
+	width              int
+	height             int
 } // Custom key mappings
 type keyMap struct {
 	Search    key.Binding
@@ -95,9 +97,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Otherwise handle as back navigation for sub-pages
 			if m.currentPage > mainPage {
 				m.currentPage--
-				// Clean up topic page when leaving
+				// Clean up pages when leaving them
 				if m.currentPage != topicPage && m.topicPage != nil {
 					m.topicPage = nil
+				}
+				if m.currentPage != detailPage && m.detailPage != nil {
+					m.detailPage = nil
+				}
+				if m.currentPage != resourceDetailPage && m.resourceDetailPage != nil {
+					m.resourceDetailPage = nil
 				}
 			}
 			return m, nil
@@ -126,9 +134,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detailPage = &detailPage
 			}
 		}
-		// Clean up detail page when leaving
+		// Initialize resource detail page if needed
+		if m.currentPage == resourceDetailPage && m.resourceDetailPage == nil {
+			// Get selected resource from main page
+			if m.mainPage.resourcesList.SelectedItem() != nil {
+				if resourceItem, ok := m.mainPage.resourcesList.SelectedItem().(resourceListItem); ok {
+					rdp := NewResourceDetailPage(resourceItem.resourceItem, m.mainPage.currentResource.GetType())
+					m.resourceDetailPage = &rdp
+					cmds = append(cmds, m.resourceDetailPage.Init())
+				} else {
+					// Fallback to main page if no valid resource selected
+					m.currentPage = mainPage
+				}
+			} else {
+				// Fallback to main page if no resource selected
+				m.currentPage = mainPage
+			}
+		}
+		// Clean up pages when leaving them
 		if m.currentPage != detailPage && m.detailPage != nil {
 			m.detailPage = nil
+		}
+		if m.currentPage != resourceDetailPage && m.resourceDetailPage != nil {
+			m.resourceDetailPage = nil
 		}
 		return m, nil
 	}
@@ -142,43 +170,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mainPage = updatedMainPage
 		}
 		cmds = append(cmds, cmd)
-
-		// Check if we need to navigate to topic page
-		// Only handle enter key for navigation if NOT in search mode
-		if m.mainPage.resourcesList.SelectedItem() != nil && !m.mainPage.searchMode {
-			if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
-				// Check what type of resource is currently selected
-				selectedItem := m.mainPage.resourcesList.SelectedItem()
-
-				// Try to cast to topicItem first (legacy compatibility)
-				if topic, ok := selectedItem.(topicItem); ok {
-					m.currentPage = topicPage
-					tp := NewTopicPage(m.dataSource, topic.name, topic.topic)
-					m.topicPage = &tp
-					cmds = append(cmds, m.topicPage.Init())
-				} else if resourceItem, ok := selectedItem.(resourceListItem); ok {
-					// Handle resourceListItem
-					// For now, only navigate to topic page if it's a topic resource
-					// In the future, we might want to handle other resource types differently
-					if m.mainPage.currentResource.GetType() == TopicResourceType {
-						// Extract topic information from resource item
-						// This is a simplified approach - in a real implementation,
-						// we would need to properly map resource items to topics
-						m.currentPage = topicPage
-						// Create a dummy topic for now
-						topic := api.Topic{
-							NumPartitions:     1,
-							ReplicationFactor: 1,
-							ReplicaAssignment: make(map[int32][]int32),
-							ConfigEntries:     make(map[string]*string),
-						}
-						tp := NewTopicPage(m.dataSource, resourceItem.resourceItem.GetID(), topic)
-						m.topicPage = &tp
-						cmds = append(cmds, m.topicPage.Init())
-					}
-				}
-			}
-		}
 
 	case topicPage:
 		if m.topicPage != nil {
@@ -209,6 +200,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			cmds = append(cmds, cmd)
 		}
+		
+	case resourceDetailPage:
+		if m.resourceDetailPage != nil {
+			var cmd tea.Cmd
+			resourceDetailModel, cmd := m.resourceDetailPage.Update(msg)
+			if updatedResourceDetailPage, ok := resourceDetailModel.(*ResourceDetailPageModel); ok {
+				m.resourceDetailPage = updatedResourceDetailPage
+			}
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -228,6 +229,11 @@ func (m Model) View() string {
 			return m.detailPage.View()
 		}
 		return "Detail page not initialized"
+	case resourceDetailPage:
+		if m.resourceDetailPage != nil {
+			return m.resourceDetailPage.View()
+		}
+		return "Resource detail page not initialized"
 	default:
 		return "Unknown page"
 	}
