@@ -144,7 +144,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 		// Check if we need to navigate to topic page
-		if m.mainPage.resourcesList.SelectedItem() != nil {
+		// Only handle enter key for navigation if NOT in search mode
+		if m.mainPage.resourcesList.SelectedItem() != nil && !m.mainPage.searchMode {
 			if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
 				// Check what type of resource is currently selected
 				selectedItem := m.mainPage.resourcesList.SelectedItem()
