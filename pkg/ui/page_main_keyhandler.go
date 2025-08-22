@@ -25,7 +25,7 @@ func (m *MainPageModel) HandleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.searchMode = false
 			m.searchBar.Blur()
 			m.searchBar.SetValue("")
-			// Reset the resources list to show all items
+			// Reset the resources list to show all items (without highlighting)
 			m.resourcesList.SetItems(m.allItems)
 			m.statusMessage = "Search cancelled"
 			return m, nil
@@ -136,15 +136,22 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 		if topicItem, ok := item.(topicItem); ok {
 			// Simple case-insensitive search
 			if strings.Contains(strings.ToLower(topicItem.name), strings.ToLower(query)) {
-				filteredItems = append(filteredItems, item)
+				// Create highlighted version of the item
+				highlightedItem := CreateHighlightedItem(item, query)
+				filteredItems = append(filteredItems, highlightedItem)
 			}
 		} else if resourceItem, ok := item.(resourceListItem); ok {
 			// Simple case-insensitive search on resource ID
 			if strings.Contains(strings.ToLower(resourceItem.resourceItem.GetID()), strings.ToLower(query)) {
-				filteredItems = append(filteredItems, item)
+				// Create highlighted version of the item
+				highlightedItem := CreateHighlightedItem(item, query)
+				filteredItems = append(filteredItems, highlightedItem)
 			}
 		}
 	}
+
+	// Apply natural sorting to filtered results
+	SortResourceListNaturally(filteredItems)
 
 	m.resourcesList.SetItems(filteredItems)
 	m.searchBar.SetResultCount(len(filteredItems))
@@ -167,7 +174,7 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 
 // HandleClearSearch processes clear search messages
 func (m *MainPageModel) HandleClearSearch(msg clearSearchMsg) (tea.Model, tea.Cmd) {
-	// Clear search and reset resources list
+	// Clear search and reset resources list to original items (without highlighting)
 	m.resourcesList.SetItems(m.allItems)
 	m.searchBar.SetResultCount(0)
 	m.searchMode = false

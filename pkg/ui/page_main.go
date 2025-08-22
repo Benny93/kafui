@@ -139,8 +139,19 @@ func (d *customDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil
 
 func (d *customDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	var name, partitions, replication string
+	var searchQuery string
 
-	if i, ok := item.(resourceListItem); ok {
+	if i, ok := item.(HighlightedResourceListItem); ok {
+		name = i.resourceItem.GetID()
+		searchQuery = i.searchQuery
+		details := i.resourceItem.GetDetails()
+		if p, ok := details["partitions"]; ok {
+			partitions = fmt.Sprintf("Partitions: %s", p)
+		}
+		if r, ok := details["replication"]; ok {
+			replication = fmt.Sprintf("Replication: %s", r)
+		}
+	} else if i, ok := item.(resourceListItem); ok {
 		name = i.resourceItem.GetID()
 		details := i.resourceItem.GetDetails()
 		if p, ok := details["partitions"]; ok {
@@ -149,10 +160,20 @@ func (d *customDelegate) Render(w io.Writer, m list.Model, index int, item list.
 		if r, ok := details["replication"]; ok {
 			replication = fmt.Sprintf("Replication: %s", r)
 		}
+	} else if i, ok := item.(HighlightedTopicItem); ok {
+		name = i.name
+		searchQuery = i.searchQuery
+		partitions = fmt.Sprintf("Partitions: %d", i.topic.NumPartitions)
+		replication = fmt.Sprintf("Replication: %d", i.topic.ReplicationFactor)
 	} else if i, ok := item.(topicItem); ok {
 		name = i.name
 		partitions = fmt.Sprintf("Partitions: %d", i.topic.NumPartitions)
 		replication = fmt.Sprintf("Replication: %d", i.topic.ReplicationFactor)
+	}
+
+	// Apply search highlighting if search query is present
+	if searchQuery != "" {
+		name = HighlightSearchMatches(name, searchQuery)
 	}
 
 	itemStyle := d.styles.NormalTitle
@@ -335,15 +356,11 @@ func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 		searchSuggestions = append(searchSuggestions, item.GetID())
 	}
 
-	// Sort items by ID (name)
-	sort.Slice(listItems, func(i, j int) bool {
-		item1 := listItems[i].(resourceListItem)
-		item2 := listItems[j].(resourceListItem)
-		return item1.resourceItem.GetID() < item2.resourceItem.GetID()
-	})
+	// Sort items by ID (name) using natural sorting
+	SortResourceListNaturally(listItems)
 
-	// Sort suggestions as well
-	sort.Strings(searchSuggestions)
+	// Sort suggestions using natural sorting as well
+	sort.Sort(NaturalSort(searchSuggestions))
 
 	m.resourcesList.SetItems(listItems)
 	m.allItems = listItems
@@ -388,8 +405,8 @@ func (m *MainPageModel) loadTopics() tea.Cmd {
 			topicNames = append(topicNames, name)
 		}
 
-		// Sort topic names
-		sort.Strings(topicNames)
+		// Sort topic names using natural sorting
+		sort.Sort(NaturalSort(topicNames))
 
 		items := make([]list.Item, 0, len(topics))
 		searchSuggestions := make([]string, 0, len(topics))
