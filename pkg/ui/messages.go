@@ -2,12 +2,10 @@ package ui
 
 import (
 	"time"
-
-	"github.com/charmbracelet/bubbles/list"
 )
 
 // Custom message types
-type topicListMsg []list.Item
+type topicListMsg []interface{} // Changed from []list.Item to []interface{}
 type errorMsg error
 type pageChangeMsg page
 type timerTickMsg time.Time

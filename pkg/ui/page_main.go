@@ -2,15 +2,14 @@ package ui
 
 import (
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/components"
-	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -26,7 +25,7 @@ var (
 
 type MainPageModel struct {
 	dataSource      api.KafkaDataSource
-	resourcesList   list.Model
+	resourcesTable  table.Model
 	searchBar       components.SearchBarModel
 	spinner         spinner.Model
 	statusMessage   string
@@ -35,14 +34,14 @@ type MainPageModel struct {
 	height          int
 	loading         bool
 	searchMode      bool
-	allItems        []list.Item
+	allRows         []table.Row
 	resourceManager *ResourceManager
 	currentResource Resource
 	err             error
 	// Filter state tracking
-	isFiltered      bool
-	currentFilter   string
-	filteredItems   []list.Item
+	isFiltered    bool
+	currentFilter string
+	filteredRows  []table.Row
 
 	// Reusable components
 	layout      *components.Layout
@@ -72,7 +71,7 @@ func (m MainPageModel) View() string {
 	// Update main content
 	m.mainContent.SetDimensions(contentWidth, contentHeight)
 	m.mainContent.SetSearchBar(m.searchBar)
-	m.mainContent.SetList(m.resourcesList)
+	m.mainContent.SetTable(m.resourcesTable)
 	m.mainContent.SetShowSearch(true)
 
 	// Update sidebar
@@ -85,11 +84,9 @@ func (m MainPageModel) View() string {
 
 	// Update footer
 	selectedItem := "None"
-	if item := m.resourcesList.SelectedItem(); item != nil {
-		if rItem, ok := item.(resourceListItem); ok {
-			selectedItem = rItem.resourceItem.GetID()
-		} else if tItem, ok := item.(topicItem); ok {
-			selectedItem = tItem.name
+	if selectedRow := m.getSelectedResourceItem(); selectedRow != nil {
+		if rowStruct, ok := selectedRow.(struct{ ID string }); ok {
+			selectedItem = rowStruct.ID
 		}
 	}
 
@@ -97,7 +94,7 @@ func (m MainPageModel) View() string {
 		Width:         m.width,
 		SearchMode:    m.searchMode,
 		SelectedItem:  selectedItem,
-		TotalItems:    len(m.allItems),
+		TotalItems:    len(m.allRows),
 		StatusMessage: m.statusMessage,
 		LastUpdate:    m.lastUpdate,
 		Spinner:       m.spinner,
@@ -111,98 +108,185 @@ func (m MainPageModel) View() string {
 	)
 }
 
-// Note: renderResourceButtons, renderShortcuts, and renderFooter methods have been
-// moved to reusable components in the components package
-
-type customDelegate struct {
-	styles     list.DefaultItemStyles
-	itemStyles map[int]lipgloss.Style
+// Table configuration for resource list
+func createResourceTableColumns() []table.Column {
+	return []table.Column{
+		{Title: "Name", Width: 35},
+		{Title: "Type", Width: 15},
+		{Title: "Partitions", Width: 12},
+		{Title: "Replication", Width: 12},
+		{Title: "Details", Width: 25},
+	}
 }
 
-func newCustomDelegate() list.ItemDelegate {
-	delegate := customDelegate{
-		itemStyles: make(map[int]lipgloss.Style),
-	}
-
-	delegate.styles = list.NewDefaultItemStyles()
-	selectedStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("205")).
-		Foreground(lipgloss.Color("0"))
-
-	delegate.styles.SelectedTitle = selectedStyle
-	delegate.styles.SelectedDesc = selectedStyle
-
-	return &delegate
+// Table styles for resource list
+func createResourceTableStyles() table.Styles {
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(false)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Bold(false)
+	return s
 }
 
-func (d *customDelegate) Height() int { return 1 }
-
-func (d *customDelegate) Spacing() int { return 0 }
-
-func (d *customDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
-
-func (d *customDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	var name, partitions, replication string
-	var searchQuery string
-
-	if i, ok := item.(HighlightedResourceListItem); ok {
-		name = i.resourceItem.GetID()
-		searchQuery = i.searchQuery
-		details := i.resourceItem.GetDetails()
-		if p, ok := details["partitions"]; ok {
-			partitions = fmt.Sprintf("Partitions: %s", p)
+// Convert resource items to table rows
+func convertItemsToRows(items []interface{}, searchQuery string) []table.Row {
+	rows := make([]table.Row, 0, len(items))
+	
+	for _, item := range items {
+		var name, resourceType, partitions, replication, details string
+		
+		switch i := item.(type) {
+		case resourceListItem:
+			name = i.resourceItem.GetID()
+			// Determine resource type based on the concrete type
+			switch i.resourceItem.(type) {
+			case *TopicResourceItem:
+				resourceType = "topic"
+			case *ConsumerGroupResourceItem:
+				resourceType = "consumer-group"
+			case *SchemaResourceItem:
+				resourceType = "schema"
+			case *ContextResourceItem:
+				resourceType = "context"
+			default:
+				resourceType = "unknown"
+			}
+			itemDetails := i.resourceItem.GetDetails()
+			if p, ok := itemDetails["Partitions"]; ok {
+				partitions = p
+			} else {
+				partitions = "-"
+			}
+			if r, ok := itemDetails["Replication Factor"]; ok {
+				replication = r
+			} else if r, ok := itemDetails["State"]; ok {
+				replication = r // For consumer groups, use state
+			} else {
+				replication = "-"
+			}
+			if d, ok := itemDetails["Consumers"]; ok {
+				details = d + " consumers"
+			} else if d, ok := itemDetails["Message Count"]; ok {
+				details = d + " messages"
+			} else {
+				details = "-"
+			}
+		case topicItem:
+			name = i.name
+			resourceType = "topic"
+			partitions = fmt.Sprintf("%d", i.topic.NumPartitions)
+			replication = fmt.Sprintf("%d", i.topic.ReplicationFactor)
+			details = fmt.Sprintf("%d configs", len(i.topic.ConfigEntries))
+		case HighlightedResourceListItem:
+			name = i.resourceItem.GetID()
+			// Determine resource type based on the concrete type
+			switch i.resourceItem.(type) {
+			case *TopicResourceItem:
+				resourceType = "topic"
+			case *ConsumerGroupResourceItem:
+				resourceType = "consumer-group"
+			case *SchemaResourceItem:
+				resourceType = "schema"
+			case *ContextResourceItem:
+				resourceType = "context"
+			default:
+				resourceType = "unknown"
+			}
+			itemDetails := i.resourceItem.GetDetails()
+			if p, ok := itemDetails["Partitions"]; ok {
+				partitions = p
+			} else {
+				partitions = "-"
+			}
+			if r, ok := itemDetails["Replication Factor"]; ok {
+				replication = r
+			} else if r, ok := itemDetails["State"]; ok {
+				replication = r // For consumer groups, use state
+			} else {
+				replication = "-"
+			}
+			if d, ok := itemDetails["Consumers"]; ok {
+				details = d + " consumers"
+			} else if d, ok := itemDetails["Message Count"]; ok {
+				details = d + " messages"
+			} else {
+				details = "-"
+			}
+			// Apply highlighting to name
+			if i.searchQuery != "" {
+				name = HighlightSearchMatches(name, i.searchQuery)
+			}
+		case HighlightedTopicItem:
+			name = i.name
+			resourceType = "topic"
+			partitions = fmt.Sprintf("%d", i.topic.NumPartitions)
+			replication = fmt.Sprintf("%d", i.topic.ReplicationFactor)
+			details = fmt.Sprintf("%d configs", len(i.topic.ConfigEntries))
+			// Apply highlighting to name
+			if i.searchQuery != "" {
+				name = HighlightSearchMatches(name, i.searchQuery)
+			}
+		default:
+			continue // Skip unknown types
 		}
-		if r, ok := details["replication"]; ok {
-			replication = fmt.Sprintf("Replication: %s", r)
+		
+		// Apply search highlighting if searchQuery is provided and not already highlighted
+		if searchQuery != "" {
+			switch item.(type) {
+			case resourceListItem, topicItem:
+				name = HighlightSearchMatches(name, searchQuery)
+			}
 		}
-	} else if i, ok := item.(resourceListItem); ok {
-		name = i.resourceItem.GetID()
-		details := i.resourceItem.GetDetails()
-		if p, ok := details["partitions"]; ok {
-			partitions = fmt.Sprintf("Partitions: %s", p)
-		}
-		if r, ok := details["replication"]; ok {
-			replication = fmt.Sprintf("Replication: %s", r)
-		}
-	} else if i, ok := item.(HighlightedTopicItem); ok {
-		name = i.name
-		searchQuery = i.searchQuery
-		partitions = fmt.Sprintf("Partitions: %d", i.topic.NumPartitions)
-		replication = fmt.Sprintf("Replication: %d", i.topic.ReplicationFactor)
-	} else if i, ok := item.(topicItem); ok {
-		name = i.name
-		partitions = fmt.Sprintf("Partitions: %d", i.topic.NumPartitions)
-		replication = fmt.Sprintf("Replication: %d", i.topic.ReplicationFactor)
+		
+		rows = append(rows, table.Row{name, resourceType, partitions, replication, details})
 	}
+	
+	return rows
+}
 
-	// Apply search highlighting if search query is present
-	if searchQuery != "" {
-		name = HighlightSearchMatches(name, searchQuery)
+// Get currently selected resource item from table
+func (m *MainPageModel) getSelectedResourceItem() interface{} {
+	selectedRow := m.resourcesTable.Cursor()
+	if selectedRow < 0 || selectedRow >= len(m.allRows) {
+		return nil
 	}
-
-	itemStyle := d.styles.NormalTitle
-	if index == m.Index() {
-		itemStyle = d.styles.SelectedTitle
+	
+	// We need to find the corresponding item from our original data
+	// This is a bit complex since we're mapping from rows back to items
+	// For now, we'll use the row data directly
+	row := m.allRows[selectedRow]
+	if len(row) > 0 {
+		// Create a minimal resource item from row data
+		resourceID := row[0] // First column is the name
+		// For now, return a simple structure
+		return struct{
+			ID string
+		}{
+			ID: resourceID,
+		}
 	}
-
-	// Create a single row with columns
-	row := fmt.Sprintf("%-40s %-20s %-20s", name, partitions, replication)
-	fmt.Fprint(w, itemStyle.Render(row))
+	
+	return nil
 }
 
 func NewMainPage(ds api.KafkaDataSource) MainPageModel {
-	// Initialize resources list with custom delegate
-	delegate := newCustomDelegate()
-
-	resourcesList := list.New([]list.Item{}, delegate, 0, 0)
-	resourcesList.Title = "Kafka Topics"
-	resourcesList.SetShowTitle(true)
-	resourcesList.SetShowHelp(true)
-	resourcesList.SetFilteringEnabled(false) // We'll handle filtering ourselves
-	resourcesList.SetShowFilter(false)
-	resourcesList.Styles.Title = TitleStyle
-	resourcesList.FilterInput.Prompt = "search: "
-	resourcesList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(Highlight)
+	// Initialize resources table
+	columns := createResourceTableColumns()
+	resourcesTable := table.New(
+		table.WithColumns(columns),
+		table.WithFocused(true),
+		table.WithHeight(20),
+	)
+	resourcesTable.SetStyles(createResourceTableStyles())
+	// Table doesn't need filtering configuration - we handle it ourselves
+	// Remove old list-specific configurations (no longer needed for table)
+	// Table styling is handled by createResourceTableStyles()
 
 	// Initialize resource manager
 	resourceManager := NewResourceManager(ds)
@@ -236,19 +320,19 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 
 	return MainPageModel{
 		dataSource:      ds,
-		resourcesList:   resourcesList,
+		resourcesTable:  resourcesTable,
 		searchBar:       searchBar,
 		spinner:         sp,
 		lastUpdate:      time.Now(),
 		statusMessage:   "Welcome to Kafui",
 		searchMode:      false,
-		allItems:        []list.Item{},
+		allRows:         []table.Row{},
 		resourceManager: resourceManager,
 		currentResource: currentResource,
 		// Initialize filter state
 		isFiltered:    false,
 		currentFilter: "",
-		filteredItems: []list.Item{},
+		filteredRows:  []table.Row{},
 		layout:        layout,
 		sidebar:       sidebar,
 		footer:        footer,
@@ -277,8 +361,8 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		mainContentWidth := msg.Width - sidebarWidth - 6 // Account for margins and borders
 		contentHeight := msg.Height - 8                  // Account for header, footer and margins (removed status bar)
 
-		// Update list and search bar dimensions
-		m.resourcesList.SetSize(mainContentWidth-4, contentHeight-3) // Account for borders and margins
+		// Update table and search bar dimensions
+		m.resourcesTable.SetHeight(contentHeight - 3) // Account for borders and margins
 		m.searchBar.SetWidth(mainContentWidth - 4)
 		return m, nil
 
@@ -287,8 +371,12 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case topicListMsg:
 		m.loading = false
-		items := []list.Item(msg)
-		
+		// topicListMsg is already a slice of interfaces, no need to convert
+		items := make([]interface{}, len(msg))
+		for i, item := range msg {
+			items[i] = item
+		}
+
 		// Only update if we're currently showing topics (not if we've switched to another resource)
 		if m.currentResource.GetType() != TopicResourceType {
 			// Ignore topic updates when viewing other resources
@@ -297,10 +385,11 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateTimer(),
 			)
 		}
-		
-		// Store the new items as our base data
-		m.allItems = items
-		
+
+		// Convert items to table rows
+		rows := convertItemsToRows(items, "")
+		m.allRows = rows
+
 		// Update search suggestions with topic names
 		searchSuggestions := make([]string, 0, len(items))
 		for _, item := range items {
@@ -309,30 +398,33 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.searchBar.SetSearchSuggestions(searchSuggestions)
-		
+
 		// If we're currently filtered, reapply the filter to new data
 		if m.isFiltered && m.currentFilter != "" {
 			// Reapply current filter
-			filteredItems := []list.Item{}
+			filteredItems := []interface{}{}
 			for _, item := range items {
 				if topicItem, ok := item.(topicItem); ok {
 					if strings.Contains(strings.ToLower(topicItem.name), strings.ToLower(m.currentFilter)) {
-						highlightedItem := CreateHighlightedItem(item, m.currentFilter)
+						// Create highlighted version using original topicItem
+						highlightedItem := CreateHighlightedItem(topicItem, m.currentFilter)
 						filteredItems = append(filteredItems, highlightedItem)
 					}
 				}
 			}
-			// Apply natural sorting to filtered results
-			SortResourceListNaturally(filteredItems)
-			m.filteredItems = filteredItems
-			m.resourcesList.SetItems(filteredItems)
-			m.statusMessage = fmt.Sprintf("Showing %d of %d topics (filtered by: %s)", len(filteredItems), len(items), m.currentFilter)
+			// Convert filtered items to table rows and apply natural sorting
+			filteredRows := convertItemsToRows(filteredItems, m.currentFilter)
+			SortTableRowsNaturally(filteredRows)
+			m.filteredRows = filteredRows
+			m.resourcesTable.SetRows(filteredRows)
+			m.statusMessage = fmt.Sprintf("Showing %d of %d topics (filtered by: %s)", len(filteredRows), len(rows), m.currentFilter)
 		} else {
-			// No filter active, show all items
-			m.resourcesList.SetItems(items)
-			m.statusMessage = fmt.Sprintf("Showing %d of %d topics", len(items), len(items))
+			// No filter active, show all rows
+			SortTableRowsNaturally(rows)
+			m.resourcesTable.SetRows(rows)
+			m.statusMessage = fmt.Sprintf("Showing %d of %d topics", len(rows), len(rows))
 		}
-		
+
 		return m, tea.Batch(
 			m.spinner.Tick,
 			m.updateTimer(),
@@ -373,44 +465,54 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case switchResourceByNameMsg:
 		return m.HandleSwitchResourceByName(msg)
-		
+
 	case currentResourceListMsg:
 		m.loading = false
 		// Only update if the message is for the current resource type
 		if msg.resourceType == m.currentResource.GetType() {
-			// Store the new items as our base data
-			m.allItems = msg.items
+			// Convert list items to interface slice
+			items := make([]interface{}, len(msg.items))
+			for i, item := range msg.items {
+				items[i] = item
+			}
 			
+			// Convert to table rows
+			rows := convertItemsToRows(items, "")
+			m.allRows = rows
+
 			// Update search suggestions
-			searchSuggestions := make([]string, 0, len(msg.items))
-			for _, item := range msg.items {
+			searchSuggestions := make([]string, 0, len(items))
+			for _, item := range items {
 				if resourceItem, ok := item.(resourceListItem); ok {
 					searchSuggestions = append(searchSuggestions, resourceItem.resourceItem.GetID())
 				}
 			}
 			m.searchBar.SetSearchSuggestions(searchSuggestions)
-			
+
 			// If we're currently filtered, reapply the filter to new data
 			if m.isFiltered && m.currentFilter != "" {
 				// Reapply current filter
-				filteredItems := []list.Item{}
-				for _, item := range msg.items {
+				filteredItems := []interface{}{}
+				for _, item := range items {
 					if resourceItem, ok := item.(resourceListItem); ok {
 						if strings.Contains(strings.ToLower(resourceItem.resourceItem.GetID()), strings.ToLower(m.currentFilter)) {
-							highlightedItem := CreateHighlightedItem(item, m.currentFilter)
+							// Create highlighted version using original resourceListItem
+							highlightedItem := CreateHighlightedItem(resourceItem, m.currentFilter)
 							filteredItems = append(filteredItems, highlightedItem)
 						}
 					}
 				}
-				// Apply natural sorting to filtered results
-				SortResourceListNaturally(filteredItems)
-				m.filteredItems = filteredItems
-				m.resourcesList.SetItems(filteredItems)
-				m.statusMessage = fmt.Sprintf("Showing %d of %d %s (filtered by: %s)", len(filteredItems), len(msg.items), m.currentResource.GetName(), m.currentFilter)
+				// Convert filtered items to table rows and apply natural sorting
+				filteredRows := convertItemsToRows(filteredItems, m.currentFilter)
+				SortTableRowsNaturally(filteredRows)
+				m.filteredRows = filteredRows
+				m.resourcesTable.SetRows(filteredRows)
+				m.statusMessage = fmt.Sprintf("Showing %d of %d %s (filtered by: %s)", len(filteredRows), len(rows), m.currentResource.GetName(), m.currentFilter)
 			} else {
-				// No filter active, show all items
-				m.resourcesList.SetItems(msg.items)
-				m.statusMessage = fmt.Sprintf("Showing %d of %d %s", len(msg.items), len(msg.items), m.currentResource.GetName())
+				// No filter active, show all rows
+				SortTableRowsNaturally(rows)
+				m.resourcesTable.SetRows(rows)
+				m.statusMessage = fmt.Sprintf("Showing %d of %d %s", len(rows), len(rows), m.currentResource.GetName())
 			}
 		}
 		return m, tea.Batch(
@@ -425,12 +527,12 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // switchToResource switches the current view to a different resource type
 func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 	m.currentResource = m.resourceManager.GetResource(resourceType)
-	m.resourcesList.Title = m.currentResource.GetName()
+	// Note: Tables don't have titles like lists - title is handled by layout
 
 	// Reset filter state when switching resources
 	m.isFiltered = false
 	m.currentFilter = ""
-	m.filteredItems = []list.Item{}
+	m.filteredRows = []table.Row{}
 
 	// Load data for the new resource
 	items, err := m.currentResource.GetData()
@@ -439,31 +541,32 @@ func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 		return
 	}
 
-	// Convert resource items to list items
-	listItems := make([]list.Item, 0, len(items))
+	// Convert resource items to interface slice
+	interfaceItems := make([]interface{}, 0, len(items))
 	searchSuggestions := make([]string, 0, len(items))
 
 	for _, item := range items {
-		listItems = append(listItems, resourceListItem{
+		interfaceItems = append(interfaceItems, resourceListItem{
 			resourceItem: item,
 		})
 		// Add item ID to search suggestions
 		searchSuggestions = append(searchSuggestions, item.GetID())
 	}
 
-	// Sort items by ID (name) using natural sorting
-	SortResourceListNaturally(listItems)
+	// Convert to table rows and sort by ID (name) using natural sorting
+	rows := convertItemsToRows(interfaceItems, "")
+	SortTableRowsNaturally(rows)
 
 	// Sort suggestions using natural sorting as well
 	sort.Sort(NaturalSort(searchSuggestions))
 
-	m.resourcesList.SetItems(listItems)
-	m.allItems = listItems
+	m.resourcesTable.SetRows(rows)
+	m.allRows = rows
 
 	// Update search suggestions for the new resource
 	m.searchBar.SetSearchSuggestions(searchSuggestions)
 
-	m.statusMessage = fmt.Sprintf("Showing %d of %d %s", len(listItems), len(listItems), m.currentResource.GetName())
+	m.statusMessage = fmt.Sprintf("Showing %d of %d %s", len(rows), len(rows), m.currentResource.GetName())
 }
 
 // resourceListItem wraps a ResourceItem to implement list.Item interface
@@ -482,7 +585,7 @@ type switchResourceMsg ResourceType
 type switchResourceByNameMsg string
 type currentResourceListMsg struct {
 	resourceType ResourceType
-	items        []list.Item
+	items        []interface{} // Changed from []list.Item to []interface{}
 }
 
 func (m MainPageModel) updateTimer() tea.Cmd {
@@ -507,7 +610,7 @@ func (m *MainPageModel) loadTopics() tea.Cmd {
 		// Sort topic names using natural sorting
 		sort.Sort(NaturalSort(topicNames))
 
-		items := make([]list.Item, 0, len(topics))
+		items := make([]interface{}, 0, len(topics)) // Changed to []interface{}
 		searchSuggestions := make([]string, 0, len(topics))
 
 		for _, name := range topicNames {
@@ -532,20 +635,17 @@ func (m *MainPageModel) loadCurrentResource() tea.Cmd {
 			return errorMsg(err)
 		}
 
-		// Convert resource items to list items
-		listItems := make([]list.Item, 0, len(items))
+		// Convert resource items to interface slice
+		interfaceItems := make([]interface{}, 0, len(items))
 		for _, item := range items {
-			listItems = append(listItems, resourceListItem{
+			interfaceItems = append(interfaceItems, resourceListItem{
 				resourceItem: item,
 			})
 		}
 
-		// Sort items using natural sorting
-		SortResourceListNaturally(listItems)
-
 		return currentResourceListMsg{
 			resourceType: m.currentResource.GetType(),
-			items:        listItems,
+			items:        interfaceItems,
 		}
 	}
 }

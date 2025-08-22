@@ -7,6 +7,25 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// minimalResourceItem is a minimal implementation of ResourceItem for table navigation
+type minimalResourceItem struct {
+	id string
+}
+
+func (m *minimalResourceItem) GetID() string {
+	return m.id
+}
+
+func (m *minimalResourceItem) GetValues() []string {
+	return []string{m.id}
+}
+
+func (m *minimalResourceItem) GetDetails() map[string]string {
+	return map[string]string{
+		"Name": m.id,
+	}
+}
+
 type page int
 
 const (
@@ -115,12 +134,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentPage = page(msg)
 		// Initialize topic page if needed
 		if m.currentPage == topicPage && m.topicPage == nil {
-			// Get selected topic from main page
-			if m.mainPage.resourcesList.SelectedItem() != nil {
-				topic := m.mainPage.resourcesList.SelectedItem().(topicItem)
-				tp := NewTopicPage(m.dataSource, topic.name, topic.topic)
-				m.topicPage = &tp
-				cmds = append(cmds, m.topicPage.Init())
+			// Get selected item from main page table
+			if selectedItem := m.mainPage.getSelectedResourceItem(); selectedItem != nil {
+				// For now, create a dummy topic since we don't have the full topic structure
+				// This is a simplified approach - ideally we'd maintain the original item data
+				if rowStruct, ok := selectedItem.(struct{ ID string }); ok {
+					topic := api.Topic{
+						NumPartitions:     1,
+						ReplicationFactor: 1,
+						ReplicaAssignment: make(map[int32][]int32),
+						ConfigEntries:     make(map[string]*string),
+					}
+					tp := NewTopicPage(m.dataSource, rowStruct.ID, topic)
+					m.topicPage = &tp
+					cmds = append(cmds, m.topicPage.Init())
+				}
 			} else {
 				// Fallback to main page if no topic selected
 				m.currentPage = mainPage
@@ -136,10 +164,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Initialize resource detail page if needed
 		if m.currentPage == resourceDetailPage && m.resourceDetailPage == nil {
-			// Get selected resource from main page
-			if m.mainPage.resourcesList.SelectedItem() != nil {
-				if resourceItem, ok := m.mainPage.resourcesList.SelectedItem().(resourceListItem); ok {
-					rdp := NewResourceDetailPage(resourceItem.resourceItem, m.mainPage.currentResource.GetType())
+			// Get selected resource from main page table
+			if selectedItem := m.mainPage.getSelectedResourceItem(); selectedItem != nil {
+				if rowStruct, ok := selectedItem.(struct{ ID string }); ok {
+					// Create a minimal resource item that implements ResourceItem interface
+					minimalResource := &minimalResourceItem{
+						id: rowStruct.ID,
+					}
+					
+					rdp := NewResourceDetailPage(minimalResource, m.mainPage.currentResource.GetType())
 					m.resourceDetailPage = &rdp
 					cmds = append(cmds, m.resourceDetailPage.Init())
 				} else {

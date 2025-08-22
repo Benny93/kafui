@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/datasource/mock"
 	"github.com/Benny93/kafui/pkg/ui/components"
-	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 )
@@ -67,12 +66,12 @@ func TestMainPageModelView(t *testing.T) {
 
 			// Add some mock items to avoid empty state
 			if tt.width > 0 && tt.height > 0 {
-				mockItems := []list.Item{
-					topicItem{name: "test-topic-1", topic: api.Topic{NumPartitions: 3, ReplicationFactor: 1}},
-					topicItem{name: "test-topic-2", topic: api.Topic{NumPartitions: 5, ReplicationFactor: 2}},
+				mockRows := []table.Row{
+					{"test-topic-1", "topic", "3", "1", "100 messages"},
+					{"test-topic-2", "topic", "5", "2", "200 messages"},
 				}
-				model.resourcesList.SetItems(mockItems)
-				model.allItems = mockItems
+				model.resourcesTable.SetRows(mockRows)
+				model.allRows = mockRows
 			}
 
 			// Render the view
@@ -181,17 +180,14 @@ func TestMainPageModelRenderFooter(t *testing.T) {
 		name         string
 		width        int
 		searchMode   bool
-		selectedItem list.Item
+		selectedRow []string
 		expected     []string
 	}{
 		{
 			name:       "Normal footer",
 			width:      120,
 			searchMode: false,
-			selectedItem: topicItem{
-				name:  "test-topic",
-				topic: api.Topic{NumPartitions: 3, ReplicationFactor: 1},
-			},
+			selectedRow: []string{"test-topic", "topic", "3", "1", "Test topic"},
 			expected: []string{
 				"Selected: test-topic",
 				"items total",
@@ -231,32 +227,30 @@ func TestMainPageModelRenderFooter(t *testing.T) {
 			model.lastUpdate = time.Now()
 			model.statusMessage = "Test status"
 
-			// Set up mock items
-			mockItems := []list.Item{
-				topicItem{name: "test-topic-1", topic: api.Topic{NumPartitions: 3, ReplicationFactor: 1}},
-				topicItem{name: "test-topic-2", topic: api.Topic{NumPartitions: 5, ReplicationFactor: 2}},
+			// Set up mock table rows
+			mockRows := []table.Row{
+				{"test-topic-1", "topic", "3", "1", "100 messages"},
+				{"test-topic-2", "topic", "5", "2", "200 messages"},
 			}
-			model.resourcesList.SetItems(mockItems)
-			model.allItems = mockItems
+			model.resourcesTable.SetRows(mockRows)
+			model.allRows = mockRows
 
-			// Select an item if provided
-			if tt.selectedItem != nil {
-				model.resourcesList.Select(0)
+			// Select a row if provided
+			if tt.selectedRow != nil {
+				model.resourcesTable.GotoTop()
 			}
 
 			// Update footer configuration
 			selectedItem := "None"
-			if tt.selectedItem != nil {
-				if tItem, ok := tt.selectedItem.(topicItem); ok {
-					selectedItem = tItem.name
-				}
+			if tt.selectedRow != nil && len(tt.selectedRow) > 0 {
+				selectedItem = tt.selectedRow[0]
 			}
 
 			model.footer.UpdateConfig(components.FooterConfig{
 				Width:         tt.width,
 				SearchMode:    tt.searchMode,
 				SelectedItem:  selectedItem,
-				TotalItems:    len(mockItems),
+				TotalItems:    len(mockRows),
 				StatusMessage: "Test status",
 				LastUpdate:    time.Now(),
 				Spinner:       model.spinner,
@@ -349,14 +343,14 @@ func TestMainPageModelSearchFunctionality(t *testing.T) {
 	model.width = 120
 	model.height = 40
 
-	// Add mock items
-	mockItems := []list.Item{
-		topicItem{name: "user-events", topic: api.Topic{NumPartitions: 3, ReplicationFactor: 1}},
-		topicItem{name: "order-processing", topic: api.Topic{NumPartitions: 5, ReplicationFactor: 2}},
-		topicItem{name: "user-analytics", topic: api.Topic{NumPartitions: 2, ReplicationFactor: 1}},
+	// Add mock rows for table
+	mockRows := []table.Row{
+		{"user-events", "topic", "3", "1", "User events topic"},
+		{"order-processing", "topic", "5", "2", "Order processing topic"},
+		{"user-analytics", "topic", "2", "1", "User analytics topic"},
 	}
-	model.resourcesList.SetItems(mockItems)
-	model.allItems = mockItems
+	model.resourcesTable.SetRows(mockRows)
+	model.allRows = mockRows
 
 	// Test search functionality
 	searchQuery := "user"
@@ -428,7 +422,7 @@ func TestMainPageModelInitialization(t *testing.T) {
 
 	// Verify initial state
 	assert.NotNil(t, model.dataSource, "Data source should be set")
-	assert.NotNil(t, model.resourcesList, "Resources list should be initialized")
+	assert.NotNil(t, model.resourcesTable, "Resources table should be initialized")
 	assert.NotNil(t, model.searchBar, "Search bar should be initialized")
 	assert.NotNil(t, model.spinner, "Spinner should be initialized")
 	assert.NotNil(t, model.resourceManager, "Resource manager should be initialized")

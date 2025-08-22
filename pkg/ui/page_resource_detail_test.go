@@ -49,8 +49,8 @@ func TestResourceDetailPageNavigation(t *testing.T) {
 	// Test 2: Navigate to resource detail page
 	t.Run("NavigateToResourceDetail", func(t *testing.T) {
 		// Ensure we have some items and one is selected
-		if len(uiModel.mainPage.allItems) > 0 {
-			uiModel.mainPage.resourcesList.Select(0)
+		if len(uiModel.mainPage.allRows) > 0 {
+			uiModel.mainPage.resourcesTable.GotoTop()
 
 			// Press enter to navigate to resource detail
 			updatedModel, _ := uiModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -77,12 +77,14 @@ func TestResourceDetailPageNavigation(t *testing.T) {
 
 	// Test 4: Test resource detail page rendering
 	t.Run("ResourceDetailPageRendering", func(t *testing.T) {
-		if len(uiModel.mainPage.allItems) > 0 {
-			// Get first resource item
-			selectedItem := uiModel.mainPage.allItems[0]
-			if resourceItem, ok := selectedItem.(resourceListItem); ok {
+		if len(uiModel.mainPage.allRows) > 0 {
+			// Get first resource row
+			selectedRow := uiModel.mainPage.allRows[0]
+			if len(selectedRow) > 0 {
+				// Create a minimal resource item for testing
+				resourceItem := &minimalResourceItem{id: selectedRow[0]}
 				// Create resource detail page
-				rdp := NewResourceDetailPage(resourceItem.resourceItem, ConsumerGroupResourceType)
+				rdp := NewResourceDetailPage(resourceItem, ConsumerGroupResourceType)
 				rdp.width = 120
 				rdp.height = 40
 
@@ -99,12 +101,14 @@ func TestResourceDetailPageKeyHandling(t *testing.T) {
 	// Create a mock resource item
 	mockDS := &mock.KafkaDataSourceMock{}
 	mainModel := NewMainPage(mockDS)
-	
-	if len(mainModel.allItems) > 0 {
-		selectedItem := mainModel.allItems[0]
-		if resourceItem, ok := selectedItem.(resourceListItem); ok {
+
+	if len(mainModel.allRows) > 0 {
+		selectedRow := mainModel.allRows[0]
+		if len(selectedRow) > 0 {
+			// Create a minimal resource item for testing
+			resourceItem := &minimalResourceItem{id: selectedRow[0]}
 			// Create resource detail page
-			rdp := NewResourceDetailPage(resourceItem.resourceItem, ConsumerGroupResourceType)
+			rdp := NewResourceDetailPage(resourceItem, ConsumerGroupResourceType)
 			rdp.width = 120
 			rdp.height = 40
 
@@ -120,7 +124,7 @@ func TestResourceDetailPageKeyHandling(t *testing.T) {
 				updatedModel, _ := rdp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 				rdp = updatedModel.(ResourceDetailPageModel)
 
-				// Test scroll up  
+				// Test scroll up
 				updatedModel, _ = rdp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 				rdp = updatedModel.(ResourceDetailPageModel)
 

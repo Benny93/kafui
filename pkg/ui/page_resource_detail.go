@@ -173,15 +173,15 @@ func (m ResourceDetailPageModel) View() string {
 func (m *ResourceDetailPageModel) updateContent() {
 	// Format the resource content based on type
 	formattedContent := m.formatResourceContent()
-	
+
 	// Apply word wrapping if enabled
 	if m.wrapped && m.viewport.Width > 0 {
 		formattedContent = wordwrap.String(formattedContent, m.viewport.Width-4)
 	}
-	
+
 	// Set content in viewport
 	m.viewport.SetContent(formattedContent)
-	
+
 	// Update metadata
 	m.metadata = m.formatMetadata()
 }
@@ -189,10 +189,10 @@ func (m *ResourceDetailPageModel) updateContent() {
 // formatResourceContent formats the resource content for display based on resource type
 func (m *ResourceDetailPageModel) formatResourceContent() string {
 	var content strings.Builder
-	
+
 	// Get resource details
 	details := m.resourceItem.GetDetails()
-	
+
 	switch m.resourceType {
 	case ConsumerGroupResourceType:
 		content.WriteString(m.formatConsumerGroupDetails(details))
@@ -205,53 +205,53 @@ func (m *ResourceDetailPageModel) formatResourceContent() string {
 	default:
 		content.WriteString(m.formatGenericDetails(details))
 	}
-	
+
 	return content.String()
 }
 
 // formatConsumerGroupDetails formats consumer group specific details
 func (m *ResourceDetailPageModel) formatConsumerGroupDetails(details map[string]string) string {
 	var content strings.Builder
-	
+
 	content.WriteString(sectionHeaderStyle.Render("Consumer Group Information"))
 	content.WriteString("\n\n")
-	
+
 	// Consumer Group specific fields
 	if state, ok := details["state"]; ok {
 		content.WriteString(fieldNameStyle.Render("State: "))
 		content.WriteString(fieldValueStyle.Render(state))
 		content.WriteString("\n")
 	}
-	
+
 	if protocol, ok := details["protocol"]; ok {
 		content.WriteString(fieldNameStyle.Render("Protocol: "))
 		content.WriteString(fieldValueStyle.Render(protocol))
 		content.WriteString("\n")
 	}
-	
+
 	if coordinator, ok := details["coordinator"]; ok {
 		content.WriteString(fieldNameStyle.Render("Coordinator: "))
 		content.WriteString(fieldValueStyle.Render(coordinator))
 		content.WriteString("\n")
 	}
-	
+
 	if memberCount, ok := details["members"]; ok {
 		content.WriteString(fieldNameStyle.Render("Members: "))
 		content.WriteString(fieldValueStyle.Render(memberCount))
 		content.WriteString("\n")
 	}
-	
+
 	if assignedTopics, ok := details["assigned_topics"]; ok {
 		content.WriteString(fieldNameStyle.Render("Assigned Topics: "))
 		content.WriteString(fieldValueStyle.Render(assignedTopics))
 		content.WriteString("\n")
 	}
-	
+
 	// Add any other details
 	content.WriteString("\n")
 	content.WriteString(sectionHeaderStyle.Render("Additional Details"))
 	content.WriteString("\n\n")
-	
+
 	for key, value := range details {
 		if key != "state" && key != "protocol" && key != "coordinator" && key != "members" && key != "assigned_topics" {
 			content.WriteString(fieldNameStyle.Render(key + ": "))
@@ -259,35 +259,35 @@ func (m *ResourceDetailPageModel) formatConsumerGroupDetails(details map[string]
 			content.WriteString("\n")
 		}
 	}
-	
+
 	return content.String()
 }
 
 // formatSchemaDetails formats schema specific details
 func (m *ResourceDetailPageModel) formatSchemaDetails(details map[string]string) string {
 	var content strings.Builder
-	
+
 	content.WriteString(sectionHeaderStyle.Render("Schema Information"))
 	content.WriteString("\n\n")
-	
+
 	if version, ok := details["version"]; ok {
 		content.WriteString(fieldNameStyle.Render("Version: "))
 		content.WriteString(fieldValueStyle.Render(version))
 		content.WriteString("\n")
 	}
-	
+
 	if schemaType, ok := details["type"]; ok {
 		content.WriteString(fieldNameStyle.Render("Type: "))
 		content.WriteString(fieldValueStyle.Render(schemaType))
 		content.WriteString("\n")
 	}
-	
+
 	if compatibility, ok := details["compatibility"]; ok {
 		content.WriteString(fieldNameStyle.Render("Compatibility: "))
 		content.WriteString(fieldValueStyle.Render(compatibility))
 		content.WriteString("\n")
 	}
-	
+
 	// Add schema content if available
 	if schema, ok := details["schema"]; ok {
 		content.WriteString("\n")
@@ -296,65 +296,65 @@ func (m *ResourceDetailPageModel) formatSchemaDetails(details map[string]string)
 		content.WriteString(fieldValueStyle.Render(schema))
 		content.WriteString("\n")
 	}
-	
+
 	return content.String()
 }
 
 // formatContextDetails formats context specific details
 func (m *ResourceDetailPageModel) formatContextDetails(details map[string]string) string {
 	var content strings.Builder
-	
+
 	content.WriteString(sectionHeaderStyle.Render("Context Information"))
 	content.WriteString("\n\n")
-	
+
 	if endpoint, ok := details["endpoint"]; ok {
 		content.WriteString(fieldNameStyle.Render("Endpoint: "))
 		content.WriteString(fieldValueStyle.Render(endpoint))
 		content.WriteString("\n")
 	}
-	
+
 	if auth, ok := details["auth"]; ok {
 		content.WriteString(fieldNameStyle.Render("Authentication: "))
 		content.WriteString(fieldValueStyle.Render(auth))
 		content.WriteString("\n")
 	}
-	
+
 	return m.formatGenericDetails(details)
 }
 
 // formatTopicDetails formats topic specific details
 func (m *ResourceDetailPageModel) formatTopicDetails(details map[string]string) string {
 	var content strings.Builder
-	
+
 	content.WriteString(sectionHeaderStyle.Render("Topic Information"))
 	content.WriteString("\n\n")
-	
+
 	if partitions, ok := details["partitions"]; ok {
 		content.WriteString(fieldNameStyle.Render("Partitions: "))
 		content.WriteString(fieldValueStyle.Render(partitions))
 		content.WriteString("\n")
 	}
-	
+
 	if replication, ok := details["replication"]; ok {
 		content.WriteString(fieldNameStyle.Render("Replication Factor: "))
 		content.WriteString(fieldValueStyle.Render(replication))
 		content.WriteString("\n")
 	}
-	
+
 	return m.formatGenericDetails(details)
 }
 
 // formatGenericDetails formats any additional details in a generic way
 func (m *ResourceDetailPageModel) formatGenericDetails(details map[string]string) string {
 	var content strings.Builder
-	
+
 	// Skip already processed fields for consumer groups
 	skipFields := map[string]bool{
 		"state": true, "protocol": true, "coordinator": true, "members": true, "assigned_topics": true,
 		"version": true, "type": true, "compatibility": true, "schema": true,
 		"endpoint": true, "auth": true, "partitions": true, "replication": true,
 	}
-	
+
 	hasAdditional := false
 	for key := range details {
 		if !skipFields[key] {
@@ -362,12 +362,12 @@ func (m *ResourceDetailPageModel) formatGenericDetails(details map[string]string
 			break
 		}
 	}
-	
+
 	if hasAdditional {
 		content.WriteString("\n")
 		content.WriteString(sectionHeaderStyle.Render("Additional Properties"))
 		content.WriteString("\n\n")
-		
+
 		for key, value := range details {
 			if !skipFields[key] {
 				content.WriteString(fieldNameStyle.Render(key + ": "))
@@ -376,7 +376,7 @@ func (m *ResourceDetailPageModel) formatGenericDetails(details map[string]string
 			}
 		}
 	}
-	
+
 	return content.String()
 }
 
@@ -384,9 +384,9 @@ func (m *ResourceDetailPageModel) formatGenericDetails(details map[string]string
 func (m *ResourceDetailPageModel) formatMetadata() string {
 	title := fmt.Sprintf("%s Details: %s", strings.Title(m.resourceType.String()), m.resourceName)
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	
+
 	metadata := fmt.Sprintf("%s\nLast updated: %s", title, timestamp)
-	
+
 	return resourceMetadataStyle.Render(metadata)
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -89,6 +90,17 @@ func SortResourceListNaturally(items []list.Item) {
 		}
 
 		return NaturalLess(nameI, nameJ)
+	})
+}
+
+// SortTableRowsNaturally sorts a slice of table rows using natural sorting
+func SortTableRowsNaturally(rows []table.Row) {
+	sort.Slice(rows, func(i, j int) bool {
+		// Sort by the first column (Name)
+		if len(rows[i]) > 0 && len(rows[j]) > 0 {
+			return NaturalLess(rows[i][0], rows[j][0])
+		}
+		return false
 	})
 }
 

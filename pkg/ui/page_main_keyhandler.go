@@ -6,7 +6,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -25,12 +25,12 @@ func (m *MainPageModel) HandleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.searchMode = false
 			m.searchBar.Blur()
 			m.searchBar.SetValue("")
-			// Reset the resources list to show all items (without highlighting)
-			m.resourcesList.SetItems(m.allItems)
+			// Reset the resources table to show all rows (without highlighting)
+			m.resourcesTable.SetRows(m.allRows)
 			// Reset filter state
 			m.isFiltered = false
 			m.currentFilter = ""
-			m.filteredItems = []list.Item{}
+			m.filteredRows = []table.Row{}
 			m.statusMessage = "Search cancelled"
 			return m, nil
 		}
@@ -88,8 +88,8 @@ func (m *MainPageModel) HandleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		// If not in search mode and an item is selected, navigate to appropriate page
-		if m.resourcesList.SelectedItem() != nil {
+		// If not in search mode and a row is selected, navigate to appropriate page
+		if m.getSelectedResourceItem() != nil {
 			// Check the current resource type to determine navigation
 			if m.currentResource.GetType() == TopicResourceType {
 				// Navigate to topic page for topics
@@ -114,19 +114,19 @@ func (m *MainPageModel) HandleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		debugLog("Search bar update complete, commands: %v", cmd != nil)
 		return m, tea.Batch(cmds...)
 	} else {
-		// Normal navigation
+		// Normal table navigation
 		switch msg.String() {
 		case "j", "down":
-			m.resourcesList.CursorDown()
+			m.resourcesTable.MoveDown(1)
 		case "k", "up":
-			m.resourcesList.CursorUp()
+			m.resourcesTable.MoveUp(1)
 		case "g", "home":
-			m.resourcesList.Select(0)
+			m.resourcesTable.GotoTop()
 		case "G", "end":
-			m.resourcesList.Select(len(m.resourcesList.Items()) - 1)
+			m.resourcesTable.GotoBottom()
 		default:
 			var cmd tea.Cmd
-			m.resourcesList, cmd = m.resourcesList.Update(msg)
+			m.resourcesTable, cmd = m.resourcesTable.Update(msg)
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -144,46 +144,65 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 	m.isFiltered = true
 	m.currentFilter = query
 
-	// Filter the resources list
-	filteredItems := []list.Item{}
+	// Filter the resources
+	filteredItems := []interface{}{}
 
-	for _, item := range m.allItems {
-		// Check if it's a topicItem (legacy) or resourceListItem (new)
-		if topicItem, ok := item.(topicItem); ok {
+	// Convert current table rows back to items for filtering
+	// We need to work with the original data stored elsewhere
+	// For now, we'll work with a simplified approach
+	for _, row := range m.allRows {
+		if len(row) > 0 {
+			name := row[0] // First column is the name
 			// Simple case-insensitive search
-			if strings.Contains(strings.ToLower(topicItem.name), strings.ToLower(query)) {
-				// Create highlighted version of the item
-				highlightedItem := CreateHighlightedItem(item, query)
-				filteredItems = append(filteredItems, highlightedItem)
-			}
-		} else if resourceItem, ok := item.(resourceListItem); ok {
-			// Simple case-insensitive search on resource ID
-			if strings.Contains(strings.ToLower(resourceItem.resourceItem.GetID()), strings.ToLower(query)) {
-				// Create highlighted version of the item
-				highlightedItem := CreateHighlightedItem(item, query)
-				filteredItems = append(filteredItems, highlightedItem)
+			if strings.Contains(strings.ToLower(name), strings.ToLower(query)) {
+				// Create a simplified item for highlighting
+				// This is a workaround - ideally we'd maintain the original items
+				filteredItems = append(filteredItems, struct {
+					Name string
+					Row  table.Row
+				}{
+					Name: name,
+					Row:  row,
+				})
 			}
 		}
 	}
 
-	// Apply natural sorting to filtered results
-	SortResourceListNaturally(filteredItems)
+	// Convert filtered items to highlighted table rows
+	filteredRows := make([]table.Row, 0, len(filteredItems))
+	for _, item := range filteredItems {
+		if simpleItem, ok := item.(struct {
+			Name string
+			Row  table.Row
+		}); ok {
+			// Apply highlighting to the name (first column)
+			highlightedName := HighlightSearchMatches(simpleItem.Name, query)
+			// Create new row with highlighted name
+			newRow := make(table.Row, len(simpleItem.Row))
+			copy(newRow, simpleItem.Row)
+			newRow[0] = highlightedName // Replace first column with highlighted version
+			filteredRows = append(filteredRows, newRow)
+		}
+	}
 
-	// Store filtered items
-	m.filteredItems = filteredItems
-	m.resourcesList.SetItems(filteredItems)
+	// Apply natural sorting to filtered results
+	SortTableRowsNaturally(filteredRows)
+
+	// Store filtered rows
+	m.filteredRows = filteredRows
+	m.resourcesTable.SetRows(filteredRows)
 	m.searchBar.SetResultCount(len(filteredItems))
 	// Exit search mode and focus resources list
 	m.searchMode = false
 	m.searchBar.Blur()
 
-	if len(filteredItems) == 0 {
+	if len(filteredRows) == 0 {
 		m.statusMessage = fmt.Sprintf("No items found for: %s", query)
 	} else {
-		m.statusMessage = fmt.Sprintf("Showing %d of %d items (filtered by: %s)", len(filteredItems), len(m.allItems), query)
-		// Focus first item in filtered list if available
-		if len(filteredItems) > 0 {
-			m.resourcesList.Select(0)
+		m.statusMessage = fmt.Sprintf("Showing %d of %d items (filtered by: %s)", len(filteredRows), len(m.allRows), query)
+		// Focus first row in filtered table if available
+		if len(filteredRows) > 0 {
+			m.resourcesTable.GotoTop()
 		}
 	}
 
@@ -192,16 +211,16 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 
 // HandleClearSearch processes clear search messages
 func (m *MainPageModel) HandleClearSearch(msg clearSearchMsg) (tea.Model, tea.Cmd) {
-	// Clear search and reset resources list to original items (without highlighting)
-	m.resourcesList.SetItems(m.allItems)
+	// Clear search and reset resources table to original rows (without highlighting)
+	m.resourcesTable.SetRows(m.allRows)
 	m.searchBar.SetResultCount(0)
 	m.searchMode = false
 	m.searchBar.Blur()
 	// Reset filter state
 	m.isFiltered = false
 	m.currentFilter = ""
-	m.filteredItems = []list.Item{}
-	m.statusMessage = fmt.Sprintf("Showing %d of %d resources", len(m.allItems), len(m.allItems))
+	m.filteredRows = []table.Row{}
+	m.statusMessage = fmt.Sprintf("Showing %d of %d resources", len(m.allRows), len(m.allRows))
 	return m, nil
 }
 

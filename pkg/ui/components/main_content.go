@@ -2,6 +2,7 @@ package components
 
 import (
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -12,6 +13,8 @@ type MainContentConfig struct {
 	ShowSearch  bool
 	SearchBar   SearchBarModel
 	List        list.Model
+	Table       table.Model
+	UseTable    bool // Flag to determine whether to use table or list
 	CustomTitle string
 }
 
@@ -41,21 +44,35 @@ func (mc *MainContent) RenderSearchSection() string {
 	return searchStyle.Render(mc.config.SearchBar.View())
 }
 
-// RenderListSection renders the list section
-func (mc *MainContent) RenderListSection() string {
-	listHeight := mc.config.Height
+// RenderContentSection renders either the list or table section
+func (mc *MainContent) RenderContentSection() string {
+	contentHeight := mc.config.Height
 	if mc.config.ShowSearch {
-		listHeight -= 3 // Account for search bar
+		contentHeight -= 3 // Account for search bar
 	}
 	
-	if listHeight < 0 {
-		listHeight = 0
+	if contentHeight < 0 {
+		contentHeight = 0
 	}
 	
-	return MainPanelStyle.
-		Width(mc.config.Width).
-		Height(listHeight).
-		Render(mc.config.List.View())
+	if mc.config.UseTable {
+		// Render table
+		return MainPanelStyle.
+			Width(mc.config.Width).
+			Height(contentHeight).
+			Render(mc.config.Table.View())
+	} else {
+		// Render list (legacy support)
+		return MainPanelStyle.
+			Width(mc.config.Width).
+			Height(contentHeight).
+			Render(mc.config.List.View())
+	}
+}
+
+// RenderListSection renders the list section (deprecated - use RenderContentSection)
+func (mc *MainContent) RenderListSection() string {
+	return mc.RenderContentSection()
 }
 
 // Render renders the complete main content area
@@ -67,8 +84,8 @@ func (mc *MainContent) Render() string {
 		sections = append(sections, searchSection)
 	}
 	
-	// Add list section
-	sections = append(sections, mc.RenderListSection())
+	// Add content section (list or table)
+	sections = append(sections, mc.RenderContentSection())
 	
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
@@ -91,6 +108,13 @@ func (mc *MainContent) SetSearchBar(searchBar SearchBarModel) {
 // SetList updates the list
 func (mc *MainContent) SetList(list list.Model) {
 	mc.config.List = list
+	mc.config.UseTable = false // Use list mode
+}
+
+// SetTable updates the table
+func (mc *MainContent) SetTable(table table.Model) {
+	mc.config.Table = table
+	mc.config.UseTable = true // Use table mode
 }
 
 // SetShowSearch updates the search visibility
