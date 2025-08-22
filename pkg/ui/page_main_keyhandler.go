@@ -25,8 +25,8 @@ func (m *MainPageModel) HandleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.searchMode = false
 			m.searchBar.Blur()
 			m.searchBar.SetValue("")
-			// Reset the topic list to show all items
-			m.topicList.SetItems(m.allItems)
+			// Reset the resources list to show all items
+			m.resourcesList.SetItems(m.allItems)
 			m.statusMessage = "Search cancelled"
 			return m, nil
 		}
@@ -58,15 +58,34 @@ func (m *MainPageModel) HandleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		shared.DebugLog("Enter Key event - Type: %v, String: %s, SearchMode: %v", msg.Type, msg.String(), m.searchMode)
 
-		// If in search mode, let the search bar handle the enter key
+		// If in search mode, handle based on search type
 		if m.searchMode {
-			var cmd tea.Cmd
-			m.searchBar, cmd = m.searchBar.Update(msg)
-			cmds = append(cmds, cmd)
-			return m, tea.Batch(cmds...)
+			if m.searchBar.IsResourceMode() {
+				// Resource mode: let search bar handle to switch resource
+				var cmd tea.Cmd
+				m.searchBar, cmd = m.searchBar.Update(msg)
+				cmds = append(cmds, cmd)
+				return m, tea.Batch(cmds...)
+			} else {
+				// Normal search mode: trigger search and exit search mode to focus resources list
+				query := m.searchBar.Value()
+				if query != "" {
+					// Trigger search
+					var cmd tea.Cmd
+					m.searchBar, cmd = m.searchBar.Update(msg)
+					cmds = append(cmds, cmd)
+					return m, tea.Batch(cmds...)
+				} else {
+					// Empty search, just exit search mode and focus resources list
+					m.searchMode = false
+					m.searchBar.Blur()
+					m.statusMessage = "Search cancelled"
+					return m, nil
+				}
+			}
 		}
 		// If not in search mode and an item is selected, navigate to topic page
-		if m.topicList.SelectedItem() != nil {
+		if m.resourcesList.SelectedItem() != nil {
 			// Let the main UI model handle navigation to topic page
 			return m, func() tea.Msg {
 				return pageChangeMsg(topicPage)
@@ -86,16 +105,16 @@ func (m *MainPageModel) HandleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Normal navigation
 		switch msg.String() {
 		case "j", "down":
-			m.topicList.CursorDown()
+			m.resourcesList.CursorDown()
 		case "k", "up":
-			m.topicList.CursorUp()
+			m.resourcesList.CursorUp()
 		case "g", "home":
-			m.topicList.Select(0)
+			m.resourcesList.Select(0)
 		case "G", "end":
-			m.topicList.Select(len(m.topicList.Items()) - 1)
+			m.resourcesList.Select(len(m.resourcesList.Items()) - 1)
 		default:
 			var cmd tea.Cmd
-			m.topicList, cmd = m.topicList.Update(msg)
+			m.resourcesList, cmd = m.resourcesList.Update(msg)
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -109,7 +128,7 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 	query := string(msg)
 	m.statusMessage = fmt.Sprintf("Searching for: %s", query)
 
-	// Filter the topic list
+	// Filter the resources list
 	filteredItems := []list.Item{}
 
 	for _, item := range m.allItems {
@@ -127,15 +146,20 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 		}
 	}
 
-	m.topicList.SetItems(filteredItems)
+	m.resourcesList.SetItems(filteredItems)
 	m.searchBar.SetResultCount(len(filteredItems))
+	// Exit search mode and focus resources list
 	m.searchMode = false
 	m.searchBar.Blur()
 
 	if len(filteredItems) == 0 {
 		m.statusMessage = fmt.Sprintf("No items found for: %s", query)
 	} else {
-		m.statusMessage = fmt.Sprintf("Showing %d of %d items", len(filteredItems), len(m.allItems))
+		m.statusMessage = fmt.Sprintf("Showing %d of %d items (filtered)", len(filteredItems), len(m.allItems))
+		// Focus first item in filtered list if available
+		if len(filteredItems) > 0 {
+			m.resourcesList.Select(0)
+		}
 	}
 
 	return m, nil
@@ -143,12 +167,12 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 
 // HandleClearSearch processes clear search messages
 func (m *MainPageModel) HandleClearSearch(msg clearSearchMsg) (tea.Model, tea.Cmd) {
-	// Clear search and reset topic list
-	m.topicList.SetItems(m.allItems)
+	// Clear search and reset resources list
+	m.resourcesList.SetItems(m.allItems)
 	m.searchBar.SetResultCount(0)
 	m.searchMode = false
 	m.searchBar.Blur()
-	m.statusMessage = fmt.Sprintf("Showing %d of %d topics", len(m.allItems), len(m.allItems))
+	m.statusMessage = fmt.Sprintf("Showing %d of %d resources", len(m.allItems), len(m.allItems))
 	return m, nil
 }
 

@@ -108,8 +108,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Initialize topic page if needed
 		if m.currentPage == topicPage && m.topicPage == nil {
 			// Get selected topic from main page
-			if m.mainPage.topicList.SelectedItem() != nil {
-				topic := m.mainPage.topicList.SelectedItem().(topicItem)
+			if m.mainPage.resourcesList.SelectedItem() != nil {
+				topic := m.mainPage.resourcesList.SelectedItem().(topicItem)
 				tp := NewTopicPage(m.dataSource, topic.name, topic.topic)
 				m.topicPage = &tp
 				cmds = append(cmds, m.topicPage.Init())
@@ -144,10 +144,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 		// Check if we need to navigate to topic page
-		if m.mainPage.topicList.SelectedItem() != nil {
+		if m.mainPage.resourcesList.SelectedItem() != nil {
 			if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
 				// Check what type of resource is currently selected
-				selectedItem := m.mainPage.topicList.SelectedItem()
+				selectedItem := m.mainPage.resourcesList.SelectedItem()
 
 				// Try to cast to topicItem first (legacy compatibility)
 				if topic, ok := selectedItem.(topicItem); ok {

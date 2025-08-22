@@ -40,3 +40,5 @@ dist/
 .crush/
 
 *.log
+
+.qoder/

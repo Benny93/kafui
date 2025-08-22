@@ -26,7 +26,7 @@ var (
 
 type MainPageModel struct {
 	dataSource      api.KafkaDataSource
-	topicList       list.Model
+	resourcesList   list.Model
 	searchBar       components.SearchBarModel
 	spinner         spinner.Model
 	statusMessage   string
@@ -68,7 +68,7 @@ func (m MainPageModel) View() string {
 	// Update main content
 	m.mainContent.SetDimensions(contentWidth, contentHeight)
 	m.mainContent.SetSearchBar(m.searchBar)
-	m.mainContent.SetList(m.topicList)
+	m.mainContent.SetList(m.resourcesList)
 	m.mainContent.SetShowSearch(true)
 
 	// Update sidebar
@@ -81,7 +81,7 @@ func (m MainPageModel) View() string {
 
 	// Update footer
 	selectedItem := "None"
-	if item := m.topicList.SelectedItem(); item != nil {
+	if item := m.resourcesList.SelectedItem(); item != nil {
 		if rItem, ok := item.(resourceListItem); ok {
 			selectedItem = rItem.resourceItem.GetID()
 		} else if tItem, ok := item.(topicItem); ok {
@@ -166,18 +166,18 @@ func (d *customDelegate) Render(w io.Writer, m list.Model, index int, item list.
 }
 
 func NewMainPage(ds api.KafkaDataSource) MainPageModel {
-	// Initialize topic list with custom delegate
+	// Initialize resources list with custom delegate
 	delegate := newCustomDelegate()
 
-	topicList := list.New([]list.Item{}, delegate, 0, 0)
-	topicList.Title = "Kafka Topics"
-	topicList.SetShowTitle(true)
-	topicList.SetShowHelp(true)
-	topicList.SetFilteringEnabled(false) // We'll handle filtering ourselves
-	topicList.SetShowFilter(false)
-	topicList.Styles.Title = TitleStyle
-	topicList.FilterInput.Prompt = "search: "
-	topicList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(Highlight)
+	resourcesList := list.New([]list.Item{}, delegate, 0, 0)
+	resourcesList.Title = "Kafka Topics"
+	resourcesList.SetShowTitle(true)
+	resourcesList.SetShowHelp(true)
+	resourcesList.SetFilteringEnabled(false) // We'll handle filtering ourselves
+	resourcesList.SetShowFilter(false)
+	resourcesList.Styles.Title = TitleStyle
+	resourcesList.FilterInput.Prompt = "search: "
+	resourcesList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(Highlight)
 
 	// Initialize resource manager
 	resourceManager := NewResourceManager(ds)
@@ -211,7 +211,7 @@ func NewMainPage(ds api.KafkaDataSource) MainPageModel {
 
 	return MainPageModel{
 		dataSource:      ds,
-		topicList:       topicList,
+		resourcesList:   resourcesList,
 		searchBar:       searchBar,
 		spinner:         sp,
 		lastUpdate:      time.Now(),
@@ -249,7 +249,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentHeight := msg.Height - 8                  // Account for header, footer and margins (removed status bar)
 
 		// Update list and search bar dimensions
-		m.topicList.SetSize(mainContentWidth-4, contentHeight-3) // Account for borders and margins
+		m.resourcesList.SetSize(mainContentWidth-4, contentHeight-3) // Account for borders and margins
 		m.searchBar.SetWidth(mainContentWidth - 4)
 		return m, nil
 
@@ -259,9 +259,9 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case topicListMsg:
 		m.loading = false
 		items := []list.Item(msg)
-		m.topicList.SetItems(items)
+		m.resourcesList.SetItems(items)
 		m.allItems = items // Store all items for filtering
-		
+
 		// Update search suggestions with topic names
 		searchSuggestions := make([]string, 0, len(items))
 		for _, item := range items {
@@ -270,7 +270,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.searchBar.SetSearchSuggestions(searchSuggestions)
-		
+
 		m.statusMessage = fmt.Sprintf("Showing %d of %d topics", len(items), len(items))
 		return m, tea.Batch(
 			m.spinner.Tick,
@@ -314,7 +314,7 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // switchToResource switches the current view to a different resource type
 func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 	m.currentResource = m.resourceManager.GetResource(resourceType)
-	m.topicList.Title = m.currentResource.GetName()
+	m.resourcesList.Title = m.currentResource.GetName()
 
 	// Load data for the new resource
 	items, err := m.currentResource.GetData()
@@ -345,7 +345,7 @@ func (m *MainPageModel) switchToResource(resourceType ResourceType) {
 	// Sort suggestions as well
 	sort.Strings(searchSuggestions)
 
-	m.topicList.SetItems(listItems)
+	m.resourcesList.SetItems(listItems)
 	m.allItems = listItems
 
 	// Update search suggestions for the new resource
