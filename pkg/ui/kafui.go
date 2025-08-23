@@ -6,6 +6,7 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/datasource/kafds"
 	"github.com/Benny93/kafui/pkg/datasource/mock"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -13,6 +14,9 @@ import (
 var openUIFunc = OpenUI
 
 func Init(cfgOption string, useMock bool) {
+	// Initialize debug logging (clears old log and sets up rotation)
+	shared.InitDebugLog()
+
 	fmt.Println("Init...")
 	var dataSource api.KafkaDataSource
 
