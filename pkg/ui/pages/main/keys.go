@@ -1,6 +1,7 @@
 package mainpage
 
 import (
+	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/key"
@@ -211,16 +212,66 @@ func (k *Keys) handleEnter(model *Model, msg tea.KeyMsg) tea.Cmd {
 		// Check the current resource type to determine navigation
 		if model.currentResource.GetType() == TopicResourceType {
 			// Navigate to topic page for topics and include topic data
-			if topicItem, ok := selectedItem.(*TopicResourceItem); ok {
-				// Create topic data structure for the page change
+			// Handle different topic item types
+			switch item := selectedItem.(type) {
+			case TopicItem:
+				// Direct TopicItem from TopicListMsg
 				topicData := map[string]interface{}{
-					"name":  topicItem.GetID(),
-					"topic": topicItem.GetTopic(),
+					"name":  item.GetID(),
+					"topic": item.GetTopic(),
 				}
 				return core.NewPageChangeMsg("topic", topicData)
-			} else {
-				// Fallback if type assertion fails
-				return core.NewPageChangeMsg("topic", nil)
+			case *TopicResourceItem:
+				// TopicResourceItem from resource manager
+				topicData := map[string]interface{}{
+					"name":  item.GetID(),
+					"topic": item.GetTopic(),
+				}
+				return core.NewPageChangeMsg("topic", topicData)
+			case shared.ResourceListItem:
+				// Wrapped resource item
+				if topicResourceItem, ok := item.ResourceItem.(*TopicResourceItem); ok {
+					topicData := map[string]interface{}{
+						"name":  topicResourceItem.GetID(),
+						"topic": topicResourceItem.GetTopic(),
+					}
+					return core.NewPageChangeMsg("topic", topicData)
+				}
+				// If not a topic resource item, treat as unknown
+				shared.DebugLog("Unknown topic item type: %T, selectedItem: %+v", selectedItem, selectedItem)
+				itemName := "unknown"
+				if idGetter, ok := selectedItem.(interface{ GetID() string }); ok {
+					itemName = idGetter.GetID()
+				}
+				// Create minimal topic data
+				topicData := map[string]interface{}{
+					"name": itemName,
+					"topic": api.Topic{
+						NumPartitions:     1,
+						ReplicationFactor: 1,
+						ReplicaAssignment: make(map[int32][]int32),
+						ConfigEntries:     make(map[string]*string),
+					},
+				}
+				return core.NewPageChangeMsg("topic", topicData)
+			default:
+				// Fallback - try to extract name at least
+				shared.DebugLog("Unknown topic item type: %T, selectedItem: %+v", selectedItem, selectedItem)
+				itemName := "unknown"
+				if idGetter, ok := selectedItem.(interface{ GetID() string }); ok {
+					itemName = idGetter.GetID()
+				}
+				// Create minimal topic data
+				topicData := map[string]interface{}{
+					"name": itemName,
+					"topic": api.Topic{
+						NumPartitions:     1,
+						ReplicationFactor: 1,
+						ReplicaAssignment: make(map[int32][]int32),
+						ConfigEntries:     make(map[string]*string),
+					},
+				}
+				return core.NewPageChangeMsg("topic", topicData)
 			}
 		} else {
 			// Navigate to resource detail page for other resources

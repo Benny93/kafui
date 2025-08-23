@@ -35,6 +35,10 @@ func (t TopicItem) GetID() string {
 	return t.name
 }
 
+func (t TopicItem) GetTopic() api.Topic {
+	return t.topic
+}
+
 // ResourceType represents different types of Kafka resources
 type ResourceType int
 
