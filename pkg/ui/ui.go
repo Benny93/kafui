@@ -2,51 +2,39 @@ package ui
 
 import (
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/core"
+	detailpage "github.com/Benny93/kafui/pkg/ui/pages/detail"
+	mainpage "github.com/Benny93/kafui/pkg/ui/pages/main"
+	resourcedetailpage "github.com/Benny93/kafui/pkg/ui/pages/resource_detail"
+	topicpage "github.com/Benny93/kafui/pkg/ui/pages/topic"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-
 )
 
-// minimalResourceItem is a minimal implementation of ResourceItem for table navigation
-type minimalResourceItem struct {
-	id string
-}
-
-func (m *minimalResourceItem) GetID() string {
-	return m.id
-}
-
-func (m *minimalResourceItem) GetValues() []string {
-	return []string{m.id}
-}
-
-func (m *minimalResourceItem) GetDetails() map[string]string {
-	return map[string]string{
-		"Name": m.id,
-	}
-}
-
-type page int
+// Page constants for navigation
+type pageType int
 
 const (
-	mainPage page = iota
-	topicPage
-	detailPage
-	resourceDetailPage
+	mainPageType pageType = iota
+	topicPageType
+	detailPageType
+	resourceDetailPageType
 )
 
 // Model represents the main application state
 type Model struct {
 	dataSource         api.KafkaDataSource
-	currentPage        page
-	mainPage           *MainPageModel
-	topicPage          *TopicPageModel
-	detailPage         *DetailPageModel
-	resourceDetailPage *ResourceDetailPageModel
+	currentPage        pageType
+	mainPage           *mainpage.Model
+	topicPage          *topicpage.Model
+	detailPage         *detailpage.Model
+	resourceDetailPage *resourcedetailpage.Model
 	width              int
 	height             int
-} // Custom key mappings
+}
+
+// Key mappings
 type keyMap struct {
 	Search    key.Binding
 	TopicMode key.Binding
@@ -73,12 +61,31 @@ var keys = keyMap{
 	),
 }
 
+// minimalResourceItem is a minimal implementation of ResourceItem for table navigation
+type minimalResourceItem struct {
+	id string
+}
+
+func (m *minimalResourceItem) GetID() string {
+	return m.id
+}
+
+func (m *minimalResourceItem) GetValues() []string {
+	return []string{m.id}
+}
+
+func (m *minimalResourceItem) GetDetails() map[string]string {
+	return map[string]string{
+		"Name": m.id,
+	}
+}
+
 func initialModel(dataSource api.KafkaDataSource) Model {
-	mp := NewMainPage(dataSource)
+	mp := mainpage.NewModel(dataSource)
 	return Model{
 		dataSource:  dataSource,
-		currentPage: mainPage,
-		mainPage:    &mp,
+		currentPage: mainPageType,
+		mainPage:    mp,
 	}
 }
 
@@ -105,55 +112,67 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// If we're on the main page, let the main page handle the Back key first
 			// (e.g., to exit search mode)
-			if m.currentPage == mainPage {
+			if m.currentPage == mainPageType {
 				// Let the main page handle the Back key
 				mainModel, cmd := m.mainPage.Update(msg)
-				if updatedMainPage, ok := mainModel.(*MainPageModel); ok {
+				if updatedMainPage, ok := mainModel.(*mainpage.Model); ok {
 					m.mainPage = updatedMainPage
 				}
 				return m, cmd
 			}
 
 			// Otherwise handle as back navigation for sub-pages
-			if m.currentPage > mainPage {
+			if m.currentPage > mainPageType {
 				m.currentPage--
 				// Clean up pages when leaving them
-				if m.currentPage != topicPage && m.topicPage != nil {
+				if m.currentPage != topicPageType && m.topicPage != nil {
 					m.topicPage = nil
 				}
-				if m.currentPage != detailPage && m.detailPage != nil {
+				if m.currentPage != detailPageType && m.detailPage != nil {
 					m.detailPage = nil
 				}
-				if m.currentPage != resourceDetailPage && m.resourceDetailPage != nil {
+				if m.currentPage != resourceDetailPageType && m.resourceDetailPage != nil {
 					m.resourceDetailPage = nil
 				}
 			}
 			return m, nil
 		}
 
-	case pageChangeMsg:
-		m.currentPage = page(msg)
+	case core.PageChangeMsg:
+		// Handle page changes based on PageID
+		switch msg.PageID {
+		case "main":
+			m.currentPage = mainPageType
+		case "topic":
+			m.currentPage = topicPageType
+		case "detail":
+			m.currentPage = detailPageType
+		case "resource_detail":
+			m.currentPage = resourceDetailPageType
+		}
 		// Initialize topic page if needed
-		if m.currentPage == topicPage && m.topicPage == nil {
+		if m.currentPage == topicPageType && m.topicPage == nil {
 			// Get selected item from main page table
-			if selectedItem := m.mainPage.getSelectedResourceItem(); selectedItem != nil {
+			if selectedItem := m.mainPage.GetSelectedResourceItem(); selectedItem != nil {
 				// Handle different item types to extract topic information
 				var topicName string
-				var topic api.Topic
+				var topicDetails api.Topic
 
-				switch item := selectedItem.(type) {
-				case topicItem:
-					// Direct topic item
-					topicName = item.name
-					topic = item.topic
-				case HighlightedTopicItem:
-					// Highlighted topic item
-					topicName = item.name
-					topic = item.topic
-				default:
+				// Try to extract topic data from the selected item
+				if msg.Data != nil {
+					// Use data passed with the page change message
+					if topicData, ok := msg.Data.(map[string]interface{}); ok {
+						if name, hasName := topicData["name"]; hasName {
+							topicName = name.(string)
+						}
+						if details, hasDetails := topicData["topic"]; hasDetails {
+							topicDetails = details.(api.Topic)
+						}
+					}
+				} else {
 					// Fallback - create a minimal topic
 					topicName = "unknown"
-					topic = api.Topic{
+					topicDetails = api.Topic{
 						NumPartitions:     1,
 						ReplicationFactor: 1,
 						ReplicaAssignment: make(map[int32][]int32),
@@ -161,49 +180,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 
-				tp := NewTopicPage(m.dataSource, topicName, topic)
-				m.topicPage = &tp
+				m.topicPage = topicpage.NewModel(m.dataSource, topicName, topicDetails)
 				cmds = append(cmds, m.topicPage.Init())
 			} else {
 				// Fallback to main page if no topic selected
-				m.currentPage = mainPage
+				m.currentPage = mainPageType
 			}
 		}
 		// Initialize detail page if needed
-		if m.currentPage == detailPage && m.detailPage == nil {
-			// Check if we have a selected message in the topic page
-			if m.topicPage != nil && m.topicPage.selectedMessage != nil {
-				detailPage := NewDetailPage(m.topicPage.topicName, *m.topicPage.selectedMessage)
-				m.detailPage = &detailPage
+		if m.currentPage == detailPageType && m.detailPage == nil {
+			// Check if we have message data passed via the page change
+			if msg.Data != nil {
+				if messageData, ok := msg.Data.(api.Message); ok {
+					// Get topic name from topic page or use default
+					topicName := "unknown"
+					if m.topicPage != nil {
+						topicName = "topic" // We'll need to add a getter method to topic page
+					}
+					m.detailPage = detailpage.NewModel(topicName, messageData)
+				}
 			}
 		}
 		// Initialize resource detail page if needed
-		if m.currentPage == resourceDetailPage && m.resourceDetailPage == nil {
+		if m.currentPage == resourceDetailPageType && m.resourceDetailPage == nil {
 			// Get selected resource from main page table
-			if selectedItem := m.mainPage.getSelectedResourceItem(); selectedItem != nil {
-				if rowStruct, ok := selectedItem.(struct{ ID string }); ok {
-					// Create a minimal resource item that implements ResourceItem interface
-					minimalResource := &minimalResourceItem{
-						id: rowStruct.ID,
-					}
-
-					rdp := NewResourceDetailPage(minimalResource, m.mainPage.currentResource.GetType())
-					m.resourceDetailPage = &rdp
+			if selectedItem := m.mainPage.GetSelectedResourceItem(); selectedItem != nil {
+				// Try to convert to ResourceItem interface
+				if resourceItem, ok := selectedItem.(shared.ResourceItem); ok {
+					// Get the resource type from the main page
+					resourceType := "unknown"
+					// Add getter method to main page to get current resource type
+					m.resourceDetailPage = resourcedetailpage.NewModel(resourceItem, resourceType)
 					cmds = append(cmds, m.resourceDetailPage.Init())
 				} else {
-					// Fallback to main page if no valid resource selected
-					m.currentPage = mainPage
+					// Create a minimal resource item if needed
+					minimalResource := &minimalResourceItem{
+						id: "unknown",
+					}
+					m.resourceDetailPage = resourcedetailpage.NewModel(minimalResource, "unknown")
+					cmds = append(cmds, m.resourceDetailPage.Init())
 				}
 			} else {
 				// Fallback to main page if no resource selected
-				m.currentPage = mainPage
+				m.currentPage = mainPageType
 			}
 		}
 		// Clean up pages when leaving them
-		if m.currentPage != detailPage && m.detailPage != nil {
+		if m.currentPage != detailPageType && m.detailPage != nil {
 			m.detailPage = nil
 		}
-		if m.currentPage != resourceDetailPage && m.resourceDetailPage != nil {
+		if m.currentPage != resourceDetailPageType && m.resourceDetailPage != nil {
 			m.resourceDetailPage = nil
 		}
 		return m, tea.Batch(cmds...)
@@ -211,49 +237,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle updates for sub-components
 	switch m.currentPage {
-	case mainPage:
+	case mainPageType:
 		var cmd tea.Cmd
 		mainModel, cmd := m.mainPage.Update(msg)
-		if updatedMainPage, ok := mainModel.(*MainPageModel); ok {
+		if updatedMainPage, ok := mainModel.(*mainpage.Model); ok {
 			m.mainPage = updatedMainPage
 		}
 		cmds = append(cmds, cmd)
 
-	case topicPage:
+	case topicPageType:
 		if m.topicPage != nil {
 			var cmd tea.Cmd
 			topicModel, cmd := m.topicPage.Update(msg)
-			if updatedTopicPage, ok := topicModel.(*TopicPageModel); ok {
+			if updatedTopicPage, ok := topicModel.(*topicpage.Model); ok {
 				m.topicPage = updatedTopicPage
 			}
 			cmds = append(cmds, cmd)
-
-			// Check if we need to navigate to detail page
-			if pageMsg, ok := msg.(pageChangeMsg); ok && page(pageMsg) == detailPage {
-				// Initialize detail page with selected message
-				if m.topicPage.selectedMessage != nil {
-					detailPageModel := NewDetailPage(m.topicPage.topicName, *m.topicPage.selectedMessage)
-					m.detailPage = &detailPageModel
-					m.currentPage = detailPage
-				}
-			}
 		}
 
-	case detailPage:
+	case detailPageType:
 		if m.detailPage != nil {
 			var cmd tea.Cmd
 			detailModel, cmd := m.detailPage.Update(msg)
-			if updatedDetailPage, ok := detailModel.(*DetailPageModel); ok {
+			if updatedDetailPage, ok := detailModel.(*detailpage.Model); ok {
 				m.detailPage = updatedDetailPage
 			}
 			cmds = append(cmds, cmd)
 		}
 
-	case resourceDetailPage:
+	case resourceDetailPageType:
 		if m.resourceDetailPage != nil {
 			var cmd tea.Cmd
 			resourceDetailModel, cmd := m.resourceDetailPage.Update(msg)
-			if updatedResourceDetailPage, ok := resourceDetailModel.(*ResourceDetailPageModel); ok {
+			if updatedResourceDetailPage, ok := resourceDetailModel.(*resourcedetailpage.Model); ok {
 				m.resourceDetailPage = updatedResourceDetailPage
 			}
 			cmds = append(cmds, cmd)
@@ -264,20 +280,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	// Update page dimensions if needed
+	if m.width > 0 && m.height > 0 {
+		switch m.currentPage {
+		case mainPageType:
+			m.mainPage.SetDimensions(m.width, m.height)
+		case topicPageType:
+			if m.topicPage != nil {
+				m.topicPage.SetDimensions(m.width, m.height)
+			}
+		case detailPageType:
+			if m.detailPage != nil {
+				m.detailPage.SetDimensions(m.width, m.height)
+			}
+		case resourceDetailPageType:
+			if m.resourceDetailPage != nil {
+				m.resourceDetailPage.SetDimensions(m.width, m.height)
+			}
+		}
+	}
+
 	switch m.currentPage {
-	case mainPage:
+	case mainPageType:
 		return m.mainPage.View()
-	case topicPage:
+	case topicPageType:
 		if m.topicPage != nil {
 			return m.topicPage.View()
 		}
 		return "Topic page not initialized"
-	case detailPage:
+	case detailPageType:
 		if m.detailPage != nil {
 			return m.detailPage.View()
 		}
 		return "Detail page not initialized"
-	case resourceDetailPage:
+	case resourceDetailPageType:
 		if m.resourceDetailPage != nil {
 			return m.resourceDetailPage.View()
 		}
@@ -285,4 +321,14 @@ func (m Model) View() string {
 	default:
 		return "Unknown page"
 	}
+}
+
+// NewUIModel creates a new UI model (public API)
+func NewUIModel(dataSource api.KafkaDataSource) Model {
+	return initialModel(dataSource)
+}
+
+// InitializeModel is an alias for backwards compatibility
+func InitializeModel(dataSource api.KafkaDataSource) Model {
+	return NewUIModel(dataSource)
 }

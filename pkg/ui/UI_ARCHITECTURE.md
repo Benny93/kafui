@@ -2,68 +2,118 @@
 
 ## Overview
 
-Kafui's user interface is built using the **Bubble Tea framework** (by Charm), following a reactive, event-driven architecture. The UI provides an interactive terminal-based interface for managing Apache Kafka clusters, topics, consumer groups, and messages.
+Kafui's user interface is built using the **Bubble Tea framework** (by Charm), following a reactive, event-driven architecture with a **modular design pattern**. The UI has been restructured into a clean, maintainable architecture with separated concerns, reusable components, and a standardized page interface system.
 
 **Key Technologies:**
 - **TUI Framework**: `github.com/charmbracelet/bubbletea` (v1.3.6) - Event-driven reactive UI
 - **Styling**: `github.com/charmbracelet/lipgloss` - Terminal styling and layout
 - **Components**: `github.com/charmbracelet/bubbles` - Pre-built UI components (tables, text input, lists, etc.)
 - **UI Components**: Custom component system in `pkg/ui/components/`
+- **Modular Architecture**: Page-based modules in `pkg/ui/pages/` with separated concerns
 
 ## Architecture Pattern
 
-The UI follows a **layered MVC-style architecture** with clear separation between presentation, business logic, and data access:
+The UI follows a **modular page-based architecture** with standardized interfaces and clear separation of concerns. Each page is implemented as a self-contained module with dedicated files for different responsibilities:
 
 ```mermaid
 graph TB
-    A[Main UI Controller] --> B[Page Models]
-    B --> C[Reusable Components]
-    B --> D[Resource Management]
+    A[Root UI Controller] --> B[Core Interfaces]
+    B --> C[Modular Pages]
+    C --> D[Shared Components]
     C --> E[Data Source Layer]
     D --> E
     
-    subgraph "Page Models"
-        B1[MainPageModel]
-        B2[TopicPageModel] 
-        B3[DetailPageModel]
+    subgraph "Core Layer (pkg/ui/core/)"
+        B1[Page Interface]
+        B2[Message Types]
+        B3[Shared Styles]
+        B4[Common Utils]
     end
     
-    subgraph "Components"
-        C1[SearchBar]
-        C2[Layout]
-        C3[Sidebar]
-        C4[Footer]
-        C5[MainContent]
-        C6[Modal]
-        C7[FuzzyMatcher]
+    subgraph "Modular Pages (pkg/ui/pages/)"
+        C1[main/]
+        C2[topic/]
+        C3[detail/]
+        C4[resource_detail/]
     end
     
-    subgraph "Resource Management"
-        D1[ResourceManager]
-        D2[TopicResource]
-        D3[ConsumerGroupResource]
-        D4[SchemaResource]
-        D5[ContextResource]
+    subgraph "Page Structure (per page)"
+        PS1[page.go - Core Logic]
+        PS2[handlers.go - Event Handling]
+        PS3[keys.go - Key Bindings]
+        PS4[view.go - Rendering]
+        PS5[types.go - Data Types]
+        PS6[components.go - UI Components]
+    end
+    
+    subgraph "Legacy Components (pkg/ui/components/)"
+        D1[SearchBar]
+        D2[Layout]
+        D3[Sidebar]
+        D4[Footer]
+        D5[MainContent]
     end
 ```
 
 ## Core Architecture Components
 
-### 1. Main UI Controller (`ui.go`)
+### 1. Core Interfaces (`pkg/ui/core/`)
 
-**Responsibility**: Root application state management and page routing
+**The foundation of the modular architecture providing standardized interfaces and shared utilities.**
+
+#### Page Interface (`core/interfaces.go`)
+
+**Standardized interface that all pages must implement:**
+
+```go
+type Page interface {
+    Init() tea.Cmd
+    Update(msg tea.Msg) (tea.Model, tea.Cmd)
+    View() string
+    SetDimensions(width, height int)
+    GetID() string
+}
+
+type Dimensions struct {
+    Width  int
+    Height int
+}
+
+type Theme struct {
+    Primary   string
+    Secondary string
+    Accent    string
+    Error     string
+    Success   string
+    Warning   string
+    Info      string
+}
+```
+
+**Benefits:**
+- **Consistency**: All pages follow the same interface contract
+- **Testability**: Standard interface enables uniform testing patterns
+- **Maintainability**: Clear contracts for page behavior
+- **Extensibility**: Easy to add new pages that conform to the interface
+
+### 2. Root UI Controller (`ui.go`)
+
+**Responsibility**: Application state management and page routing (transitional implementation)
 
 ```go
 type Model struct {
-    dataSource  api.KafkaDataSource
-    currentPage page
-    mainPage    *MainPageModel
-    topicPage   *TopicPageModel
-    detailPage  *DetailPageModel
-    width       int
-    height      int
+    dataSource         api.KafkaDataSource
+    currentPage        page
+    mainPage           *MainPageModel  // Legacy: to be updated to Page interface
+    topicPage          *TopicPageModel // Legacy: to be updated to Page interface
+    detailPage         *DetailPageModel // Legacy: to be updated to Page interface
+    resourceDetailPage *ResourceDetailPageModel // Legacy: to be updated
+    width              int
+    height             int
 }
 ```
+
+**Note**: The root controller is currently in a transitional state and will be updated to use the new Page interface system.
 
 **Key Features:**
 - **Page Navigation**: Manages transitions between main, topic, and detail pages
@@ -87,31 +137,55 @@ stateDiagram-v2
 - `Update(msg tea.Msg) (tea.Model, tea.Cmd)` - Handles all application events
 - `View() string` - Routes rendering to appropriate page
 
-### 2. Page Models
+### 3. Modular Pages (`pkg/ui/pages/`)
 
-#### MainPageModel (`page_main.go`)
+**Each page is implemented as a self-contained module with separated concerns following the UI modularization pattern.**
 
-**Responsibility**: Primary interface for browsing Kafka resources
+#### Main Page Module (`pkg/ui/pages/main/`)
 
+**Primary interface for browsing Kafka resources with modular architecture:**
+
+**File Structure:**
+- `main_page.go` - Core page logic and Page interface implementation
+- `handlers.go` - Event handling logic for different message types
+- `keys.go` - Key binding definitions and handling
+- `view.go` - Rendering logic and view composition
+- `resource_manager.go` - Resource management and data operations
+- `types.go` - Data structures and type definitions
+- `main_page_test.go` - Comprehensive unit tests
+
+**Core Model (`main_page.go`):**
 ```go
-type MainPageModel struct {
-    // Data Management
-    dataSource      api.KafkaDataSource
+type Model struct {
+    // Dependencies
+    dataSource api.KafkaDataSource
+    
+    // Modular Components
+    handlers *Handlers
+    keys     *Keys
+    view     *View
+    
+    // Resource Management
     resourceManager *ResourceManager
     currentResource Resource
     
-    // UI Components
-    topicList       list.Model
+    // UI State
+    dimensions      core.Dimensions
     searchBar       components.SearchBarModel
-    layout          *components.Layout
-    sidebar         *components.Sidebar
-    footer          *components.Footer
-    mainContent     *components.MainContent
+    resourcesTable  table.Model
     
-    // State Management
+    // Data State
+    allItems        []interface{}
+    allRows         []table.Row
+    filteredItems   []interface{}
+    filteredRows    []table.Row
+    
+    // Operational State
     loading         bool
     searchMode      bool
-    allItems        []list.Item
+    isFiltered      bool
+    statusMessage   string
+    lastUpdate      time.Time
 }
 ```
 
@@ -122,36 +196,64 @@ type MainPageModel struct {
 - **Real-time Updates**: Periodic data refresh with loading states
 - **Custom List Delegate**: Provides formatted display of resource items
 
-#### TopicPageModel (`page_topic.go`)
+#### Topic Page Module (`pkg/ui/pages/topic/`)
 
-**Responsibility**: Message consumption and display for specific Kafka topics
+**Message consumption and display for specific Kafka topics with real-time streaming:**
 
+**File Structure:**
+- `topic_page.go` - Core topic page logic and Page interface implementation
+- `handlers.go` - Message and event handling logic
+- `keys.go` - Topic-specific key bindings and controls
+- `view.go` - Topic view rendering with message table and info panels
+- `consumption.go` - Message consumption controller and streaming logic
+- `types.go` - Topic-specific data structures and configurations
+- `topic_page_test.go` - Comprehensive testing including real-time scenarios
+
+**Core Model (`topic_page.go`):**
 ```go
-type TopicPageModel struct {
-    // Kafka Integration
-    dataSource        api.KafkaDataSource
-    topicName         string
-    topicDetails      api.Topic
-    consumeFlags      api.ConsumeFlags
-    messages          []api.Message
+type Model struct {
+    // Dependencies
+    dataSource api.KafkaDataSource
     
-    // UI Components
-    messageTable      table.Model
-    searchInput       textinput.Model
+    // Modular Components
+    handlers    *Handlers
+    keys        *Keys
+    view        *View
+    consumption *ConsumptionController
     
-    // Real-time Features
-    consuming         bool
-    paused            bool
-    cancelConsumption context.CancelFunc
-    msgChan           <-chan api.Message
-    errChan           <-chan error
+    // Topic Data
+    topicName    string
+    topicDetails api.Topic
     
-    // Error Handling
-    retryCount        int
-    maxRetries        int
-    retryDelay        time.Duration
-    errorHistory      []error
-    connectionStatus  string
+    // Message Management
+    messages         []api.Message
+    filteredMessages []api.Message
+    messageTable     table.Model
+    selectedMessage  *api.Message
+    
+    // UI State
+    dimensions    core.Dimensions
+    searchInput   textinput.Model
+    spinner       spinner.Model
+    
+    // Consumption State
+    consuming        bool
+    paused           bool
+    searchMode       bool
+    loading          bool
+    
+    // Configuration
+    consumeFlags api.ConsumeFlags
+    
+    // Status & Error Handling
+    statusMessage    string
+    connectionStatus string
+    error            error
+    lastError        error
+    errorHistory     []error
+    retryCount       int
+    maxRetries       int
+    lastUpdate       time.Time
 }
 ```
 
@@ -162,20 +264,68 @@ type TopicPageModel struct {
 - **Pause/Resume**: Control message consumption flow
 - **Connection Status**: Monitoring and display of connection health
 
-#### DetailPageModel (`page_detail.go`)
+#### Detail Page Module (`pkg/ui/pages/detail/`)
 
-**Responsibility**: Detailed view of individual Kafka messages
+**Detailed view of individual Kafka messages with formatting options:**
 
+**File Structure:**
+- `detail_page.go` - Core detail page logic and Page interface implementation
+- `components.go` - Detail page components (Keys, Handlers, View)
+- `detail_page_test.go` - Testing for message display and formatting
+
+**Core Model (`detail_page.go`):**
 ```go
-type DetailPageModel struct {
-    message      api.Message
-    topicName    string
-    width        int
-    height       int
-    viewport     viewport.Model
-    metadata     string
-    helpText     string
-    wrapped      bool
+type Model struct {
+    // Modular Components
+    handlers *Handlers
+    keys     *Keys
+    view     *View
+    
+    // Message Data
+    topicName string
+    message   api.Message
+    
+    // UI State
+    dimensions core.Dimensions
+    
+    // Display Configuration
+    displayFormat DisplayFormat
+    showHeaders   bool
+    showMetadata  bool
+}
+
+type DisplayFormat struct {
+    ValueFormat string // "raw", "pretty", "json", "hex"
+    KeyFormat   string // "raw", "json", "hex"
+    WrapLines   bool
+    ShowBytes   bool
+}
+```
+
+#### Resource Detail Page Module (`pkg/ui/pages/resource_detail/`)
+
+**Detailed view of Kafka resources (topics, consumer groups, etc.):**
+
+**File Structure:**
+- `resource_detail_page.go` - Core resource detail logic
+- `components.go` - Resource detail components
+- `resource_detail_page_test.go` - Resource detail testing
+
+**Core Model (`resource_detail_page.go`):**
+```go
+type Model struct {
+    // Modular Components
+    handlers *Handlers
+    keys     *Keys
+    view     *View
+    
+    // Resource Data
+    resourceItem core.ResourceItem
+    resourceType string
+    
+    // UI State
+    dimensions core.Dimensions
+    error      error
 }
 ```
 
@@ -186,9 +336,61 @@ type DetailPageModel struct {
 - **Word Wrapping**: Toggle text wrapping for readability
 - **Navigation**: Scroll controls and keyboard shortcuts
 
-### 3. Component System (`components/`)
+### 4. Modular Page Architecture Pattern
 
-The component system follows a **composition-over-inheritance** pattern with functional options:
+**Each page module follows a consistent structure with separated concerns:**
+
+#### Separated Concerns Pattern
+
+**1. Core Logic (`*_page.go`)**
+- Page interface implementation
+- Model structure and initialization
+- Main business logic
+- State management
+
+**2. Event Handling (`handlers.go`)**
+```go
+type Handlers struct {
+    model *Model
+}
+
+func (h *Handlers) HandleKeyMessage(msg tea.KeyMsg) (tea.Model, tea.Cmd)
+func (h *Handlers) HandleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd)
+func (h *Handlers) HandleCustomMessage(msg CustomMsg) (tea.Model, tea.Cmd)
+```
+
+**3. Key Bindings (`keys.go`)**
+```go
+type Keys struct {
+    model *Model
+}
+
+func (k *Keys) ShortHelp() []key.Binding
+func (k *Keys) FullHelp() [][]key.Binding
+func (k *Keys) HandleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd)
+```
+
+**4. View Rendering (`view.go`)**
+```go
+type View struct {
+    model *Model
+}
+
+func (v *View) Render() string
+func (v *View) RenderHeader() string
+func (v *View) RenderContent() string
+func (v *View) RenderFooter() string
+```
+
+**5. Data Types (`types.go`)**
+- Page-specific data structures
+- Configuration types
+- Message types
+- Enums and constants
+
+### 5. Legacy Component System (`components/`)
+
+**Note**: The original component system is being phased out in favor of the modular page architecture. Some components are still used during the transition:
 
 ```go
 type ComponentOption func(*Component)
@@ -342,23 +544,64 @@ type ResourceManager struct {
 - **Extensibility**: Easy addition of new resource types
 - **Type Safety**: Strongly typed resource management
 
-### 5. Message System
+### 6. Core Message System (`core/messages.go`)
 
-**Bubble Tea Event System:**
-
-The application uses Bubble Tea's event-driven architecture with custom message types:
+**Centralized message types for the modular architecture:**
 
 ```go
-// Custom message types (messages.go)
-type topicListMsg []list.Item
-type errorMsg error
-type pageChangeMsg page
-type timerTickMsg time.Time
+// Page Navigation Messages
+type PageChangeMsg struct {
+    Page     string
+    Data     interface{}
+    Previous string
+}
 
-// Additional messages defined in various files
-type searchTopicsMsg string
-type switchResourceMsg ResourceType
-type clearSearchMsg struct{}
+// Data Loading Messages
+type DataLoadedMsg struct {
+    Type string
+    Data interface{}
+}
+
+type LoadingMsg struct {
+    Loading bool
+    Message string
+}
+
+// Error Handling Messages
+type ErrorMsg struct {
+    Error   error
+    Context string
+    Retry   bool
+}
+
+// Search and Filter Messages
+type SearchMsg struct {
+    Query string
+    Mode  string
+}
+
+type FilterMsg struct {
+    Criteria interface{}
+    Clear    bool
+}
+
+// Resource Management Messages
+type ResourceSwitchMsg struct {
+    ResourceType string
+    Force        bool
+}
+
+// UI State Messages
+type StatusMsg struct {
+    Message   string
+    Level     string // "info", "warning", "error", "success"
+    Temporary bool
+}
+
+// Helper Functions
+func NewPageChangeMsg(page, previous string, data interface{}) PageChangeMsg
+func NewErrorMsg(err error, context string) ErrorMsg
+func NewStatusMsg(message, level string) StatusMsg
 ```
 
 **Message Flow:**
@@ -372,7 +615,35 @@ graph LR
     F --> G[Terminal Render]
 ```
 
-### 6. Data Flow Architecture
+### 7. Core Utilities (`core/utils.go`)
+
+**Shared utilities for the modular architecture:**
+
+```go
+// Natural Sorting
+func NaturalSort(items []string) []string
+func NaturalSortBy(items []interface{}, keyFunc func(interface{}) string) []interface{}
+
+// String Utilities
+func TruncateString(s string, maxLen int) string
+func HighlightMatches(text, query string, style lipgloss.Style) string
+func FormatDuration(d time.Duration) string
+
+// UI Utilities
+func CalculateContentDimensions(width, height, headerHeight, footerHeight int) (int, int)
+func WrapText(text string, width int) string
+func PadString(s string, width int, align string) string
+
+// Data Conversion
+func InterfaceSliceToStringSlice(items []interface{}) []string
+func StringSliceToInterfaceSlice(items []string) []interface{}
+
+// Validation
+func ValidateResourceType(resourceType string) bool
+func ValidatePageID(pageID string) bool
+```
+
+### 8. Data Flow Architecture
 
 **Data Source Integration:**
 ```mermaid
@@ -521,6 +792,100 @@ go func() {
 
 ## Extension Points
 
+### Adding New Page Modules
+
+**1. Create Page Directory Structure:**
+```
+pkg/ui/pages/new_page/
+├── new_page.go          # Core logic + Page interface
+├── handlers.go          # Event handling
+├── keys.go             # Key bindings
+├── view.go             # Rendering logic
+├── types.go            # Data structures
+├── components.go       # UI components (if needed)
+├── package.go          # Package documentation
+└── new_page_test.go    # Unit tests
+```
+
+**2. Implement Page Interface:**
+```go
+package new_page
+
+import (
+    "github.com/Benny93/kafui/pkg/ui/core"
+    tea "github.com/charmbracelet/bubbletea"
+)
+
+type Model struct {
+    // Dependencies
+    dataSource api.KafkaDataSource
+    
+    // Modular Components
+    handlers *Handlers
+    keys     *Keys
+    view     *View
+    
+    // UI State
+    dimensions core.Dimensions
+    
+    // Page-specific fields...
+}
+
+// Implement Page interface
+func (m *Model) Init() tea.Cmd { /* ... */ }
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { /* ... */ }
+func (m *Model) View() string { /* ... */ }
+func (m *Model) SetDimensions(width, height int) { /* ... */ }
+func (m *Model) GetID() string { return "new_page" }
+```
+
+**3. Implement Separated Concerns:**
+
+**handlers.go:**
+```go
+type Handlers struct {
+    model *Model
+}
+
+func NewHandlers(model *Model) *Handlers {
+    return &Handlers{model: model}
+}
+
+func (h *Handlers) HandleKeyMessage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+    // Handle page-specific key events
+}
+```
+
+**keys.go:**
+```go
+type Keys struct {
+    model *Model
+}
+
+func NewKeys() *Keys {
+    return &Keys{}
+}
+
+func (k *Keys) ShortHelp() []key.Binding {
+    // Return key bindings for help
+}
+```
+
+**view.go:**
+```go
+type View struct {
+    model *Model
+}
+
+func NewView() *View {
+    return &View{}
+}
+
+func (v *View) Render() string {
+    // Render the complete page view
+}
+```
+
 ### Adding New Resource Types
 
 1. **Implement Resource Interface:**
@@ -529,7 +894,7 @@ type NewResource struct {
     BaseResource
 }
 
-func (nr *NewResource) GetData() ([]ResourceItem, error) {
+func (nr *NewResource) GetData() ([]core.ResourceItem, error) {
     // Implementation
 }
 ```
@@ -546,23 +911,37 @@ func NewResourceManager(ds api.KafkaDataSource) *ResourceManager {
 }
 ```
 
-### Adding New Pages
+### Extending Core Functionality
 
-1. **Create Page Model:**
+**1. Adding New Message Types (`core/messages.go`):**
 ```go
-type NewPageModel struct {
-    // Page-specific state
+type CustomMsg struct {
+    Type string
+    Data interface{}
 }
 
-func (m NewPageModel) Init() tea.Cmd { /* ... */ }
-func (m NewPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) { /* ... */ }
-func (m NewPageModel) View() string { /* ... */ }
+func NewCustomMsg(msgType string, data interface{}) CustomMsg {
+    return CustomMsg{Type: msgType, Data: data}
+}
 ```
 
-2. **Integrate with Main Controller:**
-- Add page constant
-- Update navigation logic
-- Add page initialization
+**2. Adding New Utility Functions (`core/utils.go`):**
+```go
+func NewUtilityFunction(params interface{}) interface{} {
+    // Implementation
+}
+```
+
+**3. Extending Theme System (`core/styles.go`):**
+```go
+func CustomTheme() Theme {
+    return Theme{
+        Primary:   "#CustomColor",
+        Secondary: "#AnotherColor",
+        // ... other colors
+    }
+}
+```
 
 ### Adding New Components
 
@@ -612,23 +991,37 @@ type MockDataSource struct {
 
 ## Best Practices
 
+### Modular Page Design
+- **Separated Concerns**: Each page module separates logic into dedicated files (handlers, keys, view, types)
+- **Page Interface Compliance**: All pages must implement the core Page interface
+- **Self-contained Modules**: Each page should be independently testable and maintainable
+- **Consistent Structure**: Follow the established file naming and organization patterns
+
 ### Component Design
-- **Single Responsibility**: Each component has one clear purpose
+- **Single Responsibility**: Each component/file has one clear purpose
 - **Composition**: Build complex UIs from simple, reusable components
-- **Configuration**: Use options pattern for flexible component setup
+- **Interface-based Design**: Use core interfaces for consistency
 - **State Isolation**: Components manage their own state when possible
 
 ### Event Handling
-- **Message Types**: Use typed messages for type safety
+- **Centralized Messages**: Use core message types for consistency
+- **Type Safety**: Use typed messages for compile-time safety
+- **Handler Separation**: Keep event handling logic in dedicated handlers.go files
 - **Command Batching**: Batch multiple commands for efficiency
-- **Error Propagation**: Consistent error handling across the application
-- **Async Operations**: Use channels and goroutines for long-running operations
+- **Error Propagation**: Consistent error handling using core.ErrorMsg
 
 ### Code Organization
-- **Separation of Concerns**: Clear boundaries between UI, business logic, and data
-- **Interface-based Design**: Use interfaces for testability and extensibility
-- **Package Structure**: Logical grouping of related functionality
-- **Documentation**: Comprehensive documentation of architecture and patterns
+- **Modular Structure**: Follow the pkg/ui/pages/{page}/ structure
+- **Clear Boundaries**: Separate UI rendering, business logic, and data access
+- **Interface Contracts**: Use core interfaces for page and component contracts
+- **Package Documentation**: Each page module should have a package.go with documentation
+- **Comprehensive Testing**: Each page should have corresponding unit tests
+
+### Migration Patterns
+- **Incremental Migration**: Gradually migrate from legacy components to modular architecture
+- **Interface Compatibility**: Maintain backward compatibility during transition
+- **Legacy Support**: Keep legacy components functional during migration
+- **Testing Coverage**: Maintain test coverage throughout the migration process
 
 ## Entry Points and Application Lifecycle
 
@@ -660,4 +1053,33 @@ func OpenUI(dataSource api.KafkaDataSource) {
 4. **Event Loop**: Continuous message processing
 5. **Cleanup**: Resource cleanup on exit
 
-This architecture provides a solid foundation for building interactive terminal applications with clean separation of concerns, reusable components, and extensible design patterns.
+## Migration Status
+
+### Completed Modules
+- ✅ **Core Infrastructure**: Page interface, message types, styles, utilities
+- ✅ **Main Page Module**: Complete modular implementation with separated concerns
+- ✅ **Topic Page Module**: Real-time message consumption with modular architecture
+- ✅ **Detail Page Module**: Message detail display with formatting options
+- ✅ **Resource Detail Module**: Resource information display
+
+### Legacy Components (In Transition)
+- 🔄 **Root UI Controller**: Still using legacy model references, needs update to Page interface
+- 🔄 **Component System**: Legacy components still in use, being gradually replaced
+- 🔄 **Test Files**: Some test files still reference old model types
+
+### Next Steps
+1. **Update Root Controller**: Migrate ui.go to use Page interface system
+2. **Component Migration**: Gradually replace legacy components with modular equivalents
+3. **Test Updates**: Update remaining test files to work with new architecture
+4. **Documentation**: Complete API documentation for all page modules
+
+## Conclusion
+
+The new modular architecture provides a solid foundation for building maintainable, testable, and extensible terminal applications. The separated concerns pattern ensures that each aspect of page functionality is isolated and manageable, while the standardized Page interface provides consistency across all pages.
+
+**Key Benefits:**
+- **Maintainability**: Clear separation of concerns makes code easier to understand and modify
+- **Testability**: Each component can be tested independently
+- **Extensibility**: New pages can be added following the established patterns
+- **Consistency**: Standardized interfaces ensure uniform behavior across pages
+- **Modularity**: Self-contained page modules reduce coupling and improve cohesion
