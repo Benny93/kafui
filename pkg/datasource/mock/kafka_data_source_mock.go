@@ -65,23 +65,78 @@ func (kp KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 }
 
 func (kp KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error {
-	// Simulate consuming messages from the topic
-	for i := 0; i < 100; i++ {
-		description := "Lorem ipsum dolor sit amet con et just me incididunt ut lab inductor laris martinus"
-		// Simulate receiving a message
-		msg := api.Message{
-			Key:       fmt.Sprintf("purchase_%s_%d", topicName, i),
-			Value:     fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, i+1, i*2+1, time.Now().Format(time.RFC3339), description),
-			Offset:    int64(i + 1),
-			Partition: 0,
+	// Start consumption in a goroutine to make it asynchronous like real Kafka
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Only call onError if context is not cancelled
+				select {
+				case <-ctx.Done():
+					// Context is cancelled, don't call onError as channels might be closed
+					return
+				default:
+					onError(fmt.Errorf("panic in mock consumption: %v", r))
+				}
+			}
+		}()
+
+		// Simulate initial connection delay
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(50 * time.Millisecond):
 		}
 
-		// Call the message handler function
-		handleMessage(msg)
+		// Simulate continuous message consumption like real Kafka
+		// Keep generating messages until context is cancelled
+		messageIndex := 0
+		for {
+			// Check if context is cancelled before processing
+			select {
+			case <-ctx.Done():
+				return // Stop generating messages if context is cancelled
+			default:
+				// Continue processing
+			}
 
-		// Simulate some processing time
-		//time.Sleep(100 * time.Millisecond)
-	}
+			description := "Lorem ipsum dolor sit amet con et just me incididunt ut lab inductor laris martinus"
+			// Simulate receiving a message
+			msg := api.Message{
+				Key:       fmt.Sprintf("purchase_%s_%d", topicName, messageIndex),
+				Value:     fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, messageIndex+1, messageIndex*2+1, time.Now().Format(time.RFC3339), description),
+				Offset:    int64(messageIndex + 1),
+				Partition: int32(messageIndex % 3), // Distribute across 3 partitions
+			}
+
+			// Check context again before calling handler with panic recovery
+			select {
+			case <-ctx.Done():
+				return // Context cancelled, stop processing
+			default:
+				// Call the message handler function with panic recovery
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							// Handler panicked (likely due to closed channel), just return
+							// Don't call onError as it might also panic
+							return
+						}
+					}()
+					handleMessage(msg)
+				}()
+			}
+
+			messageIndex++
+
+			// Simulate realistic processing time between messages with context check
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Millisecond):
+				// Continue to next iteration
+			}
+		}
+	}()
 
 	return nil
 }

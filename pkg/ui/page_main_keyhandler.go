@@ -144,46 +144,32 @@ func (m *MainPageModel) HandleSearchTopics(msg searchTopicsMsg) (tea.Model, tea.
 	m.isFiltered = true
 	m.currentFilter = query
 
-	// Filter the resources
+	// Filter the resources using original items
 	filteredItems := []interface{}{}
 
-	// Convert current table rows back to items for filtering
-	// We need to work with the original data stored elsewhere
-	// For now, we'll work with a simplified approach
-	for _, row := range m.allRows {
-		if len(row) > 0 {
-			name := row[0] // First column is the name
-			// Simple case-insensitive search
-			if strings.Contains(strings.ToLower(name), strings.ToLower(query)) {
-				// Create a simplified item for highlighting
-				// This is a workaround - ideally we'd maintain the original items
-				filteredItems = append(filteredItems, struct {
-					Name string
-					Row  table.Row
-				}{
-					Name: name,
-					Row:  row,
-				})
+	// Work with the original items instead of table rows
+	for _, item := range m.allItems {
+		switch i := item.(type) {
+		case topicItem:
+			if strings.Contains(strings.ToLower(i.name), strings.ToLower(query)) {
+				// Create highlighted version for display
+				highlightedItem := CreateHighlightedItem(i, query)
+				filteredItems = append(filteredItems, highlightedItem)
+			}
+		case resourceListItem:
+			if strings.Contains(strings.ToLower(i.resourceItem.GetID()), strings.ToLower(query)) {
+				// Create highlighted version for display
+				highlightedItem := CreateHighlightedItem(i, query)
+				filteredItems = append(filteredItems, highlightedItem)
 			}
 		}
 	}
 
-	// Convert filtered items to highlighted table rows
-	filteredRows := make([]table.Row, 0, len(filteredItems))
-	for _, item := range filteredItems {
-		if simpleItem, ok := item.(struct {
-			Name string
-			Row  table.Row
-		}); ok {
-			// Apply highlighting to the name (first column)
-			highlightedName := HighlightSearchMatches(simpleItem.Name, query)
-			// Create new row with highlighted name
-			newRow := make(table.Row, len(simpleItem.Row))
-			copy(newRow, simpleItem.Row)
-			newRow[0] = highlightedName // Replace first column with highlighted version
-			filteredRows = append(filteredRows, newRow)
-		}
-	}
+	// Store filtered items for navigation
+	m.filteredItems = filteredItems
+
+	// Convert filtered items to table rows
+	filteredRows := convertItemsToRows(filteredItems, query)
 
 	// Apply natural sorting to filtered results
 	SortTableRowsNaturally(filteredRows)
@@ -220,6 +206,7 @@ func (m *MainPageModel) HandleClearSearch(msg clearSearchMsg) (tea.Model, tea.Cm
 	m.isFiltered = false
 	m.currentFilter = ""
 	m.filteredRows = []table.Row{}
+	m.filteredItems = []interface{}{} // Clear filtered items as well
 	m.statusMessage = fmt.Sprintf("Showing %d of %d resources", len(m.allRows), len(m.allRows))
 	return m, nil
 }

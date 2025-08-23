@@ -33,14 +33,14 @@ func (mc *MainContent) RenderSearchSection() string {
 	if !mc.config.ShowSearch {
 		return ""
 	}
-	
+
 	searchStyle := lipgloss.NewStyle().
 		BorderStyle(RoundedBorder).
 		BorderForeground(Info).
 		Padding(0, 1).
 		MarginBottom(1).
 		Width(mc.config.Width)
-	
+
 	return searchStyle.Render(mc.config.SearchBar.View())
 }
 
@@ -50,11 +50,11 @@ func (mc *MainContent) RenderContentSection() string {
 	if mc.config.ShowSearch {
 		contentHeight -= 3 // Account for search bar
 	}
-	
+
 	if contentHeight < 0 {
 		contentHeight = 0
 	}
-	
+
 	if mc.config.UseTable {
 		// Render table
 		return MainPanelStyle.
@@ -78,15 +78,15 @@ func (mc *MainContent) RenderListSection() string {
 // Render renders the complete main content area
 func (mc *MainContent) Render() string {
 	var sections []string
-	
+
 	// Add search section if enabled
 	if searchSection := mc.RenderSearchSection(); searchSection != "" {
 		sections = append(sections, searchSection)
 	}
-	
+
 	// Add content section (list or table)
 	sections = append(sections, mc.RenderContentSection())
-	
+
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 

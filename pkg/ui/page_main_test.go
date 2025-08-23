@@ -177,16 +177,16 @@ func TestMainPageModelRenderShortcuts(t *testing.T) {
 
 func TestMainPageModelRenderFooter(t *testing.T) {
 	tests := []struct {
-		name         string
-		width        int
-		searchMode   bool
+		name        string
+		width       int
+		searchMode  bool
 		selectedRow []string
-		expected     []string
+		expected    []string
 	}{
 		{
-			name:       "Normal footer",
-			width:      120,
-			searchMode: false,
+			name:        "Normal footer",
+			width:       120,
+			searchMode:  false,
 			selectedRow: []string{"test-topic", "topic", "3", "1", "Test topic"},
 			expected: []string{
 				"Selected: test-topic",

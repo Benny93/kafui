@@ -136,19 +136,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.currentPage == topicPage && m.topicPage == nil {
 			// Get selected item from main page table
 			if selectedItem := m.mainPage.getSelectedResourceItem(); selectedItem != nil {
-				// For now, create a dummy topic since we don't have the full topic structure
-				// This is a simplified approach - ideally we'd maintain the original item data
-				if rowStruct, ok := selectedItem.(struct{ ID string }); ok {
-					topic := api.Topic{
+				// Handle different item types to extract topic information
+				var topicName string
+				var topic api.Topic
+
+				switch item := selectedItem.(type) {
+				case topicItem:
+					// Direct topic item
+					topicName = item.name
+					topic = item.topic
+				case HighlightedTopicItem:
+					// Highlighted topic item
+					topicName = item.name
+					topic = item.topic
+				default:
+					// Fallback - create a minimal topic
+					topicName = "unknown"
+					topic = api.Topic{
 						NumPartitions:     1,
 						ReplicationFactor: 1,
 						ReplicaAssignment: make(map[int32][]int32),
 						ConfigEntries:     make(map[string]*string),
 					}
-					tp := NewTopicPage(m.dataSource, rowStruct.ID, topic)
-					m.topicPage = &tp
-					cmds = append(cmds, m.topicPage.Init())
 				}
+
+				tp := NewTopicPage(m.dataSource, topicName, topic)
+				m.topicPage = &tp
+				cmds = append(cmds, m.topicPage.Init())
 			} else {
 				// Fallback to main page if no topic selected
 				m.currentPage = mainPage
@@ -171,7 +185,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					minimalResource := &minimalResourceItem{
 						id: rowStruct.ID,
 					}
-					
+
 					rdp := NewResourceDetailPage(minimalResource, m.mainPage.currentResource.GetType())
 					m.resourceDetailPage = &rdp
 					cmds = append(cmds, m.resourceDetailPage.Init())
@@ -191,7 +205,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.currentPage != resourceDetailPage && m.resourceDetailPage != nil {
 			m.resourceDetailPage = nil
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
 	}
 
 	// Handle updates for sub-components
@@ -233,7 +247,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			cmds = append(cmds, cmd)
 		}
-		
+
 	case resourceDetailPage:
 		if m.resourceDetailPage != nil {
 			var cmd tea.Cmd

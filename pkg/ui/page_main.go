@@ -35,6 +35,7 @@ type MainPageModel struct {
 	loading         bool
 	searchMode      bool
 	allRows         []table.Row
+	allItems        []interface{} // Store original items to maintain data connectivity
 	resourceManager *ResourceManager
 	currentResource Resource
 	err             error
@@ -42,6 +43,7 @@ type MainPageModel struct {
 	isFiltered    bool
 	currentFilter string
 	filteredRows  []table.Row
+	filteredItems []interface{} // Store filtered original items
 
 	// Reusable components
 	layout      *components.Layout
@@ -137,10 +139,10 @@ func createResourceTableStyles() table.Styles {
 // Convert resource items to table rows
 func convertItemsToRows(items []interface{}, searchQuery string) []table.Row {
 	rows := make([]table.Row, 0, len(items))
-	
+
 	for _, item := range items {
 		var name, resourceType, partitions, replication, details string
-		
+
 		switch i := item.(type) {
 		case resourceListItem:
 			name = i.resourceItem.GetID()
@@ -235,7 +237,7 @@ func convertItemsToRows(items []interface{}, searchQuery string) []table.Row {
 		default:
 			continue // Skip unknown types
 		}
-		
+
 		// Apply search highlighting if searchQuery is provided and not already highlighted
 		if searchQuery != "" {
 			switch item.(type) {
@@ -243,36 +245,30 @@ func convertItemsToRows(items []interface{}, searchQuery string) []table.Row {
 				name = HighlightSearchMatches(name, searchQuery)
 			}
 		}
-		
+
 		rows = append(rows, table.Row{name, resourceType, partitions, replication, details})
 	}
-	
+
 	return rows
 }
 
 // Get currently selected resource item from table
 func (m *MainPageModel) getSelectedResourceItem() interface{} {
 	selectedRow := m.resourcesTable.Cursor()
-	if selectedRow < 0 || selectedRow >= len(m.allRows) {
+
+	// Use filtered items if we're currently in a filtered state
+	if m.isFiltered && len(m.filteredItems) > 0 {
+		if selectedRow < 0 || selectedRow >= len(m.filteredItems) {
+			return nil
+		}
+		return m.filteredItems[selectedRow]
+	}
+
+	// Otherwise use all items
+	if selectedRow < 0 || selectedRow >= len(m.allItems) {
 		return nil
 	}
-	
-	// We need to find the corresponding item from our original data
-	// This is a bit complex since we're mapping from rows back to items
-	// For now, we'll use the row data directly
-	row := m.allRows[selectedRow]
-	if len(row) > 0 {
-		// Create a minimal resource item from row data
-		resourceID := row[0] // First column is the name
-		// For now, return a simple structure
-		return struct{
-			ID string
-		}{
-			ID: resourceID,
-		}
-	}
-	
-	return nil
+	return m.allItems[selectedRow]
 }
 
 func NewMainPage(ds api.KafkaDataSource) MainPageModel {
@@ -386,6 +382,9 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 
+		// Store original items for navigation
+		m.allItems = items
+
 		// Convert items to table rows
 		rows := convertItemsToRows(items, "")
 		m.allRows = rows
@@ -412,6 +411,8 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			// Store filtered items for navigation
+			m.filteredItems = filteredItems
 			// Convert filtered items to table rows and apply natural sorting
 			filteredRows := convertItemsToRows(filteredItems, m.currentFilter)
 			SortTableRowsNaturally(filteredRows)
@@ -475,7 +476,10 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i, item := range msg.items {
 				items[i] = item
 			}
-			
+
+			// Store original items for navigation
+			m.allItems = items
+
 			// Convert to table rows
 			rows := convertItemsToRows(items, "")
 			m.allRows = rows
@@ -502,6 +506,8 @@ func (m *MainPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
+				// Store filtered items for navigation
+				m.filteredItems = filteredItems
 				// Convert filtered items to table rows and apply natural sorting
 				filteredRows := convertItemsToRows(filteredItems, m.currentFilter)
 				SortTableRowsNaturally(filteredRows)
