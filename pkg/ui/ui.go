@@ -5,6 +5,7 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+
 )
 
 // minimalResourceItem is a minimal implementation of ResourceItem for table navigation
