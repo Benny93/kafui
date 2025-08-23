@@ -151,6 +151,11 @@ func (tri *TopicResourceItem) GetDetails() map[string]string {
 	}
 }
 
+// GetTopic returns the underlying api.Topic data
+func (tri *TopicResourceItem) GetTopic() api.Topic {
+	return tri.topic
+}
+
 // ConsumerGroupResource represents Kafka consumer groups
 type ConsumerGroupResource struct {
 	BaseResource

@@ -1,6 +1,7 @@
 package mainpage
 
 import (
+	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
@@ -206,18 +207,24 @@ func (k *Keys) handleEnter(model *Model, msg tea.KeyMsg) tea.Cmd {
 	}
 
 	// If not in search mode and a row is selected, navigate to appropriate page
-	if model.GetSelectedResourceItem() != nil {
+	if selectedItem := model.GetSelectedResourceItem(); selectedItem != nil {
 		// Check the current resource type to determine navigation
 		if model.currentResource.GetType() == TopicResourceType {
-			// Navigate to topic page for topics
-			return func() tea.Msg {
-				return PageChangeMsg{PageID: "topic"}
+			// Navigate to topic page for topics and include topic data
+			if topicItem, ok := selectedItem.(*TopicResourceItem); ok {
+				// Create topic data structure for the page change
+				topicData := map[string]interface{}{
+					"name":  topicItem.GetID(),
+					"topic": topicItem.GetTopic(),
+				}
+				return core.NewPageChangeMsg("topic", topicData)
+			} else {
+				// Fallback if type assertion fails
+				return core.NewPageChangeMsg("topic", nil)
 			}
 		} else {
 			// Navigate to resource detail page for other resources
-			return func() tea.Msg {
-				return PageChangeMsg{PageID: "resource_detail"}
-			}
+			return core.NewPageChangeMsg("resource_detail", selectedItem)
 		}
 	}
 
@@ -251,10 +258,4 @@ func (k *Keys) GetKeyBindings() []key.Binding {
 		k.bindings.Navigation.Home,
 		k.bindings.Navigation.End,
 	}
-}
-
-// PageChangeMsg represents a page change message
-type PageChangeMsg struct {
-	PageID string
-	Data   interface{}
 }
