@@ -195,9 +195,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Get topic name from topic page or use default
 					topicName := "unknown"
 					if m.topicPage != nil {
-						topicName = "topic" // We'll need to add a getter method to topic page
+						topicName = m.topicPage.GetTopicName()
 					}
-					m.detailPage = detailpage.NewModel(topicName, messageData)
+					m.detailPage = detailpage.NewModel(m.dataSource, topicName, messageData)
 				}
 			}
 		}

@@ -46,42 +46,42 @@ func createViewStyles(theme core.Theme) *ViewStyles {
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Padding(0, 1).
 			Bold(true),
-		
+
 		Footer: lipgloss.NewStyle().
 			Background(lipgloss.Color(theme.Secondary)).
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Padding(0, 1),
-		
+
 		Sidebar: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(theme.Primary)).
 			Padding(1),
-		
+
 		MainPanel: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(theme.Secondary)).
 			Padding(1),
-		
+
 		InfoPanel: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(theme.Info)),
-		
+
 		Title: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(theme.Primary)).
 			Bold(true),
-		
+
 		Subtitle: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(theme.Secondary)).
 			Bold(true),
-		
+
 		ResourceType: lipgloss.NewStyle().
 			Background(lipgloss.Color(theme.Accent)).
 			Foreground(lipgloss.Color("#000000")).
 			Padding(0, 1).
 			Bold(true),
-		
+
 		Layout: lipgloss.NewStyle().
 			Padding(1),
-		
+
 		Selected: lipgloss.NewStyle().
 			Background(lipgloss.Color("205")).
 			Foreground(lipgloss.Color("0")),
@@ -162,7 +162,7 @@ func (v *View) Render(model *Model) string {
 func (v *View) renderHeader(model *Model) string {
 	resourceIndicator := v.styles.ResourceType.Render("TOPIC")
 	headerText := fmt.Sprintf("%s Kafui - Topic: %s", resourceIndicator, model.topicName)
-	
+
 	return v.styles.Header.
 		Width(model.dimensions.Width).
 		Render(headerText)
@@ -218,18 +218,18 @@ func (v *View) renderSelectedMessageInfo(model *Model) string {
 	if selectedMsg == nil {
 		return v.styles.InfoPanel.Render("No message selected")
 	}
-	
+
 	// Basic message information
 	info := fmt.Sprintf(
 		"Partition: %d\nOffset: %d",
 		selectedMsg.Partition,
 		selectedMsg.Offset,
 	)
-	
+
 	// Add schema information if available
 	if model.selectedMessageSchema != nil {
 		schemaInfo := "\n\nSCHEMA INFO:"
-		
+
 		// Key schema information
 		if model.selectedMessageSchema.KeySchema != nil {
 			schemaInfo += fmt.Sprintf(
@@ -242,7 +242,7 @@ func (v *View) renderSelectedMessageInfo(model *Model) string {
 		} else {
 			schemaInfo += "\nKey Schema: Not available"
 		}
-		
+
 		// Value schema information
 		if model.selectedMessageSchema.ValueSchema != nil {
 			schemaInfo += fmt.Sprintf(
@@ -255,7 +255,7 @@ func (v *View) renderSelectedMessageInfo(model *Model) string {
 		} else {
 			schemaInfo += "\nValue Schema: Not available"
 		}
-		
+
 		info += schemaInfo
 	} else if selectedMsg.KeySchemaID != "" || selectedMsg.ValueSchemaID != "" {
 		// Show schema IDs even if schema info couldn't be loaded
@@ -268,7 +268,7 @@ func (v *View) renderSelectedMessageInfo(model *Model) string {
 		}
 		info += schemaInfo
 	}
-	
+
 	return v.styles.InfoPanel.Render(info)
 }
 
@@ -331,13 +331,13 @@ func (v *View) renderFooter(model *Model) string {
 	if totalContentWidth < model.dimensions.Width {
 		leftPadding := (model.dimensions.Width - totalContentWidth) / 3
 		rightPadding := model.dimensions.Width - totalContentWidth - leftPadding
-		
-		footerContent := leftInfo + 
-			strings.Repeat(" ", leftPadding) + 
-			status + 
-			strings.Repeat(" ", rightPadding) + 
+
+		footerContent := leftInfo +
+			strings.Repeat(" ", leftPadding) +
+			status +
+			strings.Repeat(" ", rightPadding) +
 			rightInfo
-		
+
 		return v.styles.Footer.Width(model.dimensions.Width).Render(footerContent)
 	}
 
@@ -363,7 +363,7 @@ func (v *View) RenderError(model *Model, err error) string {
 	}
 
 	errorContent := fmt.Sprintf("Error in topic page: %s\n\nPress 'r' to retry or 'Esc' to go back", err.Error())
-	
+
 	errorStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(v.theme.Error)).
 		Width(model.dimensions.Width - 4).
@@ -389,7 +389,7 @@ func (v *View) RenderLoading(model *Model) string {
 	}
 
 	loadingContent := fmt.Sprintf("%s Connecting to topic: %s\n\nPlease wait...", model.spinner.View(), model.topicName)
-	
+
 	loadingStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(v.theme.Info)).
 		Width(model.dimensions.Width - 4).

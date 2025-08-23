@@ -96,7 +96,7 @@ func (kp KafkaDataSourceKaf) GetContext() string {
 	if cfg.Clusters == nil {
 		return "default localhost:9092 (config not loaded)"
 	}
-	
+
 	activeCluster := kp.configManager.GetActiveCluster(cfg)
 	if activeCluster == nil {
 		return "default localhost:9092"
@@ -202,37 +202,37 @@ func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string,
 // GetMessageSchemaInfo implements api.KafkaDataSource
 func (kp KafkaDataSourceKaf) GetMessageSchemaInfo(keySchemaID, valueSchemaID string) (*api.MessageSchemaInfo, error) {
 	schemaInfo := &api.MessageSchemaInfo{}
-	
+
 	// Get schema cache from current cluster configuration
 	schemaCache, err := getSchemaCache()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize schema cache: %v", err)
 	}
-	
+
 	// If no schema registry is configured, return nil
 	if schemaCache == nil {
 		return nil, nil
 	}
-	
+
 	// Handle key schema if provided
 	if keySchemaID != "" {
 		if keySchema, err := kp.fetchSchemaInfo(schemaCache, keySchemaID); err == nil && keySchema != nil {
 			schemaInfo.KeySchema = keySchema
 		}
 	}
-	
+
 	// Handle value schema if provided
 	if valueSchemaID != "" {
 		if valueSchema, err := kp.fetchSchemaInfo(schemaCache, valueSchemaID); err == nil && valueSchema != nil {
 			schemaInfo.ValueSchema = valueSchema
 		}
 	}
-	
+
 	// Return nil if no schema information is available
 	if schemaInfo.KeySchema == nil && schemaInfo.ValueSchema == nil {
 		return nil, nil
 	}
-	
+
 	return schemaInfo, nil
 }
 
@@ -445,11 +445,11 @@ func getClusterAdmin() (admin ClusterAdminInterface, e error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Kafka config: %v", err)
 	}
-	
+
 	if currentCluster == nil {
 		return nil, fmt.Errorf("no Kafka cluster configured. Please check your configuration or ensure Kafka is running")
 	}
-	
+
 	clusterAdmin, err := kafkaClientFactory.CreateClusterAdmin(currentCluster.Brokers, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to Kafka cluster at %v: %v\nPlease ensure Kafka is running and accessible", currentCluster.Brokers, err)
@@ -501,17 +501,17 @@ func (kp KafkaDataSourceKaf) fetchSchemaInfo(schemaCache *avro.SchemaCache, sche
 	if _, err := fmt.Sscanf(schemaIDStr, "%d", &schemaID); err != nil {
 		return nil, fmt.Errorf("invalid schema ID format: %s", schemaIDStr)
 	}
-	
+
 	// For now, return basic schema info since we don't have direct access to schema registry
 	// In a real implementation, you would need to fetch the schema from the registry
 	// The SchemaCache from kaf doesn't expose a direct Get method for schema by ID
 	// but typically handles this internally via DecodeMessage
-	
+
 	return &api.SchemaInfo{
 		ID:         schemaID,
-		Schema:     "", // Would need to fetch from registry
-		Subject:    "", // Would need to fetch from registry
-		Version:    0,  // Would need to fetch from registry
+		Schema:     "",                                 // Would need to fetch from registry
+		Subject:    "",                                 // Would need to fetch from registry
+		Version:    0,                                  // Would need to fetch from registry
 		RecordName: fmt.Sprintf("Schema-%d", schemaID), // Placeholder
 	}, nil
 }
@@ -524,10 +524,10 @@ func extractRecordName(schemaJSON string) string {
 	if err := json.Unmarshal([]byte(schemaJSON), &schemaMap); err != nil {
 		return "Unknown"
 	}
-	
+
 	if name, ok := schemaMap["name"].(string); ok {
 		return name
 	}
-	
+
 	return "Unknown"
 }

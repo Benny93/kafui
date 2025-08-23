@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/Benny93/kafui/pkg/api"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // MockDataSource is a mock implementation of api.KafkaDataSource for testing
@@ -60,17 +60,17 @@ func (m *MockDataSource) GetMessageSchemaInfo(keySchemaID, valueSchemaID string)
 func TestNewModel(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}
-	
+
 	// Create test topic details
 	topicDetails := api.Topic{
 		NumPartitions:     3,
 		ReplicationFactor: 2,
 		MessageCount:      100,
 	}
-	
+
 	// Create new model
 	model := NewModel(mockDS, "test-topic", topicDetails)
-	
+
 	// Verify model is properly initialized
 	assert.NotNil(t, model)
 	assert.Equal(t, mockDS, model.dataSource)
@@ -95,29 +95,29 @@ func TestNewModel(t *testing.T) {
 func TestModelImplementsPageInterface(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}
-	
+
 	// Create test topic details
 	topicDetails := api.Topic{
 		NumPartitions:     3,
 		ReplicationFactor: 2,
 		MessageCount:      100,
 	}
-	
+
 	// Create new model
 	model := NewModel(mockDS, "test-topic", topicDetails)
-	
+
 	// Test that model implements the Page interface methods
 	assert.Equal(t, "topic", model.GetID())
-	
+
 	// Test Init returns a command
 	cmd := model.Init()
 	assert.NotNil(t, cmd)
-	
+
 	// Test SetDimensions
 	model.SetDimensions(80, 24)
 	assert.Equal(t, 80, model.dimensions.Width)
 	assert.Equal(t, 24, model.dimensions.Height)
-	
+
 	// Test View returns a string (basic test)
 	model.SetDimensions(80, 24) // Ensure dimensions are set
 	view := model.View()
@@ -127,17 +127,17 @@ func TestModelImplementsPageInterface(t *testing.T) {
 func TestAddMessage(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}
-	
+
 	// Create test topic details
 	topicDetails := api.Topic{
 		NumPartitions:     3,
 		ReplicationFactor: 2,
 		MessageCount:      100,
 	}
-	
+
 	// Create new model
 	model := NewModel(mockDS, "test-topic", topicDetails)
-	
+
 	// Test adding a message
 	testMessage := api.Message{
 		Key:       "test-key",
@@ -145,20 +145,20 @@ func TestAddMessage(t *testing.T) {
 		Offset:    123,
 		Partition: 0,
 	}
-	
+
 	// Initially should have no messages
 	assert.Len(t, model.messages, 0)
 	assert.Len(t, model.filteredMessages, 0)
-	
+
 	// Add message
 	model.AddMessage(testMessage)
-	
+
 	// Should now have one message
 	assert.Len(t, model.messages, 1)
 	assert.Len(t, model.filteredMessages, 1)
 	assert.Equal(t, testMessage, model.messages[0])
 	assert.Contains(t, model.statusMessage, "Consumed 1 messages")
-	
+
 	// Add duplicate message (should not be added)
 	model.AddMessage(testMessage)
 	assert.Len(t, model.messages, 1) // Should still be 1
@@ -167,43 +167,43 @@ func TestAddMessage(t *testing.T) {
 func TestFilterMessages(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}
-	
+
 	// Create test topic details
 	topicDetails := api.Topic{
 		NumPartitions:     3,
 		ReplicationFactor: 2,
 		MessageCount:      100,
 	}
-	
+
 	// Create new model
 	model := NewModel(mockDS, "test-topic", topicDetails)
-	
+
 	// Add test messages
 	messages := []api.Message{
 		{Key: "user-123", Value: "user data", Offset: 1, Partition: 0},
 		{Key: "order-456", Value: "order data", Offset: 2, Partition: 0},
 		{Key: "user-789", Value: "more user data", Offset: 3, Partition: 0},
 	}
-	
+
 	for _, msg := range messages {
 		model.AddMessage(msg)
 	}
-	
+
 	// Test no filter (should show all messages)
 	model.FilterMessages()
 	assert.Len(t, model.filteredMessages, 3)
-	
+
 	// Test filter by key
 	model.searchMode = true
 	model.searchInput.SetValue("user")
 	model.FilterMessages()
 	assert.Len(t, model.filteredMessages, 2) // Should match 2 messages with "user" in key or value
-	
+
 	// Test filter by value
 	model.searchInput.SetValue("order")
 	model.FilterMessages()
 	assert.Len(t, model.filteredMessages, 1) // Should match 1 message with "order"
-	
+
 	// Test no matches
 	model.searchInput.SetValue("nonexistent")
 	model.FilterMessages()
@@ -213,25 +213,25 @@ func TestFilterMessages(t *testing.T) {
 func TestTogglePause(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}
-	
+
 	// Create test topic details
 	topicDetails := api.Topic{
 		NumPartitions:     3,
 		ReplicationFactor: 2,
 		MessageCount:      100,
 	}
-	
+
 	// Create new model
 	model := NewModel(mockDS, "test-topic", topicDetails)
-	
+
 	// Initially should not be paused
 	assert.False(t, model.paused)
-	
+
 	// Toggle pause on
 	model.TogglePause()
 	assert.True(t, model.paused)
 	assert.Contains(t, model.statusMessage, "paused")
-	
+
 	// Toggle pause off
 	model.TogglePause()
 	assert.False(t, model.paused)
@@ -241,21 +241,21 @@ func TestTogglePause(t *testing.T) {
 func TestSetError(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}
-	
+
 	// Create test topic details
 	topicDetails := api.Topic{
 		NumPartitions:     3,
 		ReplicationFactor: 2,
 		MessageCount:      100,
 	}
-	
+
 	// Create new model
 	model := NewModel(mockDS, "test-topic", topicDetails)
-	
+
 	// Test setting an error
 	testError := assert.AnError
 	model.SetError(testError)
-	
+
 	assert.Equal(t, testError, model.error)
 	assert.Equal(t, testError, model.lastError)
 	assert.Len(t, model.errorHistory, 1)
@@ -266,17 +266,17 @@ func TestSetError(t *testing.T) {
 func TestSetConnectionStatus(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}
-	
+
 	// Create test topic details
 	topicDetails := api.Topic{
 		NumPartitions:     3,
 		ReplicationFactor: 2,
 		MessageCount:      100,
 	}
-	
+
 	// Create new model
 	model := NewModel(mockDS, "test-topic", topicDetails)
-	
+
 	// Test different connection statuses
 	testCases := []struct {
 		status          string
@@ -287,7 +287,7 @@ func TestSetConnectionStatus(t *testing.T) {
 		{"disconnected", "Disconnected"},
 		{"failed", "Connection failed"},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.status, func(t *testing.T) {
 			model.SetConnectionStatus(tc.status)
@@ -300,21 +300,21 @@ func TestSetConnectionStatus(t *testing.T) {
 func TestGetSelectedMessage(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}
-	
+
 	// Create test topic details
 	topicDetails := api.Topic{
 		NumPartitions:     3,
 		ReplicationFactor: 2,
 		MessageCount:      100,
 	}
-	
+
 	// Create new model
 	model := NewModel(mockDS, "test-topic", topicDetails)
-	
+
 	// Test with no messages
 	selected := model.GetSelectedMessage()
 	assert.Nil(t, selected)
-	
+
 	// Add a test message
 	testMessage := api.Message{
 		Key:       "test-key",
@@ -323,7 +323,7 @@ func TestGetSelectedMessage(t *testing.T) {
 		Partition: 0,
 	}
 	model.AddMessage(testMessage)
-	
+
 	// Test with messages (cursor should be at 0)
 	selected = model.GetSelectedMessage()
 	assert.NotNil(t, selected)
@@ -333,25 +333,26 @@ func TestGetSelectedMessage(t *testing.T) {
 func TestWindowSizeUpdate(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}
-	
+
 	// Create test topic details
 	topicDetails := api.Topic{
 		NumPartitions:     3,
 		ReplicationFactor: 2,
 		MessageCount:      100,
 	}
-	
+
 	// Create new model
 	model := NewModel(mockDS, "test-topic", topicDetails)
-	
+
 	// Test window size message
 	msg := tea.WindowSizeMsg{Width: 100, Height: 30}
 	updatedModel, cmd := model.Update(msg)
-	
+
 	// Should return the same model type
 	assert.IsType(t, &Model{}, updatedModel)
-	assert.NotNil(t, cmd) // May return a command
-	
+	// cmd may be nil, that's okay
+	_ = cmd
+
 	// Check dimensions were updated
 	updatedTopicModel := updatedModel.(*Model)
 	assert.Equal(t, 100, updatedTopicModel.dimensions.Width)

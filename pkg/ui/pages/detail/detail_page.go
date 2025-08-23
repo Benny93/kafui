@@ -6,13 +6,27 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	tea "github.com/charmbracelet/bubbletea"
+
+
+
+
+
+
+
+
+
+
+
+
 )
 
 // Model represents the detail page state for viewing individual messages
 type Model struct {
 	// Data
-	topicName string
-	message   api.Message
+	topicName    string
+	message      api.Message
+	dataSource   api.KafkaDataSource
+	schemaInfo   *api.MessageSchemaInfo
 
 	// State
 	dimensions core.Dimensions
@@ -38,10 +52,11 @@ type MessageDisplayFormat struct {
 }
 
 // NewModel creates a new detail page model
-func NewModel(topicName string, message api.Message) *Model {
+func NewModel(dataSource api.KafkaDataSource, topicName string, message api.Message) *Model {
 	m := &Model{
-		topicName: topicName,
-		message:   message,
+		dataSource: dataSource,
+		topicName:  topicName,
+		message:    message,
 		displayFormat: MessageDisplayFormat{
 			ValueFormat: "pretty",
 			KeyFormat:   "raw",
@@ -52,12 +67,57 @@ func NewModel(topicName string, message api.Message) *Model {
 		showMetadata: true,
 	}
 
+	// Load schema information if available (lazy loading)
+	// m.loadSchemaInfo() - moved to lazy loading
+
 	// Initialize components
 	m.handlers = NewHandlers(m)
 	m.keys = NewKeys()
 	m.view = NewView()
 
 	return m
+}
+
+// loadSchemaInfo loads schema information for the message (lazy loading)
+func (m *Model) loadSchemaInfo() {
+	if m.dataSource == nil {
+		return
+	}
+	
+	// Only load if schema IDs are present
+	if m.message.KeySchemaID == "" && m.message.ValueSchemaID == "" {
+		return
+	}
+	
+	// Load schema information from data source
+	schemaInfo, err := m.dataSource.GetMessageSchemaInfo(m.message.KeySchemaID, m.message.ValueSchemaID)
+	if err != nil {
+		// Log error but don't fail - schema info is optional
+		return
+	}
+	
+	m.schemaInfo = schemaInfo
+}
+
+// GetSchemaInfo returns schema information, loading it lazily if needed
+func (m *Model) GetSchemaInfo() *api.MessageSchemaInfo {
+	if m.schemaInfo == nil && (m.message.KeySchemaID != "" || m.message.ValueSchemaID != "") {
+		m.loadSchemaInfo()
+	}
+	return m.schemaInfo
+}
+
+// LoadSchemaInfoAsync loads schema information asynchronously for better UX
+func (m *Model) LoadSchemaInfoAsync() tea.Cmd {
+	// Only load if we have schema IDs and haven't loaded yet
+	if m.schemaInfo != nil || (m.message.KeySchemaID == "" && m.message.ValueSchemaID == "") {
+		return nil
+	}
+	
+	return func() tea.Msg {
+		m.loadSchemaInfo()
+		return nil // Could return a custom message for UI updates if needed
+	}
 }
 
 // Init implements the Page interface
@@ -90,13 +150,24 @@ func (m *Model) GetID() string {
 
 // GetMessageInfo returns formatted message information
 func (m *Model) GetMessageInfo() map[string]string {
-	return map[string]string{
+	info := map[string]string{
 		"Topic":      m.topicName,
 		"Partition":  fmt.Sprintf("%d", m.message.Partition),
 		"Offset":     fmt.Sprintf("%d", m.message.Offset),
 		"Key Size":   fmt.Sprintf("%d bytes", len(m.message.Key)),
 		"Value Size": fmt.Sprintf("%d bytes", len(m.message.Value)),
+		"Headers":    fmt.Sprintf("%d", len(m.message.Headers)),
 	}
+	
+	// Add schema information if available
+	if m.message.KeySchemaID != "" {
+		info["Key Schema ID"] = m.message.KeySchemaID
+	}
+	if m.message.ValueSchemaID != "" {
+		info["Value Schema ID"] = m.message.ValueSchemaID
+	}
+	
+	return info
 }
 
 // GetFormattedKey returns the formatted message key

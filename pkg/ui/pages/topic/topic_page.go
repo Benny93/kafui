@@ -24,10 +24,10 @@ type Model struct {
 	topicDetails api.Topic
 
 	// Message data
-	messages         []api.Message
-	consumedMessages map[string]api.Message
-	filteredMessages []api.Message
-	selectedMessage  *api.Message
+	messages              []api.Message
+	consumedMessages      map[string]api.Message
+	filteredMessages      []api.Message
+	selectedMessage       *api.Message
 	selectedMessageSchema *api.MessageSchemaInfo
 
 	// State
@@ -180,6 +180,11 @@ func (m *Model) GetID() string {
 	return "topic"
 }
 
+// GetTopicName returns the current topic name
+func (m *Model) GetTopicName() string {
+	return m.topicName
+}
+
 // Business logic methods
 
 // GetSelectedMessage returns the currently selected message
@@ -206,7 +211,7 @@ func (m *Model) loadSchemaInfoForMessage(msg *api.Message) {
 		m.selectedMessageSchema = nil
 		return
 	}
-	
+
 	// Load schema information from data source
 	schemaInfo, err := m.dataSource.GetMessageSchemaInfo(msg.KeySchemaID, msg.ValueSchemaID)
 	if err != nil {
@@ -214,9 +219,9 @@ func (m *Model) loadSchemaInfoForMessage(msg *api.Message) {
 		m.selectedMessageSchema = nil
 		return
 	}
-	
+
 	m.selectedMessageSchema = schemaInfo
-	shared.DebugLog("Loaded schema info for message - KeySchema: %v, ValueSchema: %v", 
+	shared.DebugLog("Loaded schema info for message - KeySchema: %v, ValueSchema: %v",
 		schemaInfo != nil && schemaInfo.KeySchema != nil,
 		schemaInfo != nil && schemaInfo.ValueSchema != nil)
 }

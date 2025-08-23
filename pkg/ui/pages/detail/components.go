@@ -6,6 +6,7 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Keys handles key bindings for the detail page
@@ -114,11 +115,100 @@ func (h *Handlers) Handle(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 // View handles rendering for the detail page
 type View struct {
 	dimensions core.Dimensions
+	theme      core.Theme
+	styles     *ViewStyles
+}
+
+// ViewStyles contains all the styles used in the detail page
+type ViewStyles struct {
+	Header       lipgloss.Style
+	Footer       lipgloss.Style
+	Sidebar      lipgloss.Style
+	MainPanel    lipgloss.Style
+	InfoPanel    lipgloss.Style
+	Title        lipgloss.Style
+	Subtitle     lipgloss.Style
+	ResourceType lipgloss.Style
+	Layout       lipgloss.Style
+	Content      lipgloss.Style
+	Value        lipgloss.Style
+	Key          lipgloss.Style
+	Metadata     lipgloss.Style
 }
 
 // NewView creates a new View instance
 func NewView() *View {
-	return &View{}
+	theme := core.DefaultTheme()
+	return &View{
+		theme:  theme,
+		styles: createViewStyles(theme),
+	}
+}
+
+// createViewStyles creates the styling configuration for the detail page
+func createViewStyles(theme core.Theme) *ViewStyles {
+	return &ViewStyles{
+		Header: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Primary)).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Padding(0, 1).
+			Bold(true),
+
+		Footer: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Secondary)).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Padding(0, 1),
+
+		Sidebar: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(theme.Primary)).
+			Padding(1),
+
+		MainPanel: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(theme.Secondary)).
+			Padding(1),
+
+		InfoPanel: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Info)),
+
+		Title: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Primary)).
+			Bold(true),
+
+		Subtitle: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Secondary)).
+			Bold(true),
+
+		ResourceType: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Accent)).
+			Foreground(lipgloss.Color("#000000")).
+			Padding(0, 1).
+			Bold(true),
+
+		Layout: lipgloss.NewStyle().
+			Padding(1),
+
+		Content: lipgloss.NewStyle().
+			Padding(1).
+			Margin(0, 1),
+
+		Value: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Success)).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(theme.Secondary)).
+			Padding(1),
+
+		Key: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Warning)).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(theme.Secondary)).
+			Padding(1),
+
+		Metadata: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.Info)).
+			Italic(true),
+	}
 }
 
 // Render renders the detail page view
@@ -127,19 +217,266 @@ func (v *View) Render(model *Model) string {
 		return "Loading message details..."
 	}
 
-	// Simple implementation for now
-	content := fmt.Sprintf(
-		"Topic: %s\nMessage Details\n\nKey: %s\nValue: %s\n\nPress 'esc' to go back",
-		model.topicName,
-		model.GetFormattedKey(),
-		model.GetFormattedValue(),
+	// Calculate layout dimensions
+	sidebarWidth := 35
+	contentWidth := model.dimensions.Width - sidebarWidth - 6 // Account for padding and borders
+	contentHeight := model.dimensions.Height - 8              // Account for header and footer
+
+	// Header section
+	header := v.renderHeader(model)
+
+	// Main content area with message details
+	mainContent := v.renderMainContent(model, contentWidth, contentHeight)
+
+	// Sidebar with metadata and actions
+	sidebar := v.renderSidebar(model, sidebarWidth, contentHeight)
+
+	// Combine main content and sidebar
+	body := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		mainContent,
+		lipgloss.NewStyle().Width(2).Render(""), // Spacer
+		sidebar,
 	)
 
-	return content
+	// Footer with key bindings
+	footer := v.renderFooter(model)
+
+	// Combine all sections
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		v.styles.Layout.Render(body),
+		footer,
+	)
+}
+
+func (v *View) renderHeader(model *Model) string {
+	resourceIndicator := v.styles.ResourceType.Render("MESSAGE")
+	headerText := fmt.Sprintf("%s Kafui - Message Detail: %s", resourceIndicator, model.topicName)
+
+	return v.styles.Header.
+		Width(model.dimensions.Width).
+		Render(headerText)
+}
+
+func (v *View) renderMainContent(model *Model, width, height int) string {
+	// Message key section
+	keySection := v.styles.MainPanel.
+		Width(width/2 - 2).
+		Height(height/2 - 2).
+		Render(v.renderKeySection(model))
+
+	// Message value section
+	valueSection := v.styles.MainPanel.
+		Width(width/2 - 2).
+		Height(height/2 - 2).
+		Render(v.renderValueSection(model))
+
+	// Headers section (if enabled)
+	var headersSection string
+	if model.showHeaders && len(model.message.Headers) > 0 {
+		headersSection = v.styles.MainPanel.
+			Width(width).
+			Height(height / 4).
+			Render(v.renderHeadersSection(model))
+	}
+
+	// Arrange sections
+	topRow := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		keySection,
+		lipgloss.NewStyle().Width(2).Render(""), // Spacer
+		valueSection,
+	)
+
+	if headersSection != "" {
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			topRow,
+			lipgloss.NewStyle().Height(1).Render(""), // Spacer
+			headersSection,
+		)
+	}
+
+	return topRow
+}
+
+func (v *View) renderKeySection(model *Model) string {
+	title := v.styles.Title.Render("MESSAGE KEY")
+	content := model.GetFormattedKey()
+
+	if content == "<null>" {
+		content = v.styles.InfoPanel.Render("No key present")
+	} else {
+		content = v.styles.Key.Width(30).Render(content)
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		lipgloss.NewStyle().MarginTop(1).Render(""),
+		content,
+	)
+}
+
+func (v *View) renderValueSection(model *Model) string {
+	title := v.styles.Title.Render("MESSAGE VALUE")
+	content := model.GetFormattedValue()
+
+	if content == "<null>" {
+		content = v.styles.InfoPanel.Render("No value present")
+	} else {
+		content = v.styles.Value.Width(30).Render(content)
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		lipgloss.NewStyle().MarginTop(1).Render(""),
+		content,
+	)
+}
+
+func (v *View) renderHeadersSection(model *Model) string {
+	title := v.styles.Title.Render("MESSAGE HEADERS")
+
+	if len(model.message.Headers) == 0 {
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			title,
+			v.styles.InfoPanel.Render("No headers present"),
+		)
+	}
+
+	headersList := []string{}
+	for _, header := range model.message.Headers {
+		headerStr := fmt.Sprintf("%s: %s", header.Key, header.Value)
+		headersList = append(headersList, headerStr)
+	}
+
+	headersContent := lipgloss.JoinVertical(lipgloss.Left, headersList...)
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		lipgloss.NewStyle().MarginTop(1).Render(""),
+		v.styles.Content.Render(headersContent),
+	)
+}
+
+func (v *View) renderSidebar(model *Model, width, height int) string {
+	sidebarContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		v.styles.Title.Render("MESSAGE INFO"),
+		v.renderMessageInfo(model),
+		lipgloss.NewStyle().MarginTop(2).Render(""),
+		v.styles.Subtitle.Render("SCHEMA INFO"),
+		v.renderSchemaInfo(model),
+		lipgloss.NewStyle().MarginTop(2).Render(""),
+		v.styles.Subtitle.Render("DISPLAY OPTIONS"),
+		v.renderDisplayOptions(model),
+		lipgloss.NewStyle().MarginTop(2).Render(""),
+		v.styles.Subtitle.Render("SHORTCUTS"),
+		v.renderShortcuts(model),
+	)
+
+	return v.styles.Sidebar.
+		Width(width).
+		Height(height).
+		Render(sidebarContent)
+}
+
+func (v *View) renderSchemaInfo(model *Model) string {
+	schemaInfo := model.GetSchemaInfo() // Use lazy loading getter
+	if schemaInfo == nil {
+		if model.message.KeySchemaID != "" || model.message.ValueSchemaID != "" {
+			// Show schema IDs even if schema info couldn't be loaded
+			schemaInfo := []string{}
+			if model.message.KeySchemaID != "" {
+				schemaInfo = append(schemaInfo, fmt.Sprintf("Key Schema ID: %s", model.message.KeySchemaID))
+			}
+			if model.message.ValueSchemaID != "" {
+				schemaInfo = append(schemaInfo, fmt.Sprintf("Value Schema ID: %s", model.message.ValueSchemaID))
+			}
+			return v.styles.InfoPanel.Render(lipgloss.JoinVertical(lipgloss.Left, schemaInfo...))
+		}
+		return v.styles.InfoPanel.Render("No schema information")
+	}
+
+	schemaDetails := []string{}
+
+	// Key schema information
+	if schemaInfo.KeySchema != nil {
+		schemaDetails = append(schemaDetails,
+			fmt.Sprintf("Key Schema: %s (ID: %d)",
+				schemaInfo.KeySchema.RecordName,
+				schemaInfo.KeySchema.ID))
+	} else if model.message.KeySchemaID != "" {
+		schemaDetails = append(schemaDetails, fmt.Sprintf("Key Schema ID: %s (Not Avro)", model.message.KeySchemaID))
+	} else {
+		schemaDetails = append(schemaDetails, "Key Schema: Not available")
+	}
+
+	// Value schema information
+	if schemaInfo.ValueSchema != nil {
+		schemaDetails = append(schemaDetails,
+			fmt.Sprintf("Value Schema: %s (ID: %d)",
+				schemaInfo.ValueSchema.RecordName,
+				schemaInfo.ValueSchema.ID))
+	} else if model.message.ValueSchemaID != "" {
+		schemaDetails = append(schemaDetails, fmt.Sprintf("Value Schema ID: %s (Not Avro)", model.message.ValueSchemaID))
+	} else {
+		schemaDetails = append(schemaDetails, "Value Schema: Not available")
+	}
+
+	return v.styles.InfoPanel.Render(lipgloss.JoinVertical(lipgloss.Left, schemaDetails...))
+}
+
+func (v *View) renderMessageInfo(model *Model) string {
+	info := model.GetMessageInfo()
+	infoLines := []string{}
+
+	for key, value := range info {
+		infoLines = append(infoLines, fmt.Sprintf("%s: %s", key, value))
+	}
+
+	return v.styles.InfoPanel.Render(lipgloss.JoinVertical(lipgloss.Left, infoLines...))
+}
+
+func (v *View) renderDisplayOptions(model *Model) string {
+	options := []string{
+		fmt.Sprintf("Format: %s", model.displayFormat.ValueFormat),
+		fmt.Sprintf("Headers: %v", model.showHeaders),
+		fmt.Sprintf("Metadata: %v", model.showMetadata),
+		fmt.Sprintf("Wrap Lines: %v", model.displayFormat.WrapLines),
+	}
+
+	return v.styles.InfoPanel.Render(lipgloss.JoinVertical(lipgloss.Left, options...))
+}
+
+func (v *View) renderShortcuts(model *Model) string {
+	shortcuts := []string{
+		"f     Toggle format",
+		"h     Toggle headers",
+		"m     Toggle metadata",
+		"c     Copy content",
+		"Esc   Back to topic",
+		"q     Quit",
+	}
+
+	return v.styles.InfoPanel.Render(lipgloss.JoinVertical(lipgloss.Left, shortcuts...))
+}
+
+func (v *View) renderFooter(model *Model) string {
+	footerText := "Detail View | Use 'f' to toggle format, 'h' for headers, 'm' for metadata | Press 'Esc' to go back"
+
+	return v.styles.Footer.
+		Width(model.dimensions.Width).
+		Render(footerText)
 }
 
 // SetDimensions updates the view dimensions
 func (v *View) SetDimensions(width, height int) {
 	v.dimensions = core.Dimensions{Width: width, Height: height}
 }
-

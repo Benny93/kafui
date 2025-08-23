@@ -55,11 +55,11 @@ type ConsumerGroup struct {
 
 // SchemaInfo represents Avro schema information
 type SchemaInfo struct {
-	ID          int    `json:"id"`
-	Schema      string `json:"schema"`
-	Subject     string `json:"subject"`
-	Version     int    `json:"version"`
-	RecordName  string `json:"recordName"` // The type name (e.g., AddedItemToChartEvent)
+	ID         int    `json:"id"`
+	Schema     string `json:"schema"`
+	Subject    string `json:"subject"`
+	Version    int    `json:"version"`
+	RecordName string `json:"recordName"` // The type name (e.g., AddedItemToChartEvent)
 }
 
 // MessageSchemaInfo contains schema information for a message's key and value

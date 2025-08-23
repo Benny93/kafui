@@ -48,6 +48,14 @@ func (m *MockDataSource) ConsumeTopic(ctx context.Context, topicName string, fla
 	return args.Error(0)
 }
 
+func (m *MockDataSource) GetMessageSchemaInfo(keySchemaID, valueSchemaID string) (*api.MessageSchemaInfo, error) {
+	args := m.Called(keySchemaID, valueSchemaID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*api.MessageSchemaInfo), args.Error(1)
+}
+
 func TestNewModel(t *testing.T) {
 	// Create mock data source
 	mockDS := &MockDataSource{}

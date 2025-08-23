@@ -107,12 +107,17 @@ func rotateLogIfNeeded() error {
 }
 
 func DebugLog(format string, args ...interface{}) {
-	logMutex.Lock()
+	// Try to acquire lock with timeout to prevent deadlock
+	if !tryLockWithTimeout() {
+		return // Skip logging if we can't acquire lock
+	}
 	defer logMutex.Unlock()
 
 	// Initialize log on first use if not already initialized
 	if !logInitialized {
-		InitDebugLog()
+		// Don't call InitDebugLog here as it would cause deadlock
+		// Just set the flag and continue
+		logInitialized = true
 	}
 
 	// Rotate log if needed (check every write to keep it manageable)
@@ -133,4 +138,20 @@ func DebugLog(format string, args ...interface{}) {
 	logMsg := fmt.Sprintf("%s: %s\n", timestamp, fmt.Sprintf(format, args...))
 
 	f.WriteString(logMsg)
+}
+
+// tryLockWithTimeout attempts to acquire the log mutex with a timeout
+func tryLockWithTimeout() bool {
+	done := make(chan bool, 1)
+	go func() {
+		logMutex.Lock()
+		done <- true
+	}()
+	
+	select {
+	case <-done:
+		return true
+	case <-time.After(100 * time.Millisecond):
+		return false
+	}
 }

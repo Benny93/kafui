@@ -96,7 +96,7 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 			Offset:    int64(messageIndex + 1),
 			Partition: int32(messageIndex % 3), // Distribute across 3 partitions
 		}
-		
+
 		// Simulate some messages having Avro schemas (about 30% of messages)
 		if messageIndex%3 == 0 {
 			// Simulate key schema for some messages
@@ -146,7 +146,7 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 // GetMessageSchemaInfo implements api.KafkaDataSource
 func (kp *KafkaDataSourceMock) GetMessageSchemaInfo(keySchemaID, valueSchemaID string) (*api.MessageSchemaInfo, error) {
 	schemaInfo := &api.MessageSchemaInfo{}
-	
+
 	// Handle key schema if provided
 	if keySchemaID != "" {
 		if schema := kp.getSchemaFromCache(keySchemaID); schema != nil {
@@ -160,7 +160,7 @@ func (kp *KafkaDataSourceMock) GetMessageSchemaInfo(keySchemaID, valueSchemaID s
 			}
 		}
 	}
-	
+
 	// Handle value schema if provided
 	if valueSchemaID != "" {
 		if schema := kp.getSchemaFromCache(valueSchemaID); schema != nil {
@@ -174,12 +174,12 @@ func (kp *KafkaDataSourceMock) GetMessageSchemaInfo(keySchemaID, valueSchemaID s
 			}
 		}
 	}
-	
+
 	// Return nil if no schema information is available
 	if schemaInfo.KeySchema == nil && schemaInfo.ValueSchema == nil {
 		return nil, nil
 	}
-	
+
 	return schemaInfo, nil
 }
 
@@ -232,12 +232,12 @@ func (kp *KafkaDataSourceMock) simulateSchemaFetch(schemaID, schemaType string) 
 			RecordName: "PaymentProcessedEvent",
 			Schema:     `{"type":"record","name":"PaymentProcessedEvent","fields":[{"name":"paymentId","type":"string"},{"name":"status","type":"string"}]}`},
 	}
-	
+
 	// Return mock schema if it exists
 	if schema, exists := mockSchemas[schemaID]; exists {
 		return schema
 	}
-	
+
 	// Return nil for non-Avro or unknown schemas
 	return nil
 }
