@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -196,6 +197,43 @@ func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string,
 
 	//cgs := []string{"message1", "message2", "message3"} // Example
 	return nil
+}
+
+// GetMessageSchemaInfo implements api.KafkaDataSource
+func (kp KafkaDataSourceKaf) GetMessageSchemaInfo(keySchemaID, valueSchemaID string) (*api.MessageSchemaInfo, error) {
+	schemaInfo := &api.MessageSchemaInfo{}
+	
+	// Get schema cache from current cluster configuration
+	schemaCache, err := getSchemaCache()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize schema cache: %v", err)
+	}
+	
+	// If no schema registry is configured, return nil
+	if schemaCache == nil {
+		return nil, nil
+	}
+	
+	// Handle key schema if provided
+	if keySchemaID != "" {
+		if keySchema, err := kp.fetchSchemaInfo(schemaCache, keySchemaID); err == nil && keySchema != nil {
+			schemaInfo.KeySchema = keySchema
+		}
+	}
+	
+	// Handle value schema if provided
+	if valueSchemaID != "" {
+		if valueSchema, err := kp.fetchSchemaInfo(schemaCache, valueSchemaID); err == nil && valueSchema != nil {
+			schemaInfo.ValueSchema = valueSchema
+		}
+	}
+	
+	// Return nil if no schema information is available
+	if schemaInfo.KeySchema == nil && schemaInfo.ValueSchema == nil {
+		return nil, nil
+	}
+	
+	return schemaInfo, nil
 }
 
 func getConfig() (saramaConfig *sarama.Config, e error) {
@@ -454,4 +492,42 @@ func getSchemaCache() (cache *avro.SchemaCache, er error) {
 		return nil, err
 	}
 	return cache, nil
+}
+
+// fetchSchemaInfo retrieves schema information for a given schema ID
+func (kp KafkaDataSourceKaf) fetchSchemaInfo(schemaCache *avro.SchemaCache, schemaIDStr string) (*api.SchemaInfo, error) {
+	// Parse schema ID
+	var schemaID int
+	if _, err := fmt.Sscanf(schemaIDStr, "%d", &schemaID); err != nil {
+		return nil, fmt.Errorf("invalid schema ID format: %s", schemaIDStr)
+	}
+	
+	// For now, return basic schema info since we don't have direct access to schema registry
+	// In a real implementation, you would need to fetch the schema from the registry
+	// The SchemaCache from kaf doesn't expose a direct Get method for schema by ID
+	// but typically handles this internally via DecodeMessage
+	
+	return &api.SchemaInfo{
+		ID:         schemaID,
+		Schema:     "", // Would need to fetch from registry
+		Subject:    "", // Would need to fetch from registry
+		Version:    0,  // Would need to fetch from registry
+		RecordName: fmt.Sprintf("Schema-%d", schemaID), // Placeholder
+	}, nil
+}
+
+// extractRecordName extracts the record name from an Avro schema JSON
+func extractRecordName(schemaJSON string) string {
+	// Simple JSON parsing to extract the "name" field
+	// This is a basic implementation - could be improved with proper JSON parsing
+	var schemaMap map[string]interface{}
+	if err := json.Unmarshal([]byte(schemaJSON), &schemaMap); err != nil {
+		return "Unknown"
+	}
+	
+	if name, ok := schemaMap["name"].(string); ok {
+		return name
+	}
+	
+	return "Unknown"
 }

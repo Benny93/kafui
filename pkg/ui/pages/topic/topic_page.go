@@ -28,6 +28,7 @@ type Model struct {
 	consumedMessages map[string]api.Message
 	filteredMessages []api.Message
 	selectedMessage  *api.Message
+	selectedMessageSchema *api.MessageSchemaInfo
 
 	// State
 	dimensions    core.Dimensions
@@ -189,10 +190,35 @@ func (m *Model) GetSelectedMessage() *api.Message {
 
 	cursor := m.messageTable.Cursor()
 	if cursor >= 0 && cursor < len(m.filteredMessages) {
-		return &m.filteredMessages[cursor]
+		selectedMsg := &m.filteredMessages[cursor]
+		// Load schema information when message is selected
+		m.loadSchemaInfoForMessage(selectedMsg)
+		return selectedMsg
 	}
 
 	return nil
+}
+
+// loadSchemaInfoForMessage loads schema information for a message
+func (m *Model) loadSchemaInfoForMessage(msg *api.Message) {
+	// Only load if schema IDs are present
+	if msg.KeySchemaID == "" && msg.ValueSchemaID == "" {
+		m.selectedMessageSchema = nil
+		return
+	}
+	
+	// Load schema information from data source
+	schemaInfo, err := m.dataSource.GetMessageSchemaInfo(msg.KeySchemaID, msg.ValueSchemaID)
+	if err != nil {
+		shared.DebugLog("Failed to load schema info: %v", err)
+		m.selectedMessageSchema = nil
+		return
+	}
+	
+	m.selectedMessageSchema = schemaInfo
+	shared.DebugLog("Loaded schema info for message - KeySchema: %v, ValueSchema: %v", 
+		schemaInfo != nil && schemaInfo.KeySchema != nil,
+		schemaInfo != nil && schemaInfo.ValueSchema != nil)
 }
 
 // FilterMessages filters messages based on search input

@@ -20,7 +20,7 @@ func Init(cfgOption string, useMock bool) {
 	fmt.Println("Init...")
 	var dataSource api.KafkaDataSource
 
-	dataSource = mock.KafkaDataSourceMock{}
+	dataSource = &mock.KafkaDataSourceMock{}
 	if !useMock {
 		dataSource = kafds.NewKafkaDataSourceKaf()
 	}

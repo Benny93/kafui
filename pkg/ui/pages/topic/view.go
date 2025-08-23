@@ -174,6 +174,9 @@ func (v *View) renderSidebar(model *Model, width, height int) string {
 		v.styles.Title.Render("TOPIC INFO"),
 		v.renderTopicInfo(model),
 		lipgloss.NewStyle().MarginTop(2).Render(""),
+		v.styles.Subtitle.Render("SELECTED MESSAGE"),
+		v.renderSelectedMessageInfo(model),
+		lipgloss.NewStyle().MarginTop(2).Render(""),
 		v.styles.Subtitle.Render("SHORTCUTS"),
 		v.renderShortcuts(model),
 	)
@@ -206,6 +209,66 @@ func (v *View) renderTopicInfo(model *Model) string {
 		info += strings.Join(configLines, "\n")
 	}
 
+	return v.styles.InfoPanel.Render(info)
+}
+
+// renderSelectedMessageInfo renders information about the currently selected message including schema info
+func (v *View) renderSelectedMessageInfo(model *Model) string {
+	selectedMsg := model.GetSelectedMessage()
+	if selectedMsg == nil {
+		return v.styles.InfoPanel.Render("No message selected")
+	}
+	
+	// Basic message information
+	info := fmt.Sprintf(
+		"Partition: %d\nOffset: %d",
+		selectedMsg.Partition,
+		selectedMsg.Offset,
+	)
+	
+	// Add schema information if available
+	if model.selectedMessageSchema != nil {
+		schemaInfo := "\n\nSCHEMA INFO:"
+		
+		// Key schema information
+		if model.selectedMessageSchema.KeySchema != nil {
+			schemaInfo += fmt.Sprintf(
+				"\nKey Schema: %s (ID: %d)",
+				model.selectedMessageSchema.KeySchema.RecordName,
+				model.selectedMessageSchema.KeySchema.ID,
+			)
+		} else if selectedMsg.KeySchemaID != "" {
+			schemaInfo += fmt.Sprintf("\nKey Schema ID: %s (Not Avro)", selectedMsg.KeySchemaID)
+		} else {
+			schemaInfo += "\nKey Schema: Not available"
+		}
+		
+		// Value schema information
+		if model.selectedMessageSchema.ValueSchema != nil {
+			schemaInfo += fmt.Sprintf(
+				"\nValue Schema: %s (ID: %d)",
+				model.selectedMessageSchema.ValueSchema.RecordName,
+				model.selectedMessageSchema.ValueSchema.ID,
+			)
+		} else if selectedMsg.ValueSchemaID != "" {
+			schemaInfo += fmt.Sprintf("\nValue Schema ID: %s (Not Avro)", selectedMsg.ValueSchemaID)
+		} else {
+			schemaInfo += "\nValue Schema: Not available"
+		}
+		
+		info += schemaInfo
+	} else if selectedMsg.KeySchemaID != "" || selectedMsg.ValueSchemaID != "" {
+		// Show schema IDs even if schema info couldn't be loaded
+		schemaInfo := "\n\nSCHEMA INFO:"
+		if selectedMsg.KeySchemaID != "" {
+			schemaInfo += fmt.Sprintf("\nKey Schema ID: %s", selectedMsg.KeySchemaID)
+		}
+		if selectedMsg.ValueSchemaID != "" {
+			schemaInfo += fmt.Sprintf("\nValue Schema ID: %s", selectedMsg.ValueSchemaID)
+		}
+		info += schemaInfo
+	}
+	
 	return v.styles.InfoPanel.Render(info)
 }
 
