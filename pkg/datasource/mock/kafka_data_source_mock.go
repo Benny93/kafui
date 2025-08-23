@@ -65,78 +65,66 @@ func (kp KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 }
 
 func (kp KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error {
-	// Start consumption in a goroutine to make it asynchronous like real Kafka
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Only call onError if context is not cancelled
-				select {
-				case <-ctx.Done():
-					// Context is cancelled, don't call onError as channels might be closed
-					return
-				default:
-					onError(fmt.Errorf("panic in mock consumption: %v", r))
-				}
-			}
-		}()
+	// Simulate initial connection delay
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(50 * time.Millisecond):
+	}
 
-		// Simulate initial connection delay
+	// Simulate continuous message consumption like real Kafka
+	// Keep generating messages until context is cancelled
+	messageIndex := 0
+	for {
+		// Check if context is cancelled before processing
 		select {
 		case <-ctx.Done():
-			return
-		case <-time.After(50 * time.Millisecond):
+			return ctx.Err() // Return when context is cancelled
+		default:
+			// Continue processing
 		}
 
-		// Simulate continuous message consumption like real Kafka
-		// Keep generating messages until context is cancelled
-		messageIndex := 0
-		for {
-			// Check if context is cancelled before processing
-			select {
-			case <-ctx.Done():
-				return // Stop generating messages if context is cancelled
-			default:
-				// Continue processing
-			}
+		description := "Lorem ipsum dolor sit amet con et just me incididunt ut lab inductor laris martinus"
+		// Simulate receiving a message
+		msg := api.Message{
+			Key:       fmt.Sprintf("purchase_%s_%d", topicName, messageIndex),
+			Value:     fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, messageIndex+1, messageIndex*2+1, time.Now().Format(time.RFC3339), description),
+			Offset:    int64(messageIndex + 1),
+			Partition: int32(messageIndex % 3), // Distribute across 3 partitions
+		}
 
-			description := "Lorem ipsum dolor sit amet con et just me incididunt ut lab inductor laris martinus"
-			// Simulate receiving a message
-			msg := api.Message{
-				Key:       fmt.Sprintf("purchase_%s_%d", topicName, messageIndex),
-				Value:     fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, messageIndex+1, messageIndex*2+1, time.Now().Format(time.RFC3339), description),
-				Offset:    int64(messageIndex + 1),
-				Partition: int32(messageIndex % 3), // Distribute across 3 partitions
-			}
-
-			// Check context again before calling handler with panic recovery
-			select {
-			case <-ctx.Done():
-				return // Context cancelled, stop processing
-			default:
-				// Call the message handler function with panic recovery
-				func() {
-					defer func() {
-						if r := recover(); r != nil {
-							// Handler panicked (likely due to closed channel), just return
-							// Don't call onError as it might also panic
+		// Check context again before calling handler with panic recovery
+		select {
+		case <-ctx.Done():
+			return ctx.Err() // Context cancelled, stop processing
+		default:
+			// Call the message handler function with panic recovery
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						// Handler panicked (likely due to closed channel)
+						// Call onError if context is still active
+						select {
+						case <-ctx.Done():
+							// Context cancelled, don't call onError
 							return
+						default:
+							onError(fmt.Errorf("panic in message handler: %v", r))
 						}
-					}()
-					handleMessage(msg)
+					}
 				}()
-			}
-
-			messageIndex++
-
-			// Simulate realistic processing time between messages with context check
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(1 * time.Millisecond):
-				// Continue to next iteration
-			}
+				handleMessage(msg)
+			}()
 		}
-	}()
 
-	return nil
+		messageIndex++
+
+		// Simulate realistic processing time between messages with context check
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond): // Slower message rate for better visibility
+			// Continue to next iteration
+		}
+	}
 }

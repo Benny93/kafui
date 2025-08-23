@@ -1,12 +1,19 @@
 package topic
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
+
+
+
+
+
+
 )
 
 // ConsumptionController handles message consumption logic and error recovery
@@ -31,15 +38,70 @@ func (cc *ConsumptionController) StartConsuming() tea.Cmd {
 		// Set consuming state
 		cc.model.loading = true
 		cc.model.SetConnectionStatus(StatusConnecting)
+		shared.DebugLog("Set consuming state and connection status")
 
-		// Start consuming messages using the correct ConsumeTopic method
-		// This method blocks, so we'll need to handle it differently
-		// For now, just return a start consuming message without channels
+		// Create context and channels for consumption
+		ctx, cancel := context.WithCancel(context.Background())
+		msgChan := make(chan api.Message, 100)
+		errChan := make(chan error, 1)
+
+		// Create message handler that sends to our channel
+		handleMessage := func(msg api.Message) {
+			select {
+			case msgChan <- msg:
+				// Message sent successfully
+			case <-ctx.Done():
+				// Context cancelled, stop sending
+				return
+			default:
+				// Channel full, skip message to prevent blocking
+				shared.DebugLog("Message channel full, skipping message")
+			}
+		}
+
+		// Create error handler that sends to our error channel
+		onError := func(err any) {
+			select {
+			case errChan <- fmt.Errorf("%v", err):
+				// Error sent successfully
+			case <-ctx.Done():
+				// Context cancelled, stop sending
+				return
+			default:
+				// Channel full, skip error to prevent blocking
+				shared.DebugLog("Error channel full, skipping error")
+			}
+		}
+
+		// Start consumption in a goroutine
+		go func() {
+			shared.DebugLog("Starting goroutine for topic consumption: %s", cc.model.topicName)
+			defer func() {
+				shared.DebugLog("Consumption goroutine ending for topic: %s", cc.model.topicName)
+				if r := recover(); r != nil {
+					// Handle panic by sending error
+					shared.DebugLog("Panic in consumption: %v", r)
+					onError(fmt.Errorf("panic in consumption: %v", r))
+				}
+				close(msgChan)
+				close(errChan)
+			}()
+
+			shared.DebugLog("Calling dataSource.ConsumeTopic for: %s", cc.model.topicName)
+			err := cc.model.dataSource.ConsumeTopic(ctx, cc.model.topicName, cc.model.consumeFlags, handleMessage, onError)
+			if err != nil {
+				shared.DebugLog("Error from ConsumeTopic: %v", err)
+				onError(err)
+			} else {
+				shared.DebugLog("ConsumeTopic completed successfully")
+			}
+		}()
+
 		shared.DebugLog("Successfully started consumption setup")
 		return StartConsumingMsg{
-			MsgChan: nil, // Will be set up in handlers
-			ErrChan: nil, // Will be set up in handlers
-			Cancel:  nil, // Will be set up in handlers
+			MsgChan: msgChan,
+			ErrChan: errChan,
+			Cancel:  cancel,
 		}
 	}
 }
@@ -55,6 +117,7 @@ func (cc *ConsumptionController) StopConsuming() tea.Cmd {
 // ListenForMessages creates a command to listen for incoming messages
 func (cc *ConsumptionController) ListenForMessages(msgChan <-chan api.Message) tea.Cmd {
 	return func() tea.Msg {
+		shared.DebugLog("ListenForMessages called, waiting for message...")
 		select {
 		case msg, ok := <-msgChan:
 			if !ok {
@@ -69,6 +132,7 @@ func (cc *ConsumptionController) ListenForMessages(msgChan <-chan api.Message) t
 
 		case <-time.After(time.Millisecond * 100): // Timeout to prevent blocking
 			// No message received, continue listening
+			shared.DebugLog("ListenForMessages timeout, continuing...")
 			return ContinuousListenMsg{}
 		}
 	}

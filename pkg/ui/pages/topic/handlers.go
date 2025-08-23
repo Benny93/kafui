@@ -111,19 +111,27 @@ func (h *Handlers) handleKeyMsg(model *Model, msg tea.KeyMsg) (tea.Model, tea.Cm
 }
 
 func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (tea.Model, tea.Cmd) {
+	shared.DebugLog("handleMessageConsumed called - partition=%d, offset=%d", msg.Message.Partition, msg.Message.Offset)
+
 	// Add the consumed message
 	model.AddMessage(msg.Message)
-	
+	shared.DebugLog("Added message to model, total messages: %d", len(model.messages))
+
 	// Continue listening for more messages if we're still consuming
 	var cmds []tea.Cmd
 	if model.consuming && model.msgChan != nil {
+		shared.DebugLog("Continuing to listen for more messages")
 		cmds = append(cmds, model.consumption.ListenForMessages(model.msgChan))
+	} else {
+		shared.DebugLog("Not continuing to listen - consuming: %t, msgChan set: %t", model.consuming, model.msgChan != nil)
 	}
-	
+
 	return model, tea.Batch(cmds...)
 }
 
 func (h *Handlers) handleStartConsuming(model *Model, msg StartConsumingMsg) (tea.Model, tea.Cmd) {
+	shared.DebugLog("handleStartConsuming called with channels - MsgChan: %v, ErrChan: %v", msg.MsgChan != nil, msg.ErrChan != nil)
+
 	// Set consumption state
 	model.consuming = true
 	model.loading = false
@@ -131,16 +139,24 @@ func (h *Handlers) handleStartConsuming(model *Model, msg StartConsumingMsg) (te
 	model.errChan = msg.ErrChan
 	model.cancelConsumption = msg.Cancel
 	model.SetConnectionStatus(StatusConnected)
-	
+	shared.DebugLog("Set consumption state - consuming: %t, msgChan set: %t, errChan set: %t", model.consuming, model.msgChan != nil, model.errChan != nil)
+
 	// Start listening for messages and errors
 	var cmds []tea.Cmd
 	if msg.MsgChan != nil {
+		shared.DebugLog("Starting message listener")
 		cmds = append(cmds, model.consumption.ListenForMessages(msg.MsgChan))
+	} else {
+		shared.DebugLog("Warning: MsgChan is nil, not starting message listener")
 	}
 	if msg.ErrChan != nil {
+		shared.DebugLog("Starting error listener")
 		cmds = append(cmds, model.consumption.ListenForErrors(msg.ErrChan))
+	} else {
+		shared.DebugLog("Warning: ErrChan is nil, not starting error listener")
 	}
-	
+
+	shared.DebugLog("handleStartConsuming returning %d commands", len(cmds))
 	return model, tea.Batch(cmds...)
 }
 
@@ -153,15 +169,19 @@ func (h *Handlers) handleStopConsuming(model *Model, msg StopConsumingMsg) (tea.
 		model.cancelConsumption = nil
 	}
 	model.SetConnectionStatus(StatusDisconnected)
-	
+
 	return model, nil
 }
 
 func (h *Handlers) handleContinuousListen(model *Model, msg ContinuousListenMsg) (tea.Model, tea.Cmd) {
+	shared.DebugLog("handleContinuousListen called - consuming: %t, msgChan set: %t", model.consuming, model.msgChan != nil)
+
 	// Continue listening for messages if we're still consuming
 	if model.consuming && model.msgChan != nil {
+		shared.DebugLog("Continuing to listen for messages")
 		return model, model.consumption.ListenForMessages(model.msgChan)
 	}
+	shared.DebugLog("Not continuing to listen - consumption stopped or channel unavailable")
 	return model, nil
 }
 
@@ -181,16 +201,16 @@ func (h *Handlers) handleConnectionStatus(model *Model, msg ConnectionStatusMsg)
 func (h *Handlers) handleRetryConsumption(model *Model, msg RetryConsumptionMsg) (tea.Model, tea.Cmd) {
 	model.retryCount = msg.Attempt
 	model.SetConnectionStatus(StatusRetrying)
-	
+
 	if msg.LastError != nil {
 		model.SetError(msg.LastError)
 	}
-	
+
 	// Try to restart consumption
 	if model.consumption != nil {
 		return model, model.consumption.StartConsuming()
 	}
-	
+
 	return model, nil
 }
 
@@ -198,11 +218,11 @@ func (h *Handlers) handleConnectionFailed(model *Model, msg ConnectionFailedMsg)
 	model.retryCount = msg.Attempts
 	model.consuming = false
 	model.loading = false
-	
+
 	if msg.LastError != nil {
 		model.SetError(msg.LastError)
 	}
-	
+
 	model.SetConnectionStatus(StatusFailed)
 	return model, nil
 }
@@ -233,7 +253,7 @@ func (h *Handlers) handleMessageSelected(model *Model, msg MessageSelectedMsg) (
 func (h *Handlers) handleTimerTick(model *Model, msg TimerTickMsg) (tea.Model, tea.Cmd) {
 	// Update last update time
 	model.lastUpdate = time.Time(msg)
-	
+
 	// Schedule next timer tick
 	return model, tea.Tick(time.Second, func(t time.Time) tea.Msg {
 		return TimerTickMsg(t)
@@ -243,12 +263,12 @@ func (h *Handlers) handleTimerTick(model *Model, msg TimerTickMsg) (tea.Model, t
 func (h *Handlers) handleError(model *Model, msg ErrorMsg) (tea.Model, tea.Cmd) {
 	model.SetError(error(msg))
 	model.loading = false
-	
+
 	// If we're supposed to be consuming, try to retry
 	if model.consuming && model.retryCount < model.maxRetries {
 		return model, model.consumption.ScheduleRetry(error(msg))
 	}
-	
+
 	return model, nil
 }
 
@@ -279,11 +299,10 @@ func (h *Handlers) validateModel(model *Model) error {
 	if model.topicName == "" {
 		return ErrorMsg(fmt.Errorf("topic name cannot be empty"))
 	}
-	
+
 	if model.dataSource == nil {
 		return ErrorMsg(fmt.Errorf("data source cannot be nil"))
 	}
-	
+
 	return nil
 }
-
