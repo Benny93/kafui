@@ -158,7 +158,26 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	}
 
 	// If in search mode, let the search input handle keys
+	// But handle Enter and Esc specially for search confirmation/cancellation
 	if model.searchMode {
+		// Handle Enter to confirm search
+		if msg.String() == "enter" {
+			model.searchMode = false
+			model.searchInput.Blur()
+			model.FilterMessages()
+			return nil
+		}
+		
+		// Handle Esc to cancel search
+		if msg.String() == "esc" {
+			model.searchMode = false
+			model.searchInput.Blur()
+			model.searchInput.SetValue("")
+			model.FilterMessages()
+			return nil
+		}
+		
+		// Let the search input handle other keys
 		var cmd tea.Cmd
 		model.searchInput, cmd = model.searchInput.Update(msg)
 		cmds = append(cmds, cmd)

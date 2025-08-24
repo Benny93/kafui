@@ -298,6 +298,11 @@ func (m *Model) FilterMessages() {
 func (m *Model) updateMessageTable() {
 	rows := make([]table.Row, len(m.filteredMessages))
 
+	searchQuery := ""
+	if m.searchMode {
+		searchQuery = m.searchInput.Value()
+	}
+
 	for i, msg := range m.filteredMessages {
 		offset := "N/A"
 		if msg.Offset >= 0 {
@@ -310,17 +315,61 @@ func (m *Model) updateMessageTable() {
 		key := "<null>"
 		if msg.Key != "" {
 			key = truncateString(msg.Key, 18)
+			if searchQuery != "" {
+				key = highlightMatchingText(key, searchQuery)
+			}
 		}
 
 		value := "<null>"
 		if msg.Value != "" {
 			value = truncateString(msg.Value, 38)
+			if searchQuery != "" {
+				value = highlightMatchingText(value, searchQuery)
+			}
 		}
 
 		rows[i] = table.Row{offset, partition, timestamp, key, value}
 	}
 
 	m.messageTable.SetRows(rows)
+}
+
+// highlightMatchingText highlights matching parts of text with color
+func highlightMatchingText(text, query string) string {
+	if query == "" {
+		return text
+	}
+	
+	// Convert to lowercase for case-insensitive comparison
+	lowerText := strings.ToLower(text)
+	lowerQuery := strings.ToLower(query)
+	
+	// Find all occurrences of the query in the text
+	var result strings.Builder
+	start := 0
+	
+	for {
+		index := strings.Index(lowerText[start:], lowerQuery)
+		if index == -1 {
+			// No more matches, add the rest of the text
+			result.WriteString(text[start:])
+			break
+		}
+		
+		// Add text before the match
+		actualIndex := start + index
+		result.WriteString(text[start:actualIndex])
+		
+		// Add highlighted match (using Lip Gloss styling)
+		match := text[actualIndex : actualIndex+len(query)]
+		highlighted := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render(match)
+		result.WriteString(highlighted)
+		
+		// Move start position
+		start = actualIndex + len(query)
+	}
+	
+	return result.String()
 }
 
 // AddMessage adds a new message to the collection

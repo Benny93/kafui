@@ -113,15 +113,10 @@ func (v *View) renderFullView(model *Model) string {
 	// Header section
 	header := v.renderHeader(model)
 
-	// Main content area with controls, messages, and search
+	// Main content area with controls, search, and messages
 	controlsSection := v.styles.MainPanel.
 		Width(contentWidth).
 		Render(v.renderControls(model))
-
-	messagesSection := v.styles.MainPanel.
-		Width(contentWidth).
-		Height(contentHeight - 6). // Account for controls and search
-		Render(v.renderMessages(model))
 
 	var searchSection string
 	if model.searchMode {
@@ -130,14 +125,19 @@ func (v *View) renderFullView(model *Model) string {
 			Render(model.searchInput.View())
 	}
 
+	messagesSection := v.styles.MainPanel.
+		Width(contentWidth).
+		Height(contentHeight - 6). // Account for controls and search
+		Render(v.renderMessages(model))
+
 	// Combine main content sections
 	var mainContent string
 	if model.searchMode {
 		mainContent = lipgloss.JoinVertical(
 			lipgloss.Left,
 			controlsSection,
-			messagesSection,
 			searchSection,
+			messagesSection,
 		)
 	} else {
 		mainContent = lipgloss.JoinVertical(
@@ -184,6 +184,14 @@ func (v *View) renderCompactView(model *Model) string {
 		Width(contentWidth).
 		Render(v.renderControls(model))
 
+	// Search section (if in search mode)
+	var searchSection string
+	if model.searchMode {
+		searchSection = v.styles.MainPanel.
+			Width(contentWidth).
+			Render(model.searchInput.View())
+	}
+
 	// Messages section (take most of the space)
 	messagesHeight := contentHeight - 8 // Account for controls, search, and padding
 	if model.searchMode {
@@ -195,14 +203,6 @@ func (v *View) renderCompactView(model *Model) string {
 		Height(messagesHeight).
 		Render(v.renderMessages(model))
 
-	// Search section (if in search mode)
-	var searchSection string
-	if model.searchMode {
-		searchSection = v.styles.MainPanel.
-			Width(contentWidth).
-			Render(model.searchInput.View())
-	}
-
 	// Schema info section (compact version)
 	schemaInfo := v.renderCompactSchemaInfo(model)
 
@@ -210,11 +210,11 @@ func (v *View) renderCompactView(model *Model) string {
 	footer := v.renderFooter(model)
 
 	// Combine all sections
-	sections := []string{header, controlsSection, messagesSection}
+	sections := []string{header, controlsSection}
 	if model.searchMode {
 		sections = append(sections, searchSection)
 	}
-	sections = append(sections, schemaInfo, footer)
+	sections = append(sections, messagesSection, schemaInfo, footer)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
