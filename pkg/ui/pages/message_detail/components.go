@@ -328,14 +328,30 @@ func (v *View) renderCompactView(model *Model) string {
 	header := v.renderHeader(model)
 
 	// Calculate section dimensions with better space distribution
+	// First calculate space needed for headers if enabled
+	headersHeight := 0
+	if model.showHeaders && len(model.message.Headers) > 0 {
+		headersHeight = 5
+		if headersHeight > contentHeight/5 {
+			headersHeight = contentHeight / 5
+		}
+	}
+
+	// Adjust remaining height for key and value sections
+	remainingHeight := contentHeight - headersHeight
+	if headersHeight > 0 {
+		remainingHeight -= 1 // Space for header separator
+	}
+
 	// Key gets smaller fixed portion, value gets remaining space
-	keySectionHeight := 6                                      // Fixed smaller height for key section
-	valueSectionHeight := contentHeight - keySectionHeight - 6 // Remaining space with spacing
+	keySectionHeight := 6
+	if keySectionHeight > remainingHeight/4 {
+		keySectionHeight = remainingHeight / 4
+	}
+	
+	valueSectionHeight := remainingHeight - keySectionHeight - 6 // Remaining space with spacing
 
 	// Ensure minimum heights but don't exceed available space
-	if keySectionHeight > contentHeight/4 {
-		keySectionHeight = contentHeight / 4
-	}
 	if keySectionHeight < 1 {
 		keySectionHeight = 1
 	}
@@ -392,6 +408,15 @@ func (v *View) renderCompactView(model *Model) string {
 	}
 
 	// Render sections
+	// Headers section (if enabled) - now at the top
+	var headersSection string
+	if model.showHeaders && len(model.message.Headers) > 0 {
+		headersSection = v.styles.MainPanel.
+			Width(sectionWidth).
+			Height(headersHeight).
+			Render(v.renderHeadersSection(model))
+	}
+
 	keySection := v.styles.MainPanel.
 		Width(sectionWidth).
 		Height(keySectionHeight).
@@ -402,38 +427,24 @@ func (v *View) renderCompactView(model *Model) string {
 		Height(valueSectionHeight).
 		Render(v.valueViewer.View())
 
-	// Headers section (if enabled)
-	var headersSection string
-	if model.showHeaders && len(model.message.Headers) > 0 {
-		headersHeight := 5
-		if headersHeight > contentHeight/5 {
-			headersHeight = contentHeight / 5
-		}
-
-		headersSection = v.styles.MainPanel.
-			Width(sectionWidth).
-			Height(headersHeight).
-			Render(v.renderHeadersSection(model))
-	}
-
 	// Schema info section (compact version)
 	schemaInfo := v.renderCompactSchemaInfo(model)
 
 	// Footer
 	footer := v.renderFooter(model)
 
-	// Combine all sections vertically (key above value)
+	// Combine all sections vertically (headers at top, then key, then value)
 	var sections []string
 	sections = append(sections, header)
+	
+	if headersSection != "" {
+		sections = append(sections, headersSection)
+		sections = append(sections, lipgloss.NewStyle().Height(1).Render("")) // Spacer
+	}
+	
 	sections = append(sections, keySection)
 	sections = append(sections, lipgloss.NewStyle().Height(1).Render("")) // Spacer
 	sections = append(sections, valueSection)
-
-	if headersSection != "" {
-		sections = append(sections, lipgloss.NewStyle().Height(1).Render("")) // Spacer
-		sections = append(sections, headersSection)
-	}
-
 	sections = append(sections, schemaInfo)
 	sections = append(sections, footer)
 
@@ -508,7 +519,26 @@ func (v *View) renderMainContent(model *Model, width, height int) string {
 		keyContent = model.message.Key
 	}
 
-	// Only configure key viewer if we have height for it
+	// Update value viewer config
+	valueContent := "<null>"
+	if model.message.Value != "" {
+		valueContent = model.message.Value
+	}
+
+	// Start building the content sections
+	var sections []string
+
+	// Add headers section at the top if enabled
+	if model.showHeaders && len(model.message.Headers) > 0 {
+		headerSection := v.styles.MainPanel.
+			Height(headersHeight).
+			Width(contentWidth).
+			Render(v.renderHeadersSection(model))
+		sections = append(sections, headerSection)
+		sections = append(sections, lipgloss.NewStyle().Height(1).Render("")) // Spacing
+	}
+
+	// Configure and render key viewer if we have space for it
 	if keySectionHeight > 0 {
 		keyConfig := components.JSONContentConfig{
 			Width:           contentWidth,
@@ -525,14 +555,12 @@ func (v *View) renderMainContent(model *Model, width, height int) string {
 		} else {
 			v.keyViewer.UpdateConfig(keyConfig)
 		}
+
+		sections = append(sections, v.keyViewer.View())
+		sections = append(sections, lipgloss.NewStyle().Height(1).Render("")) // Spacing
 	}
 
-	// Update value viewer config
-	valueContent := "<null>"
-	if model.message.Value != "" {
-		valueContent = model.message.Value
-	}
-
+	// Configure and render value viewer
 	valueConfig := components.JSONContentConfig{
 		Width:           contentWidth,
 		Height:          valueSectionHeight,
@@ -549,70 +577,7 @@ func (v *View) renderMainContent(model *Model, width, height int) string {
 		v.valueViewer.UpdateConfig(valueConfig)
 	}
 
-	// Start building the content sections
-	var sections []string
-
-	// Configure and render key viewer if we have space for it
-	if keySectionHeight > 0 {
-		if v.keyViewer == nil {
-			v.keyViewer = components.NewJSONContentView(components.JSONContentConfig{
-				Width:           contentWidth,
-				Height:          keySectionHeight,
-				Title:           "MESSAGE KEY",
-				Content:         model.message.Key,
-				DisplayFormat:   model.displayFormat.KeyFormat,
-				ShowLineNumbers: true,
-				Focused:         model.focusedViewport == "key",
-			})
-		} else {
-			v.keyViewer.UpdateConfig(components.JSONContentConfig{
-				Width:           contentWidth,
-				Height:          keySectionHeight,
-				Title:           "MESSAGE KEY",
-				Content:         model.message.Key,
-				DisplayFormat:   model.displayFormat.KeyFormat,
-				ShowLineNumbers: true,
-				Focused:         model.focusedViewport == "key",
-			})
-		}
-
-		sections = append(sections, v.keyViewer.View())
-		sections = append(sections, lipgloss.NewStyle().Height(1).Render("")) // Spacing
-	}
-
-	// Configure and render value viewer
-	if v.valueViewer == nil {
-		v.valueViewer = components.NewJSONContentView(components.JSONContentConfig{
-			Width:           contentWidth,
-			Height:          valueSectionHeight,
-			Title:           "MESSAGE VALUE",
-			Content:         model.message.Value,
-			DisplayFormat:   model.displayFormat.ValueFormat,
-			ShowLineNumbers: true,
-			Focused:         model.focusedViewport == "value",
-		})
-	} else {
-		v.valueViewer.UpdateConfig(components.JSONContentConfig{
-			Width:           contentWidth,
-			Height:          valueSectionHeight,
-			Title:           "MESSAGE VALUE",
-			Content:         model.message.Value,
-			DisplayFormat:   model.displayFormat.ValueFormat,
-			ShowLineNumbers: true,
-			Focused:         model.focusedViewport == "value",
-		})
-	}
-
 	sections = append(sections, v.valueViewer.View())
-
-	// Add headers section if enabled
-	if model.showHeaders && len(model.message.Headers) > 0 {
-		sections = append(sections, lipgloss.NewStyle().Height(1).Render("")) // Spacing
-		headerSection := v.styles.MainPanel.
-			Height(headersHeight).
-			Render(v.renderHeadersSection(model))
-		sections = append(sections, headerSection)
-	}
 
 	// Render the final content with proper styling
 	content := lipgloss.JoinVertical(lipgloss.Left, sections...)

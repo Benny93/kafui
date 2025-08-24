@@ -95,6 +95,11 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 			Value:     fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, messageIndex+1, messageIndex*2+1, time.Now().Format(time.RFC3339), description),
 			Offset:    int64(messageIndex + 1),
 			Partition: int32(messageIndex % 3), // Distribute across 3 partitions
+			Headers: []api.MessageHeader{
+				{Key: "correlationId", Value: fmt.Sprintf("%d", messageIndex+123)},
+				{Key: "source", Value: "mock-service"},
+				{Key: "timestamp", Value: time.Now().Format(time.RFC3339)},
+			},
 		}
 
 		// Simulate some messages having Avro schemas (about 30% of messages)
