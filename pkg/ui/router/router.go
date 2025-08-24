@@ -141,8 +141,8 @@ func (r *Router) createPage(pageID string, data interface{}) core.Page {
 		// Fallback with empty data
 		return topicpage.NewModel(r.dataSource, "unknown", api.Topic{})
 		
-	case "message_detail":
-		// Extract message data
+	case "message_detail", "detail":
+		// Extract message data - handle both "message_detail" and legacy "detail" page IDs
 		if navData, ok := data.(*NavigationData); ok {
 			return messagedetailpage.NewModel(r.dataSource, navData.TopicName, navData.Message)
 		}
