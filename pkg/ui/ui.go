@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/router"
 	messagedetailpage "github.com/Benny93/kafui/pkg/ui/pages/message_detail"
 	mainpage "github.com/Benny93/kafui/pkg/ui/pages/main"
 	resourcedetailpage "github.com/Benny93/kafui/pkg/ui/pages/resource_detail"
@@ -25,13 +26,17 @@ const (
 // Model represents the main application state
 type Model struct {
 	dataSource         api.KafkaDataSource
+	Router             *router.Router  // Exported for testing
+	ShowHelp           bool            // Exported for testing
+	width              int
+	height             int
+	
+	// Legacy fields for backward compatibility (will be removed)
 	currentPage        pageType
 	mainPage           *mainpage.Model
 	topicPage          *topicpage.Model
 	detailPage         *messagedetailpage.Model
 	resourceDetailPage *resourcedetailpage.Model
-	width              int
-	height             int
 }
 
 // Key mappings
@@ -89,12 +94,80 @@ func initialModel(dataSource api.KafkaDataSource) Model {
 	}
 }
 
+// initialModelWithRouter creates a new Model using the router-based navigation
+func initialModelWithRouter(dataSource api.KafkaDataSource) Model {
+	r := router.NewRouter(dataSource)
+	return Model{
+		dataSource: dataSource,
+		Router:     r,
+		ShowHelp:   false,
+	}
+}
+
 func (m Model) Init() tea.Cmd {
-	// Initialize the main page
+	// Router-based initialization
+	if m.Router != nil {
+		return m.Router.Init()
+	}
+	
+	// Legacy initialization
 	return m.mainPage.Init()
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Router-based update handling
+	if m.Router != nil {
+		return m.updateWithRouter(msg)
+	}
+	
+	// Legacy update handling
+	return m.updateLegacy(msg)
+}
+
+// updateWithRouter handles updates using the new router system
+func (m Model) updateWithRouter(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.Router.SetDimensions(msg.Width, msg.Height)
+
+	case tea.KeyMsg:
+		// Handle global key bindings first
+		switch {
+		case key.Matches(msg, core.DefaultGlobalKeys.Help):
+			m.ShowHelp = !m.ShowHelp
+			return m, nil
+		case key.Matches(msg, core.DefaultGlobalKeys.Quit):
+			return m, tea.Quit
+		case key.Matches(msg, core.DefaultGlobalKeys.Back):
+			if !m.ShowHelp {
+				return m, m.Router.Back()
+			} else {
+				// Close help if it's open
+				m.ShowHelp = false
+				return m, nil
+			}
+		}
+	}
+
+	// Handle router updates if not in help mode
+	if !m.ShowHelp {
+		updatedRouter, cmd := m.Router.Update(msg)
+		if updatedRouter != nil {
+			// Router implements tea.Model interface, but we need to maintain our Model type
+			// The router updates its internal state, so we don't need to reassign
+		}
+		cmds = append(cmds, cmd)
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+// updateLegacy handles updates using the legacy system (for backward compatibility)
+func (m Model) updateLegacy(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -306,6 +379,57 @@ func (m *Model) updatePageDimensions() {
 }
 
 func (m Model) View() string {
+	// Router-based view rendering
+	if m.Router != nil {
+		return m.viewWithRouter()
+	}
+	
+	// Legacy view rendering
+	return m.viewLegacy()
+}
+
+// viewWithRouter renders the view using the router system
+func (m Model) viewWithRouter() string {
+	if m.ShowHelp {
+		return m.renderHelp()
+	}
+	
+	return m.Router.View()
+}
+
+// renderHelp renders the help overlay
+func (m Model) renderHelp() string {
+	currentPage := m.Router.GetCurrentPage()
+	if currentPage == nil {
+		return "Help not available"
+	}
+	
+	helpContent := "Kafui Help\n\n"
+	helpContent += "Global Keys:\n"
+	
+	// Add global key bindings
+	globalBindings := core.DefaultGlobalKeys.GetAllBindings()
+	for _, binding := range globalBindings {
+		help := binding.Help()
+		helpContent += "  " + help.Key + " - " + help.Desc + "\n"
+	}
+	
+	helpContent += "\nPage-specific Keys:\n"
+	
+	// Add page-specific key bindings
+	pageBindings := currentPage.GetHelp()
+	for _, binding := range pageBindings {
+		help := binding.Help()
+		helpContent += "  " + help.Key + " - " + help.Desc + "\n"
+	}
+	
+	helpContent += "\nPress '?' again to close help"
+	
+	return helpContent
+}
+
+// viewLegacy renders the view using the legacy system
+func (m Model) viewLegacy() string {
 	// Update page dimensions if needed (fallback in case updatePageDimensions wasn't called)
 	if m.width > 0 && m.height > 0 {
 		switch m.currentPage {
@@ -357,6 +481,11 @@ func (m Model) View() string {
 // NewUIModel creates a new UI model (public API)
 func NewUIModel(dataSource api.KafkaDataSource) Model {
 	return initialModel(dataSource)
+}
+
+// NewUIModelWithRouter creates a new UI model using the router-based navigation
+func NewUIModelWithRouter(dataSource api.KafkaDataSource) Model {
+	return initialModelWithRouter(dataSource)
 }
 
 // InitializeModel is an alias for backwards compatibility
