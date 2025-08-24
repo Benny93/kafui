@@ -112,51 +112,6 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	// Log key event details
 	shared.DebugLog("Topic Key Event - Type: %v, String: %s, SearchMode: %v", msg.Type, msg.String(), model.searchMode)
 
-	// Handle ESC key first (back navigation or exit search)
-	if key.Matches(msg, k.bindings.Back) {
-		return k.handleBack(model)
-	}
-
-	// Handle other specific key combinations
-	switch {
-	case key.Matches(msg, k.bindings.Quit):
-		return k.handleQuit(model)
-	case key.Matches(msg, k.bindings.Search):
-		return k.handleSearch(model)
-	case key.Matches(msg, k.bindings.PauseResume):
-		return k.handlePauseResume(model)
-	case key.Matches(msg, k.bindings.Retry):
-		return k.handleRetry(model)
-	case key.Matches(msg, k.bindings.Enter):
-		return k.handleEnter(model)
-	}
-
-	// Handle message control keys (only when not in search mode)
-	if !model.searchMode {
-		switch {
-		case key.Matches(msg, k.bindings.MessageControl.CopyKey):
-			return k.handleCopyKey(model)
-		case key.Matches(msg, k.bindings.MessageControl.CopyValue):
-			return k.handleCopyValue(model)
-		case key.Matches(msg, k.bindings.MessageControl.ShowDetails):
-			return k.handleShowDetails(model)
-		}
-	}
-
-	// Handle navigation keys if not in search mode
-	if !model.searchMode {
-		switch {
-		case key.Matches(msg, k.bindings.Navigation.Up):
-			return k.handleNavigation(model, "up")
-		case key.Matches(msg, k.bindings.Navigation.Down):
-			return k.handleNavigation(model, "down")
-		case key.Matches(msg, k.bindings.Navigation.Home):
-			return k.handleNavigation(model, "home")
-		case key.Matches(msg, k.bindings.Navigation.End):
-			return k.handleNavigation(model, "end")
-		}
-	}
-
 	// If in search mode, let the search input handle keys
 	// But handle Enter and Esc specially for search confirmation/cancellation
 	if model.searchMode {
@@ -183,6 +138,47 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		cmds = append(cmds, cmd)
 		model.FilterMessages()
 		return tea.Batch(cmds...)
+	}
+
+	// Handle ESC key (back navigation when not in search mode)
+	if key.Matches(msg, k.bindings.Back) {
+		return k.handleBack(model)
+	}
+
+	// Handle other specific key combinations (only when not in search mode)
+	switch {
+	case key.Matches(msg, k.bindings.Quit):
+		return k.handleQuit(model)
+	case key.Matches(msg, k.bindings.Search):
+		return k.handleSearch(model)
+	case key.Matches(msg, k.bindings.PauseResume):
+		return k.handlePauseResume(model)
+	case key.Matches(msg, k.bindings.Retry):
+		return k.handleRetry(model)
+	case key.Matches(msg, k.bindings.Enter):
+		return k.handleEnter(model)
+	}
+
+	// Handle message control keys (only when not in search mode)
+	switch {
+	case key.Matches(msg, k.bindings.MessageControl.CopyKey):
+		return k.handleCopyKey(model)
+	case key.Matches(msg, k.bindings.MessageControl.CopyValue):
+		return k.handleCopyValue(model)
+	case key.Matches(msg, k.bindings.MessageControl.ShowDetails):
+		return k.handleShowDetails(model)
+	}
+
+	// Handle navigation keys
+	switch {
+	case key.Matches(msg, k.bindings.Navigation.Up):
+		return k.handleNavigation(model, "up")
+	case key.Matches(msg, k.bindings.Navigation.Down):
+		return k.handleNavigation(model, "down")
+	case key.Matches(msg, k.bindings.Navigation.Home):
+		return k.handleNavigation(model, "home")
+	case key.Matches(msg, k.bindings.Navigation.End):
+		return k.handleNavigation(model, "end")
 	}
 
 	// Default table navigation handling
