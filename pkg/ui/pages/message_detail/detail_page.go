@@ -2,23 +2,14 @@ package messagedetail
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-
-
-
-
-
-
-
-
-
-
-
-
+	"github.com/atotto/clipboard"
 )
 
 // Model represents the detail page state for viewing individual messages
@@ -38,6 +29,13 @@ type Model struct {
 	keys     *Keys
 	view     *View
 
+	// Viewport components for scrollable content
+	keyViewport   viewport.Model
+	valueViewport viewport.Model
+	
+	// Focus management
+	focusedViewport string // "key" or "value"
+
 	// Display configuration
 	displayFormat MessageDisplayFormat
 	showHeaders   bool
@@ -54,6 +52,24 @@ type MessageDisplayFormat struct {
 
 // NewModel creates a new detail page model
 func NewModel(dataSource api.KafkaDataSource, topicName string, message api.Message) *Model {
+	// Initialize viewport components
+	keyViewport := viewport.New(30, 10)
+	valueViewport := viewport.New(50, 20)
+	
+	// Set default content
+	keyContent := "<null>"
+	if message.Key != "" {
+		keyContent = message.Key
+	}
+	
+	valueContent := "<null>"
+	if message.Value != "" {
+		valueContent = message.Value
+	}
+	
+	keyViewport.SetContent(addLineNumbers(keyContent))
+	valueViewport.SetContent(addLineNumbers(valueContent))
+
 	m := &Model{
 		dataSource: dataSource,
 		topicName:  topicName,
@@ -66,6 +82,9 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, message api.Mess
 		},
 		showHeaders:  true,
 		showMetadata: true,
+		keyViewport:   keyViewport,
+		valueViewport: valueViewport,
+		focusedViewport: "value", // Value viewport focused by default
 	}
 
 	// Load schema information if available (lazy loading)
@@ -140,6 +159,14 @@ func (m *Model) View() string {
 func (m *Model) SetDimensions(width, height int) {
 	m.dimensions = core.Dimensions{Width: width, Height: height}
 	m.view.SetDimensions(width, height)
+	
+	// Update viewport dimensions
+	if width > 0 && height > 0 {
+		m.keyViewport.Width = width/2 - 10
+		m.keyViewport.Height = height/3 - 5
+		m.valueViewport.Width = width/2 - 10
+		m.valueViewport.Height = height/3 - 5
+	}
 }
 
 // GetID implements the Page interface
@@ -263,4 +290,46 @@ func (m *Model) ToggleHeaders() {
 // ToggleMetadata toggles metadata display
 func (m *Model) ToggleMetadata() {
 	m.showMetadata = !m.showMetadata
+}
+
+// addLineNumbers adds line numbers to content
+func addLineNumbers(content string) string {
+	if content == "<null>" {
+		return content
+	}
+	
+	lines := strings.Split(content, "\n")
+	numberedLines := make([]string, len(lines))
+	
+	for i, line := range lines {
+		lineNumber := fmt.Sprintf("%4d ", i+1)
+		numberedLines[i] = lineNumber + line
+	}
+	
+	return strings.Join(numberedLines, "\n")
+}
+
+// SwitchFocus switches focus between key and value viewports
+func (m *Model) SwitchFocus() {
+	if m.focusedViewport == "key" {
+		m.focusedViewport = "value"
+	} else {
+		m.focusedViewport = "key"
+	}
+}
+
+// CopyContent copies the content of the focused viewport to clipboard
+func (m *Model) CopyContent() error {
+	var content string
+	switch m.focusedViewport {
+	case "key":
+		content = m.GetFormattedKey()
+	case "value":
+		content = m.GetFormattedValue()
+	default:
+		content = m.GetFormattedValue()
+	}
+	
+	// Try to copy to clipboard
+	return clipboard.WriteAll(content)
 }

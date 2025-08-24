@@ -66,6 +66,9 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return tea.Quit
 	case key.Matches(msg, k.bindings.ToggleFormat):
 		model.ToggleDisplayFormat()
+		// Update viewport content when format changes
+		model.keyViewport.SetContent(addLineNumbers(model.GetFormattedKey()))
+		model.valueViewport.SetContent(addLineNumbers(model.GetFormattedValue()))
 		return nil
 	case key.Matches(msg, k.bindings.ToggleHeaders):
 		model.ToggleHeaders()
@@ -74,7 +77,11 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		model.ToggleMetadata()
 		return nil
 	case key.Matches(msg, k.bindings.Copy):
-		// TODO: Implement copy functionality
+		// Implement copy functionality
+		err := model.CopyContent()
+		if err != nil {
+			// TODO: Handle error (maybe set status message)
+		}
 		return nil
 	}
 	return nil
@@ -115,8 +122,34 @@ func (h *Handlers) Handle(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		model.SetDimensions(msg.Width, msg.Height)
+		// Update viewport dimensions
+		model.keyViewport.Width = msg.Width/2 - 10
+		model.keyViewport.Height = msg.Height/3 - 5
+		model.valueViewport.Width = msg.Width/2 - 10
+		model.valueViewport.Height = msg.Height/3 - 5
 		return model, nil
 	case tea.KeyMsg:
+		// Handle viewport navigation keys first
+		switch msg.String() {
+		case "up":
+			if model.focusedViewport == "key" {
+				model.keyViewport.LineUp(1)
+			} else {
+				model.valueViewport.LineUp(1)
+			}
+			return model, nil
+		case "down":
+			if model.focusedViewport == "key" {
+				model.keyViewport.LineDown(1)
+			} else {
+				model.valueViewport.LineDown(1)
+			}
+			return model, nil
+		case "tab":
+			model.SwitchFocus()
+			return model, nil
+		}
+		
 		cmd := model.keys.HandleKey(model, msg)
 		return model, cmd
 	}
@@ -331,6 +364,12 @@ func (v *View) renderHeader(model *Model) string {
 }
 
 func (v *View) renderMainContent(model *Model, width, height int) string {
+	// Update viewport dimensions
+	model.keyViewport.Width = width/2 - 10
+	model.keyViewport.Height = height/2 - 5
+	model.valueViewport.Width = width/2 - 10
+	model.valueViewport.Height = height/2 - 5
+
 	// Adjust height to account for panel borders and padding
 	contentHeight := height - 4 // Account for main panel borders and padding
 
@@ -377,13 +416,25 @@ func (v *View) renderMainContent(model *Model, width, height int) string {
 
 func (v *View) renderKeySection(model *Model) string {
 	title := v.styles.Title.Render("MESSAGE KEY")
-	content := model.GetFormattedKey()
-
-	if content == "<null>" {
-		content = v.styles.InfoPanel.Render("No key present")
-	} else {
-		content = v.styles.Key.Width(30).Render(content)
+	
+	// Add focus indicator if this viewport is focused
+	focusIndicator := ""
+	if model.focusedViewport == "key" {
+		focusIndicator = " [FOCUSED]"
 	}
+	title = title + focusIndicator
+	
+	// Update viewport content
+	formattedKey := model.GetFormattedKey()
+	model.keyViewport.SetContent(addLineNumbers(formattedKey))
+	
+	// Render viewport with border
+	viewportStyle := v.styles.Key
+	if model.focusedViewport == "key" {
+		viewportStyle = viewportStyle.BorderForeground(lipgloss.Color("205")) // Highlight focused viewport
+	}
+	
+	content := viewportStyle.Render(model.keyViewport.View())
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -395,13 +446,25 @@ func (v *View) renderKeySection(model *Model) string {
 
 func (v *View) renderValueSection(model *Model) string {
 	title := v.styles.Title.Render("MESSAGE VALUE")
-	content := model.GetFormattedValue()
-
-	if content == "<null>" {
-		content = v.styles.InfoPanel.Render("No value present")
-	} else {
-		content = v.styles.Value.Width(30).Render(content)
+	
+	// Add focus indicator if this viewport is focused
+	focusIndicator := ""
+	if model.focusedViewport == "value" {
+		focusIndicator = " [FOCUSED]"
 	}
+	title = title + focusIndicator
+	
+	// Update viewport content
+	formattedValue := model.GetFormattedValue()
+	model.valueViewport.SetContent(addLineNumbers(formattedValue))
+	
+	// Render viewport with border
+	viewportStyle := v.styles.Value
+	if model.focusedViewport == "value" {
+		viewportStyle = viewportStyle.BorderForeground(lipgloss.Color("205")) // Highlight focused viewport
+	}
+	
+	content := viewportStyle.Render(model.valueViewport.View())
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
