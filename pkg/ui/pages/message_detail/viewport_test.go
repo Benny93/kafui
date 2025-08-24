@@ -25,9 +25,8 @@ func TestViewportFunctionality(t *testing.T) {
 	// Create new model
 	model := NewModel(mockDS, "test-topic", testMessage)
 
-	// Verify viewports are initialized
-	assert.NotNil(t, model.keyViewport)
-	assert.NotNil(t, model.valueViewport)
+	// Verify model is initialized
+	assert.NotNil(t, model)
 
 	// Check initial focus
 	assert.Equal(t, "value", model.focusedViewport)

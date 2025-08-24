@@ -9,7 +9,6 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/atotto/clipboard"
 )
@@ -33,17 +32,13 @@ type Model struct {
 	keys     *Keys
 	view     *View
 
-	// Viewport components for scrollable content
-	keyViewport   viewport.Model
-	valueViewport viewport.Model
-	
-	// Focus management
-	focusedViewport string // "key" or "value"
-
 	// Display configuration
 	displayFormat MessageDisplayFormat
 	showHeaders   bool
 	showMetadata  bool
+	
+	// Focus management
+	focusedViewport string // "key" or "value"
 }
 
 // MessageDisplayFormat represents how the message should be displayed
@@ -56,24 +51,6 @@ type MessageDisplayFormat struct {
 
 // NewModel creates a new detail page model
 func NewModel(dataSource api.KafkaDataSource, topicName string, message api.Message) *Model {
-	// Initialize viewport components
-	keyViewport := viewport.New(30, 10)
-	valueViewport := viewport.New(50, 20)
-	
-	// Set default content
-	keyContent := "<null>"
-	if message.Key != "" {
-		keyContent = message.Key
-	}
-	
-	valueContent := "<null>"
-	if message.Value != "" {
-		valueContent = message.Value
-	}
-	
-	keyViewport.SetContent(addLineNumbers(keyContent))
-	valueViewport.SetContent(addLineNumbers(valueContent))
-
 	m := &Model{
 		dataSource: dataSource,
 		topicName:  topicName,
@@ -86,8 +63,6 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, message api.Mess
 		},
 		showHeaders:  true,
 		showMetadata: true,
-		keyViewport:   keyViewport,
-		valueViewport: valueViewport,
 		focusedViewport: "value", // Value viewport focused by default
 	}
 
@@ -168,14 +143,6 @@ func (m *Model) View() string {
 func (m *Model) SetDimensions(width, height int) {
 	m.dimensions = core.Dimensions{Width: width, Height: height}
 	m.view.SetDimensions(width, height)
-	
-	// Update viewport dimensions
-	if width > 0 && height > 0 {
-		m.keyViewport.Width = width/2 - 10
-		m.keyViewport.Height = height/3 - 5
-		m.valueViewport.Width = width/2 - 10
-		m.valueViewport.Height = height/3 - 5
-	}
 }
 
 // GetID implements the Page interface
@@ -371,6 +338,16 @@ func (m *Model) SwitchFocus() {
 	} else {
 		m.focusedViewport = "key"
 	}
+}
+
+// LineUp scrolls the focused viewport up
+func (m *Model) LineUp(lines int) {
+	// This method will be handled in the view since we now use components
+}
+
+// LineDown scrolls the focused viewport down
+func (m *Model) LineDown(lines int) {
+	// This method will be handled in the view since we now use components
 }
 
 // CopyContent copies the content of the focused viewport to clipboard

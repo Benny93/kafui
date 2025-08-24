@@ -3,6 +3,7 @@ package messagedetail
 import (
 	"fmt"
 
+	"github.com/Benny93/kafui/pkg/ui/components"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -67,8 +68,7 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	case key.Matches(msg, k.bindings.ToggleFormat):
 		model.ToggleDisplayFormat()
 		// Update viewport content when format changes
-		model.keyViewport.SetContent(addLineNumbers(model.GetFormattedKey()))
-		model.valueViewport.SetContent(addLineNumbers(model.GetFormattedValue()))
+		// This is now handled in the view component
 		return nil
 	case key.Matches(msg, k.bindings.ToggleHeaders):
 		model.ToggleHeaders()
@@ -119,28 +119,17 @@ func (h *Handlers) Handle(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		model.SetDimensions(msg.Width, msg.Height)
-		// Update viewport dimensions
-		model.keyViewport.Width = msg.Width/2 - 10
-		model.keyViewport.Height = msg.Height/3 - 5
-		model.valueViewport.Width = msg.Width/2 - 10
-		model.valueViewport.Height = msg.Height/3 - 5
 		return model, nil
 	case tea.KeyMsg:
 		// Handle viewport navigation keys first
 		switch msg.String() {
 		case "up":
-			if model.focusedViewport == "key" {
-				model.keyViewport.LineUp(1)
-			} else {
-				model.valueViewport.LineUp(1)
-			}
+			// Scroll the focused viewport up
+			model.view.LineUp(1, model.focusedViewport)
 			return model, nil
 		case "down":
-			if model.focusedViewport == "key" {
-				model.keyViewport.LineDown(1)
-			} else {
-				model.valueViewport.LineDown(1)
-			}
+			// Scroll the focused viewport down
+			model.view.LineDown(1, model.focusedViewport)
 			return model, nil
 		case "tab":
 			model.SwitchFocus()
@@ -159,6 +148,8 @@ type View struct {
 	dimensions core.Dimensions
 	theme      core.Theme
 	styles     *ViewStyles
+	keyViewer   *components.JSONContentView
+	valueViewer *components.JSONContentView
 }
 
 // ViewStyles contains all the styles used in the detail page
@@ -315,16 +306,49 @@ func (v *View) renderCompactView(model *Model) string {
 	// Header section
 	header := v.renderHeader(model)
 
-	// Message content sections (stacked vertically in compact mode)
+	// Create compact key section
+	keyContent := "<null>"
+	if model.message.Key != "" {
+		keyContent = model.message.Key
+	}
+	
+	keyConfig := components.JSONContentConfig{
+		Width:           contentWidth,
+		Height:          contentHeight/3 - 2,
+		Title:           "MESSAGE KEY",
+		Content:         keyContent,
+		DisplayFormat:   model.displayFormat.KeyFormat,
+		ShowLineNumbers: true,
+		Focused:         model.focusedViewport == "key",
+	}
+	
+	v.keyViewer = components.NewJSONContentView(keyConfig)
 	keySection := v.styles.MainPanel.
 		Width(contentWidth).
 		Height(contentHeight/3 - 2).
-		Render(v.renderKeySection(model))
+		Render(v.keyViewer.View())
 
+	// Create compact value section
+	valueContent := "<null>"
+	if model.message.Value != "" {
+		valueContent = model.message.Value
+	}
+	
+	valueConfig := components.JSONContentConfig{
+		Width:           contentWidth,
+		Height:          contentHeight/3 - 2,
+		Title:           "MESSAGE VALUE",
+		Content:         valueContent,
+		DisplayFormat:   model.displayFormat.ValueFormat,
+		ShowLineNumbers: true,
+		Focused:         model.focusedViewport == "value",
+	}
+	
+	v.valueViewer = components.NewJSONContentView(valueConfig)
 	valueSection := v.styles.MainPanel.
 		Width(contentWidth).
 		Height(contentHeight/3 - 2).
-		Render(v.renderValueSection(model))
+		Render(v.valueViewer.View())
 
 	// Headers section (if enabled)
 	var headersSection string
@@ -361,12 +385,6 @@ func (v *View) renderHeader(model *Model) string {
 }
 
 func (v *View) renderMainContent(model *Model, width, height int) string {
-	// Update viewport dimensions
-	model.keyViewport.Width = width/2 - 10
-	model.keyViewport.Height = height/2 - 5
-	model.valueViewport.Width = width/2 - 10
-	model.valueViewport.Height = height/2 - 5
-
 	// Adjust height to account for panel borders and padding
 	contentHeight := height - 4 // Account for main panel borders and padding
 
@@ -412,63 +430,45 @@ func (v *View) renderMainContent(model *Model, width, height int) string {
 }
 
 func (v *View) renderKeySection(model *Model) string {
-	title := v.styles.Title.Render("MESSAGE KEY")
-	
-	// Add focus indicator if this viewport is focused
-	focusIndicator := ""
-	if model.focusedViewport == "key" {
-		focusIndicator = " [FOCUSED]"
-	}
-	title = title + focusIndicator
-	
-	// Update viewport content
-	formattedKey := model.GetFormattedKey()
-	model.keyViewport.SetContent(addLineNumbers(formattedKey))
-	
-	// Render viewport with border
-	viewportStyle := v.styles.Key
-	if model.focusedViewport == "key" {
-		viewportStyle = viewportStyle.BorderForeground(lipgloss.Color("205")) // Highlight focused viewport
+	// Create JSON content viewer for key
+	keyContent := "<null>"
+	if model.message.Key != "" {
+		keyContent = model.message.Key
 	}
 	
-	content := viewportStyle.Render(model.keyViewport.View())
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		lipgloss.NewStyle().MarginTop(1).Render(""),
-		content,
-	)
+	keyConfig := components.JSONContentConfig{
+		Width:           model.dimensions.Width/2 - 10,
+		Height:          model.dimensions.Height/3 - 5,
+		Title:           "MESSAGE KEY",
+		Content:         keyContent,
+		DisplayFormat:   model.displayFormat.KeyFormat,
+		ShowLineNumbers: true,
+		Focused:         model.focusedViewport == "key",
+	}
+	
+	v.keyViewer = components.NewJSONContentView(keyConfig)
+	return v.keyViewer.View()
 }
 
 func (v *View) renderValueSection(model *Model) string {
-	title := v.styles.Title.Render("MESSAGE VALUE")
-	
-	// Add focus indicator if this viewport is focused
-	focusIndicator := ""
-	if model.focusedViewport == "value" {
-		focusIndicator = " [FOCUSED]"
-	}
-	title = title + focusIndicator
-	
-	// Update viewport content
-	formattedValue := model.GetFormattedValue()
-	model.valueViewport.SetContent(addLineNumbers(formattedValue))
-	
-	// Render viewport with border
-	viewportStyle := v.styles.Value
-	if model.focusedViewport == "value" {
-		viewportStyle = viewportStyle.BorderForeground(lipgloss.Color("205")) // Highlight focused viewport
+	// Create JSON content viewer for value
+	valueContent := "<null>"
+	if model.message.Value != "" {
+		valueContent = model.message.Value
 	}
 	
-	content := viewportStyle.Render(model.valueViewport.View())
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		lipgloss.NewStyle().MarginTop(1).Render(""),
-		content,
-	)
+	valueConfig := components.JSONContentConfig{
+		Width:           model.dimensions.Width/2 - 10,
+		Height:          model.dimensions.Height/3 - 5,
+		Title:           "MESSAGE VALUE",
+		Content:         valueContent,
+		DisplayFormat:   model.displayFormat.ValueFormat,
+		ShowLineNumbers: true,
+		Focused:         model.focusedViewport == "value",
+	}
+	
+	v.valueViewer = components.NewJSONContentView(valueConfig)
+	return v.valueViewer.View()
 }
 
 func (v *View) renderHeadersSection(model *Model) string {
@@ -689,4 +689,22 @@ func (v *View) renderFooter(model *Model) string {
 // SetDimensions updates the view dimensions
 func (v *View) SetDimensions(width, height int) {
 	v.dimensions = core.Dimensions{Width: width, Height: height}
+}
+
+// LineUp scrolls the focused viewport up
+func (v *View) LineUp(lines int, focusedViewport string) {
+	if v.keyViewer != nil && focusedViewport == "key" {
+		v.keyViewer.LineUp(lines)
+	} else if v.valueViewer != nil && focusedViewport == "value" {
+		v.valueViewer.LineUp(lines)
+	}
+}
+
+// LineDown scrolls the focused viewport down
+func (v *View) LineDown(lines int, focusedViewport string) {
+	if v.keyViewer != nil && focusedViewport == "key" {
+		v.keyViewer.LineDown(lines)
+	} else if v.valueViewer != nil && focusedViewport == "value" {
+		v.valueViewer.LineDown(lines)
+	}
 }
