@@ -8,6 +8,7 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/components"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
@@ -172,6 +173,37 @@ func (m *Model) SetDimensions(width, height int) {
 // GetID implements the Page interface
 func (m *Model) GetID() string {
 	return "main"
+}
+
+// GetTitle implements the Page interface
+func (m *Model) GetTitle() string {
+	return "Kafui - Kafka TUI"
+}
+
+// GetHelp implements the Page interface
+func (m *Model) GetHelp() []key.Binding {
+	if m.keys != nil {
+		return m.keys.GetKeyBindings()
+	}
+	return []key.Binding{}
+}
+
+// HandleNavigation implements the Page interface
+func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
+	// Handle page-specific navigation
+	return m, nil
+}
+
+// OnFocus implements the Page interface
+func (m *Model) OnFocus() tea.Cmd {
+	// Handle focus gain - reload data when page becomes active
+	return m.loadCurrentResource()
+}
+
+// OnBlur implements the Page interface
+func (m *Model) OnBlur() tea.Cmd {
+	// Handle focus loss
+	return nil
 }
 
 // Business logic methods

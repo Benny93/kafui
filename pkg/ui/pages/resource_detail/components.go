@@ -48,6 +48,14 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+// GetKeyBindings returns all key bindings as a slice
+func (k *Keys) GetKeyBindings() []key.Binding {
+	return []key.Binding{
+		k.bindings.Back,
+		k.bindings.Quit,
+	}
+}
+
 // PageChangeMsg represents a page change message
 type PageChangeMsg struct {
 	PageID string

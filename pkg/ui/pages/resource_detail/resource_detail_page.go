@@ -1,8 +1,11 @@
 package resource_detail
 
 import (
+	"fmt"
+
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -61,6 +64,40 @@ func (m *Model) SetDimensions(width, height int) {
 // GetID implements the Page interface
 func (m *Model) GetID() string {
 	return "resource_detail"
+}
+
+// GetTitle implements the Page interface
+func (m *Model) GetTitle() string {
+	if m.resourceItem != nil {
+		return fmt.Sprintf("Resource Detail: %s", m.resourceItem.GetID())
+	}
+	return "Resource Detail"
+}
+
+// GetHelp implements the Page interface
+func (m *Model) GetHelp() []key.Binding {
+	if m.keys != nil {
+		return m.keys.GetKeyBindings()
+	}
+	return []key.Binding{}
+}
+
+// HandleNavigation implements the Page interface
+func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
+	// Handle page-specific navigation
+	return m, nil
+}
+
+// OnFocus implements the Page interface
+func (m *Model) OnFocus() tea.Cmd {
+	// Handle focus gain
+	return nil
+}
+
+// OnBlur implements the Page interface
+func (m *Model) OnBlur() tea.Cmd {
+	// Handle focus loss
+	return nil
 }
 
 // Business logic methods

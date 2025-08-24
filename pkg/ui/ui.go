@@ -3,7 +3,7 @@ package ui
 import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
-	detailpage "github.com/Benny93/kafui/pkg/ui/pages/detail"
+	messagedetailpage "github.com/Benny93/kafui/pkg/ui/pages/message_detail"
 	mainpage "github.com/Benny93/kafui/pkg/ui/pages/main"
 	resourcedetailpage "github.com/Benny93/kafui/pkg/ui/pages/resource_detail"
 	topicpage "github.com/Benny93/kafui/pkg/ui/pages/topic"
@@ -28,7 +28,7 @@ type Model struct {
 	currentPage        pageType
 	mainPage           *mainpage.Model
 	topicPage          *topicpage.Model
-	detailPage         *detailpage.Model
+	detailPage         *messagedetailpage.Model
 	resourceDetailPage *resourcedetailpage.Model
 	width              int
 	height             int
@@ -200,7 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.topicPage != nil {
 						topicName = m.topicPage.GetTopicName()
 					}
-					m.detailPage = detailpage.NewModel(m.dataSource, topicName, messageData)
+					m.detailPage = messagedetailpage.NewModel(m.dataSource, topicName, messageData)
 				}
 			}
 		}
@@ -266,7 +266,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.detailPage != nil {
 			var cmd tea.Cmd
 			detailModel, cmd := m.detailPage.Update(msg)
-			if updatedDetailPage, ok := detailModel.(*detailpage.Model); ok {
+			if updatedDetailPage, ok := detailModel.(*messagedetailpage.Model); ok {
 				m.detailPage = updatedDetailPage
 			}
 			cmds = append(cmds, cmd)

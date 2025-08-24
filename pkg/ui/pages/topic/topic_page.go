@@ -9,6 +9,7 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -178,6 +179,46 @@ func (m *Model) SetDimensions(width, height int) {
 // GetID implements the Page interface
 func (m *Model) GetID() string {
 	return "topic"
+}
+
+// GetTitle implements the Page interface
+func (m *Model) GetTitle() string {
+	if m.topicName != "" {
+		return fmt.Sprintf("Topic: %s", m.topicName)
+	}
+	return "Topic"
+}
+
+// GetHelp implements the Page interface
+func (m *Model) GetHelp() []key.Binding {
+	if m.keys != nil {
+		return m.keys.GetKeyBindings()
+	}
+	return []key.Binding{}
+}
+
+// HandleNavigation implements the Page interface
+func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
+	// Handle page-specific navigation
+	return m, nil
+}
+
+// OnFocus implements the Page interface
+func (m *Model) OnFocus() tea.Cmd {
+	// Handle focus gain - restart consumption if it was paused
+	if m.paused {
+		m.TogglePause()
+	}
+	return nil
+}
+
+// OnBlur implements the Page interface
+func (m *Model) OnBlur() tea.Cmd {
+	// Handle focus loss - pause consumption when page loses focus
+	if m.consuming && !m.paused {
+		m.TogglePause()
+	}
+	return nil
 }
 
 // GetTopicName returns the current topic name

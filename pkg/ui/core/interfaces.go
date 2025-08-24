@@ -12,6 +12,13 @@ type Page interface {
 	View() string
 	SetDimensions(width, height int)
 	GetID() string
+	
+	// Navigation methods for enhanced routing
+	GetTitle() string
+	GetHelp() []key.Binding
+	HandleNavigation(msg tea.Msg) (Page, tea.Cmd)
+	OnFocus() tea.Cmd
+	OnBlur() tea.Cmd
 }
 
 // KeyHandler handles keyboard input
