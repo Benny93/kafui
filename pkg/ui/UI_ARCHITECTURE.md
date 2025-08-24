@@ -103,17 +103,17 @@ type Theme struct {
 ```go
 type Model struct {
     dataSource         api.KafkaDataSource
-    currentPage        page
-    mainPage           *MainPageModel  // Legacy: to be updated to Page interface
-    topicPage          *TopicPageModel // Legacy: to be updated to Page interface
-    detailPage         *DetailPageModel // Legacy: to be updated to Page interface
-    resourceDetailPage *ResourceDetailPageModel // Legacy: to be updated
+    currentPage        pageType
+    mainPage           *mainpage.Model
+    topicPage          *topicpage.Model
+    detailPage         *detailpage.Model
+    resourceDetailPage *resourcedetailpage.Model
     width              int
     height             int
 }
 ```
 
-**Note**: The root controller is currently in a transitional state and will be updated to use the new Page interface system.
+**Note**: The root controller has been updated to use the new Page interface system.
 
 **Key Features:**
 - **Page Navigation**: Manages transitions between main, topic, and detail pages
@@ -320,7 +320,7 @@ type Model struct {
     view     *View
     
     // Resource Data
-    resourceItem core.ResourceItem
+    resourceItem shared.ResourceItem
     resourceType string
     
     // UI State
@@ -551,9 +551,8 @@ type ResourceManager struct {
 ```go
 // Page Navigation Messages
 type PageChangeMsg struct {
-    Page     string
-    Data     interface{}
-    Previous string
+    PageID string
+    Data   interface{}
 }
 
 // Data Loading Messages
@@ -563,45 +562,47 @@ type DataLoadedMsg struct {
 }
 
 type LoadingMsg struct {
+    Type    string
     Loading bool
     Message string
 }
 
 // Error Handling Messages
-type ErrorMsg struct {
-    Error   error
-    Context string
-    Retry   bool
+type DataErrorMsg struct {
+    Type  string
+    Error error
 }
 
 // Search and Filter Messages
 type SearchMsg struct {
     Query string
-    Mode  string
+    Mode  SearchMode
 }
 
-type FilterMsg struct {
-    Criteria interface{}
-    Clear    bool
-}
+type ClearSearchMsg struct{}
 
 // Resource Management Messages
-type ResourceSwitchMsg struct {
+type ResourceChangeMsg struct {
     ResourceType string
-    Force        bool
+    Data         interface{}
 }
 
 // UI State Messages
 type StatusMsg struct {
-    Message   string
-    Level     string // "info", "warning", "error", "success"
-    Temporary bool
+    Message string
+    Type    StatusType // "info", "warning", "error", "success"
+}
+
+// Topic-specific Messages
+type TopicSelectedMsg struct {
+    TopicName string
+    Topic     interface{}
 }
 
 // Helper Functions
-func NewPageChangeMsg(page, previous string, data interface{}) PageChangeMsg
-func NewErrorMsg(err error, context string) ErrorMsg
-func NewStatusMsg(message, level string) StatusMsg
+func NewPageChangeMsg(pageID string, data interface{}) tea.Cmd
+func NewDataErrorMsg(dataType string, err error) tea.Cmd
+func NewStatusMsg(message string, statusType StatusType) tea.Cmd
 ```
 
 **Message Flow:**
@@ -643,7 +644,40 @@ func ValidateResourceType(resourceType string) bool
 func ValidatePageID(pageID string) bool
 ```
 
-### 8. Data Flow Architecture
+### 8. Shared Types (`shared/types.go`)
+
+**Common types used across the UI components:**
+
+```go
+// ResourceItem represents a displayable resource item
+type ResourceItem interface {
+    GetID() string
+    GetValues() []string
+    GetDetails() map[string]string
+}
+
+// ViewDimensions represents view dimensions and layout information
+type ViewDimensions struct {
+    Width         int
+    Height        int
+    ContentWidth  int
+    ContentHeight int
+    SidebarWidth  int
+    FooterHeight  int
+    HeaderHeight  int
+}
+
+// PageState represents the current state of a page
+type PageState struct {
+    Loading    bool
+    Error      error
+    FilterMode bool
+    SearchMode bool
+    EditMode   bool
+}
+```
+
+### 9. Data Flow Architecture
 
 **Data Source Integration:**
 ```mermaid
@@ -671,7 +705,7 @@ type KafkaDataSource interface {
 }
 ```
 
-### 7. Styling System (`styles.go`)
+### 10. Styling System (`styles.go`)
 
 **Centralized Style Management:**
 ```go
@@ -1061,17 +1095,16 @@ func OpenUI(dataSource api.KafkaDataSource) {
 - ✅ **Topic Page Module**: Real-time message consumption with modular architecture
 - ✅ **Detail Page Module**: Message detail display with formatting options
 - ✅ **Resource Detail Module**: Resource information display
+- ✅ **Root UI Controller**: Updated to use Page interface system
 
 ### Legacy Components (In Transition)
-- 🔄 **Root UI Controller**: Still using legacy model references, needs update to Page interface
 - 🔄 **Component System**: Legacy components still in use, being gradually replaced
 - 🔄 **Test Files**: Some test files still reference old model types
 
 ### Next Steps
-1. **Update Root Controller**: Migrate ui.go to use Page interface system
-2. **Component Migration**: Gradually replace legacy components with modular equivalents
-3. **Test Updates**: Update remaining test files to work with new architecture
-4. **Documentation**: Complete API documentation for all page modules
+1. **Component Migration**: Gradually replace legacy components with modular equivalents
+2. **Test Updates**: Update remaining test files to work with new architecture
+3. **Documentation**: Complete API documentation for all page modules
 
 ## Conclusion
 
