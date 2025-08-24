@@ -33,6 +33,19 @@ func (v *View) Render(model *Model) string {
 	// Update component configurations
 	v.updateComponents(model)
 
+	// Check for special states
+	if model.error != nil {
+		return v.RenderError(model, model.error)
+	}
+
+	if model.loading && len(model.allRows) == 0 {
+		return v.RenderLoading(model)
+	}
+
+	if len(model.allRows) == 0 && !model.loading {
+		return v.RenderEmpty(model)
+	}
+
 	// Render complete layout
 	return model.layout.RenderComplete(
 		model.mainContent.Render(),
@@ -53,15 +66,27 @@ func (v *View) SetTheme(theme core.Theme) {
 }
 
 func (v *View) updateComponents(model *Model) {
+	// Determine layout mode based on screen size
+	compactMode := model.dimensions.Width < 100 || model.dimensions.Height < 25
+
 	// Update layout configuration
-	model.layout.UpdateConfig(components.LayoutConfig{
-		Width:        model.dimensions.Width,
-		Height:       model.dimensions.Height,
-		SidebarWidth: 35,
-		ShowSidebar:  true,
-		HeaderTitle:  "Kafui - Kafka UI",
+	layoutConfig := components.LayoutConfig{
+		Width:       model.dimensions.Width,
+		Height:      model.dimensions.Height,
+		HeaderTitle: "Kafui - Kafka UI",
 		ResourceType: strings.ToUpper(model.currentResource.GetType().String()),
-	})
+	}
+
+	// In compact mode, hide sidebar
+	if !compactMode {
+		layoutConfig.SidebarWidth = 35
+		layoutConfig.ShowSidebar = true
+	} else {
+		layoutConfig.SidebarWidth = 0
+		layoutConfig.ShowSidebar = false
+	}
+
+	model.layout.UpdateConfig(layoutConfig)
 
 	// Calculate dimensions
 	contentWidth, contentHeight, _ := model.layout.CalculateDimensions()
@@ -72,13 +97,15 @@ func (v *View) updateComponents(model *Model) {
 	model.mainContent.SetTable(model.resourcesTable)
 	model.mainContent.SetShowSearch(true)
 
-	// Update sidebar
-	model.sidebar.UpdateConfig(components.SidebarConfig{
-		Context:         model.dataSource.GetContext(),
-		CurrentResource: components.ResourceType(model.currentResource.GetType()),
-		ShowResources:   true,
-		ShowShortcuts:   true,
-	})
+	// Update sidebar (only if not in compact mode)
+	if !compactMode {
+		model.sidebar.UpdateConfig(components.SidebarConfig{
+			Context:         model.dataSource.GetContext(),
+			CurrentResource: components.ResourceType(model.currentResource.GetType()),
+			ShowResources:   true,
+			ShowShortcuts:   true,
+		})
+	}
 
 	// Update footer
 	selectedItem := model.GetSelectedItemName()
@@ -100,19 +127,19 @@ func (v *View) RenderError(model *Model, err error) string {
 		return "Error: " + err.Error()
 	}
 
-	// errorStyle := v.styles.ErrorText().
-	// 	Width(model.dimensions.Width - 4).
-	// 	Align(lipgloss.Center).
-	// 	Padding(2)
+	// Update main content to show error
+	model.mainContent.SetDimensions(model.dimensions.Width - 10, model.dimensions.Height - 10)
 
-	// content := errorStyle.Render("Error: " + err.Error())
-
-	// Still show the basic layout with error in main content
-	v.updateComponents(model)
-
-	// Override main content with error
-	// TODO: Implement SetCustomContent in components.MainContent
-	// model.mainContent.SetCustomContent(content)
+	// Update footer to show error
+	model.footer.UpdateConfig(components.FooterConfig{
+		Width:         model.dimensions.Width,
+		SearchMode:    model.searchMode,
+		SelectedItem:  "Error",
+		TotalItems:    0,
+		StatusMessage: "Error: " + err.Error(),
+		LastUpdate:    model.lastUpdate,
+		Spinner:       model.spinner,
+	})
 
 	return model.layout.RenderComplete(
 		model.mainContent.Render(),
@@ -127,19 +154,19 @@ func (v *View) RenderLoading(model *Model) string {
 		return "Loading..."
 	}
 
-	// loadingStyle := v.styles.InfoText().
-	// 	Width(model.dimensions.Width - 4).
-	// 	Align(lipgloss.Center).
-	// 	Padding(2)
-
-	// content := loadingStyle.Render("Loading resources...")
-
-	// Still show the basic layout with loading in main content
-	v.updateComponents(model)
-
-	// Override main content with loading message
-	// TODO: Implement SetCustomContent in components.MainContent
-	// model.mainContent.SetCustomContent(content)
+	// Update status message to show loading
+	model.statusMessage = "Loading resources... " + model.spinner.View()
+	
+	// Update footer to show loading state
+	model.footer.UpdateConfig(components.FooterConfig{
+		Width:         model.dimensions.Width,
+		SearchMode:    model.searchMode,
+		SelectedItem:  model.GetSelectedItemName(),
+		TotalItems:    model.GetTotalItemCount(),
+		StatusMessage: model.statusMessage,
+		LastUpdate:    model.lastUpdate,
+		Spinner:       model.spinner,
+	})
 
 	return model.layout.RenderComplete(
 		model.mainContent.Render(),
@@ -154,19 +181,19 @@ func (v *View) RenderEmpty(model *Model) string {
 		return "No resources found"
 	}
 
-	// emptyStyle := v.styles.SecondaryText().
-	// 	Width(model.dimensions.Width - 4).
-	// 	Align(lipgloss.Center).
-	// 	Padding(2)
-
-	// content := emptyStyle.Render("No resources found. Try refreshing or checking your connection.")
-
-	// Still show the basic layout with empty message in main content
-	v.updateComponents(model)
-
-	// Override main content with empty message
-	// TODO: Implement SetCustomContent in components.MainContent
-	// model.mainContent.SetCustomContent(content)
+	// Update status message to show empty state
+	model.statusMessage = "No resources found. Try refreshing or checking your connection."
+	
+	// Update footer to show empty state
+	model.footer.UpdateConfig(components.FooterConfig{
+		Width:         model.dimensions.Width,
+		SearchMode:    model.searchMode,
+		SelectedItem:  model.GetSelectedItemName(),
+		TotalItems:    model.GetTotalItemCount(),
+		StatusMessage: model.statusMessage,
+		LastUpdate:    model.lastUpdate,
+		Spinner:       model.spinner,
+	})
 
 	return model.layout.RenderComplete(
 		model.mainContent.Render(),

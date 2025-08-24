@@ -94,6 +94,17 @@ func (v *View) Render(model *Model) string {
 		return "Loading topic page..."
 	}
 
+	// Determine if we're in compact mode
+	compactMode := model.dimensions.Width < 100 || model.dimensions.Height < 25
+
+	if compactMode {
+		return v.renderCompactView(model)
+	}
+	return v.renderFullView(model)
+}
+
+// renderFullView renders the full layout for larger screens
+func (v *View) renderFullView(model *Model) string {
 	// Calculate layout dimensions
 	sidebarWidth := 35
 	contentWidth := model.dimensions.Width - sidebarWidth - 6 // Account for padding and borders
@@ -159,6 +170,55 @@ func (v *View) Render(model *Model) string {
 	)
 }
 
+// renderCompactView renders a compact layout for smaller screens
+func (v *View) renderCompactView(model *Model) string {
+	// Calculate layout dimensions for compact view
+	contentWidth := model.dimensions.Width - 4  // Account for padding
+	contentHeight := model.dimensions.Height - 6 // Account for header and footer
+
+	// Header section
+	header := v.renderHeader(model)
+
+	// Controls section
+	controlsSection := v.styles.MainPanel.
+		Width(contentWidth).
+		Render(v.renderControls(model))
+
+	// Messages section (take most of the space)
+	messagesHeight := contentHeight - 8 // Account for controls, search, and padding
+	if model.searchMode {
+		messagesHeight -= 3 // Additional space for search input
+	}
+
+	messagesSection := v.styles.MainPanel.
+		Width(contentWidth).
+		Height(messagesHeight).
+		Render(v.renderMessages(model))
+
+	// Search section (if in search mode)
+	var searchSection string
+	if model.searchMode {
+		searchSection = v.styles.MainPanel.
+			Width(contentWidth).
+			Render(model.searchInput.View())
+	}
+
+	// Schema info section (compact version)
+	schemaInfo := v.renderCompactSchemaInfo(model)
+
+	// Footer
+	footer := v.renderFooter(model)
+
+	// Combine all sections
+	sections := []string{header, controlsSection, messagesSection}
+	if model.searchMode {
+		sections = append(sections, searchSection)
+	}
+	sections = append(sections, schemaInfo, footer)
+
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
 func (v *View) renderHeader(model *Model) string {
 	resourceIndicator := v.styles.ResourceType.Render("TOPIC")
 	headerText := fmt.Sprintf("%s Kafui - Topic: %s", resourceIndicator, model.topicName)
@@ -187,6 +247,38 @@ func (v *View) renderSidebar(model *Model, width, height int) string {
 		Render(sidebarContent)
 }
 
+func (v *View) renderCompactSchemaInfo(model *Model) string {
+	// In compact mode, show a simplified schema info
+	selectedMsg := model.GetSelectedMessage()
+	if selectedMsg == nil {
+		return ""
+	}
+
+	info := []string{v.styles.Title.Render("SELECTED MESSAGE INFO")}
+
+	// Basic message information
+	info = append(info, fmt.Sprintf("Partition: %d | Offset: %d", selectedMsg.Partition, selectedMsg.Offset))
+
+	// Add schema information if available
+	if model.selectedMessageSchema != nil {
+		if model.selectedMessageSchema.KeySchema != nil {
+			info = append(info, fmt.Sprintf("Key Schema: %s", model.selectedMessageSchema.KeySchema.RecordName))
+		}
+		if model.selectedMessageSchema.ValueSchema != nil {
+			info = append(info, fmt.Sprintf("Value Schema: %s", model.selectedMessageSchema.ValueSchema.RecordName))
+		}
+	} else if selectedMsg.KeySchemaID != "" || selectedMsg.ValueSchemaID != "" {
+		if selectedMsg.KeySchemaID != "" {
+			info = append(info, fmt.Sprintf("Key Schema ID: %s", selectedMsg.KeySchemaID))
+		}
+		if selectedMsg.ValueSchemaID != "" {
+			info = append(info, fmt.Sprintf("Value Schema ID: %s", selectedMsg.ValueSchemaID))
+		}
+	}
+
+	return v.styles.MainPanel.Render(lipgloss.JoinVertical(lipgloss.Left, info...))
+}
+
 func (v *View) renderTopicInfo(model *Model) string {
 	info := fmt.Sprintf(
 		"Name: %s\nPartitions: %d\nReplication Factor: %d\nMessages: %d",
@@ -199,12 +291,18 @@ func (v *View) renderTopicInfo(model *Model) string {
 	// Format config entries if any
 	if len(model.topicDetails.ConfigEntries) > 0 {
 		configLines := []string{"\nConfiguration:"}
+		count := 0
 		for key, value := range model.topicDetails.ConfigEntries {
+			if count >= 5 { // Limit to 5 config entries to avoid overcrowding
+				configLines = append(configLines, "  ...")
+				break
+			}
 			if value != nil {
 				configLines = append(configLines, fmt.Sprintf("  %s: %s", key, *value))
 			} else {
 				configLines = append(configLines, fmt.Sprintf("  %s: <nil>", key))
 			}
+			count++
 		}
 		info += strings.Join(configLines, "\n")
 	}

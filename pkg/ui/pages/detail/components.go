@@ -217,6 +217,17 @@ func (v *View) Render(model *Model) string {
 		return "Loading message details..."
 	}
 
+	// Determine if we're in compact mode
+	compactMode := model.dimensions.Width < 100 || model.dimensions.Height < 25
+
+	if compactMode {
+		return v.renderCompactView(model)
+	}
+	return v.renderFullView(model)
+}
+
+// renderFullView renders the full layout for larger screens
+func (v *View) renderFullView(model *Model) string {
 	// Calculate layout dimensions
 	sidebarWidth := 35
 	contentWidth := model.dimensions.Width - sidebarWidth - 6 // Account for padding and borders
@@ -249,6 +260,51 @@ func (v *View) Render(model *Model) string {
 		v.styles.Layout.Render(body),
 		footer,
 	)
+}
+
+// renderCompactView renders a compact layout for smaller screens
+func (v *View) renderCompactView(model *Model) string {
+	// Calculate layout dimensions for compact view
+	contentWidth := model.dimensions.Width - 4  // Account for padding
+	contentHeight := model.dimensions.Height - 6 // Account for header and footer
+
+	// Header section
+	header := v.renderHeader(model)
+
+	// Message content sections (stacked vertically in compact mode)
+	keySection := v.styles.MainPanel.
+		Width(contentWidth).
+		Height(contentHeight/3 - 2).
+		Render(v.renderKeySection(model))
+
+	valueSection := v.styles.MainPanel.
+		Width(contentWidth).
+		Height(contentHeight/3 - 2).
+		Render(v.renderValueSection(model))
+
+	// Headers section (if enabled)
+	var headersSection string
+	if model.showHeaders && len(model.message.Headers) > 0 {
+		headersSection = v.styles.MainPanel.
+			Width(contentWidth).
+			Height(contentHeight/3 - 2).
+			Render(v.renderHeadersSection(model))
+	}
+
+	// Schema info section (compact version)
+	schemaInfo := v.renderCompactSchemaInfo(model)
+
+	// Footer
+	footer := v.renderFooter(model)
+
+	// Combine all sections
+	sections := []string{header, keySection, valueSection}
+	if headersSection != "" {
+		sections = append(sections, headersSection)
+	}
+	sections = append(sections, schemaInfo, footer)
+
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
 func (v *View) renderHeader(model *Model) string {
@@ -365,6 +421,53 @@ func (v *View) renderHeadersSection(model *Model) string {
 	)
 }
 
+func (v *View) renderCompactSchemaInfo(model *Model) string {
+	// In compact mode, show a simplified schema info
+	schemaInfo := model.GetSchemaInfo() // Use lazy loading getter
+	if schemaInfo == nil {
+		if model.message.KeySchemaID != "" || model.message.ValueSchemaID != "" {
+			// Show schema IDs even if schema info couldn't be loaded
+			schemaInfoLines := []string{}
+			if model.message.KeySchemaID != "" {
+				schemaInfoLines = append(schemaInfoLines, fmt.Sprintf("Key Schema ID: %s", model.message.KeySchemaID))
+			}
+			if model.message.ValueSchemaID != "" {
+				schemaInfoLines = append(schemaInfoLines, fmt.Sprintf("Value Schema ID: %s", model.message.ValueSchemaID))
+			}
+			return v.styles.MainPanel.Render(lipgloss.JoinVertical(lipgloss.Left, schemaInfoLines...))
+		}
+		return v.styles.MainPanel.Render("No schema information")
+	}
+
+	schemaDetails := []string{}
+
+	// Key schema information
+	if schemaInfo.KeySchema != nil {
+		schemaDetails = append(schemaDetails,
+			fmt.Sprintf("Key Schema: %s (ID: %d)",
+				schemaInfo.KeySchema.RecordName,
+				schemaInfo.KeySchema.ID))
+	} else if model.message.KeySchemaID != "" {
+		schemaDetails = append(schemaDetails, fmt.Sprintf("Key Schema ID: %s (Not Avro)", model.message.KeySchemaID))
+	} else {
+		schemaDetails = append(schemaDetails, "Key Schema: Not available")
+	}
+
+	// Value schema information
+	if schemaInfo.ValueSchema != nil {
+		schemaDetails = append(schemaDetails,
+			fmt.Sprintf("Value Schema: %s (ID: %d)",
+				schemaInfo.ValueSchema.RecordName,
+				schemaInfo.ValueSchema.ID))
+	} else if model.message.ValueSchemaID != "" {
+		schemaDetails = append(schemaDetails, fmt.Sprintf("Value Schema ID: %s (Not Avro)", model.message.ValueSchemaID))
+	} else {
+		schemaDetails = append(schemaDetails, "Value Schema: Not available")
+	}
+
+	return v.styles.MainPanel.Render(lipgloss.JoinVertical(lipgloss.Left, schemaDetails...))
+}
+
 func (v *View) renderSidebar(model *Model, width, height int) string {
 	sidebarContent := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -437,8 +540,32 @@ func (v *View) renderMessageInfo(model *Model) string {
 	info := model.GetMessageInfo()
 	infoLines := []string{}
 
-	for key, value := range info {
-		infoLines = append(infoLines, fmt.Sprintf("%s: %s", key, value))
+	// Display key information first
+	if val, exists := info["Topic"]; exists {
+		infoLines = append(infoLines, fmt.Sprintf("Topic: %s", val))
+	}
+	if val, exists := info["Partition"]; exists {
+		infoLines = append(infoLines, fmt.Sprintf("Partition: %s", val))
+	}
+	if val, exists := info["Offset"]; exists {
+		infoLines = append(infoLines, fmt.Sprintf("Offset: %s", val))
+	}
+	if val, exists := info["Key Size"]; exists {
+		infoLines = append(infoLines, fmt.Sprintf("Key Size: %s", val))
+	}
+	if val, exists := info["Value Size"]; exists {
+		infoLines = append(infoLines, fmt.Sprintf("Value Size: %s", val))
+	}
+	if val, exists := info["Headers"]; exists {
+		infoLines = append(infoLines, fmt.Sprintf("Headers: %s", val))
+	}
+
+	// Add schema information if available
+	if val, exists := info["Key Schema ID"]; exists {
+		infoLines = append(infoLines, fmt.Sprintf("Key Schema ID: %s", val))
+	}
+	if val, exists := info["Value Schema ID"]; exists {
+		infoLines = append(infoLines, fmt.Sprintf("Value Schema ID: %s", val))
 	}
 
 	return v.styles.InfoPanel.Render(lipgloss.JoinVertical(lipgloss.Left, infoLines...))

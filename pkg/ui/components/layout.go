@@ -72,6 +72,7 @@ func (l *Layout) RenderHeader() string {
 func (l *Layout) CombineMainContent(mainContent, sidebarContent string) string {
 	_, contentHeight, sidebarWidth := l.CalculateDimensions()
 	
+	// In compact mode or when sidebar is disabled, just return main content
 	if !l.config.ShowSidebar || sidebarWidth == 0 {
 		return LayoutStyle.Render(mainContent)
 	}
@@ -122,4 +123,9 @@ func (l *Layout) UpdateConfig(config LayoutConfig) {
 // GetConfig returns the current layout configuration
 func (l *Layout) GetConfig() LayoutConfig {
 	return l.config
+}
+
+// IsCompactMode determines if the layout should be in compact mode
+func (l *Layout) IsCompactMode() bool {
+	return l.config.Width < 100 || l.config.Height < 25
 }

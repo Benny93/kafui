@@ -102,6 +102,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
+		// Propagate dimensions to all pages immediately
+		m.updatePageDimensions()
+
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, keys.Quit):
@@ -232,6 +235,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.currentPage != resourceDetailPageType && m.resourceDetailPage != nil {
 			m.resourceDetailPage = nil
 		}
+		
+		// Update dimensions for newly created pages
+		m.updatePageDimensions()
+		
 		return m, tea.Batch(cmds...)
 	}
 
@@ -279,12 +286,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// updatePageDimensions propagates the current dimensions to all active pages
+func (m *Model) updatePageDimensions() {
+	if m.width > 0 && m.height > 0 {
+		// Update dimensions for all active pages
+		if m.mainPage != nil {
+			m.mainPage.SetDimensions(m.width, m.height)
+		}
+		if m.topicPage != nil {
+			m.topicPage.SetDimensions(m.width, m.height)
+		}
+		if m.detailPage != nil {
+			m.detailPage.SetDimensions(m.width, m.height)
+		}
+		if m.resourceDetailPage != nil {
+			m.resourceDetailPage.SetDimensions(m.width, m.height)
+		}
+	}
+}
+
 func (m Model) View() string {
-	// Update page dimensions if needed
+	// Update page dimensions if needed (fallback in case updatePageDimensions wasn't called)
 	if m.width > 0 && m.height > 0 {
 		switch m.currentPage {
 		case mainPageType:
-			m.mainPage.SetDimensions(m.width, m.height)
+			if m.mainPage != nil {
+				m.mainPage.SetDimensions(m.width, m.height)
+			}
 		case topicPageType:
 			if m.topicPage != nil {
 				m.topicPage.SetDimensions(m.width, m.height)
@@ -302,7 +330,10 @@ func (m Model) View() string {
 
 	switch m.currentPage {
 	case mainPageType:
-		return m.mainPage.View()
+		if m.mainPage != nil {
+			return m.mainPage.View()
+		}
+		return "Main page not initialized"
 	case topicPageType:
 		if m.topicPage != nil {
 			return m.topicPage.View()
