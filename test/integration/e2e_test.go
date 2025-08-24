@@ -13,6 +13,8 @@ import (
 // MockDataSource for integration testing
 type MockDataSource struct{}
 
+var _ = (api.KafkaDataSource)(&MockDataSource{})
+
 func (m *MockDataSource) Init(cfgOption string) {}
 
 func (m *MockDataSource) GetTopics() (map[string]api.Topic, error) {
@@ -45,6 +47,10 @@ func (m *MockDataSource) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 
 func (m *MockDataSource) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error {
 	return nil
+}
+
+func (m *MockDataSource) GetMessageSchemaInfo(keySchemaID, valueSchemaID string) (*api.MessageSchemaInfo, error) {
+	return &api.MessageSchemaInfo{}, nil
 }
 
 // TestE2EKafkaIntegration tests end-to-end integration with real Kafka
@@ -114,7 +120,7 @@ func TestE2EKafkaIntegration(t *testing.T) {
 		handleMessage := func(msg api.Message) {
 			messagesReceived++
 			lastMessage = msg
-			t.Logf("Received message: Key=%s, Value=%s, Offset=%d, Partition=%d", 
+			t.Logf("Received message: Key=%s, Value=%s, Offset=%d, Partition=%d",
 				msg.Key, msg.Value, msg.Offset, msg.Partition)
 		}
 
@@ -141,7 +147,7 @@ func TestE2EKafkaIntegration(t *testing.T) {
 				t.Error("Expected to receive messages from test-topic-1")
 			} else {
 				t.Logf("Successfully received %d messages", messagesReceived)
-				
+
 				// Verify message structure
 				if lastMessage.Key == "" && lastMessage.Value == "" {
 					t.Error("Received message has empty key and value")
@@ -208,24 +214,24 @@ func TestE2EInitFlow(t *testing.T) {
 	t.Run("Mock Mode Init Flow", func(t *testing.T) {
 		// Test that Init doesn't panic with mock mode
 		// Note: We can't easily test the full UI, but we can test that Init starts correctly
-		
+
 		// This would normally call kafui.Init(testConfig, true)
 		// but since it starts the UI, we test the components separately
-		
+
 		// Test the data source selection logic that Init() uses
 		var dataSource api.KafkaDataSource
 		useMock := true
-		
+
 		if useMock {
 			// Use mock data source for mock mode test
 			dataSource = &MockDataSource{}
 		} else {
 			dataSource = &kafds.KafkaDataSourceKaf{}
 		}
-		
+
 		// Verify the data source can be initialized
 		dataSource.Init(testConfig)
-		
+
 		// Test basic functionality
 		_, err := dataSource.GetTopics()
 		if err != nil {
@@ -241,14 +247,14 @@ func TestE2EInitFlow(t *testing.T) {
 		// Test the data source selection logic for real Kafka
 		var dataSource api.KafkaDataSource
 		useMock := false
-		
+
 		if !useMock {
 			dataSource = &kafds.KafkaDataSourceKaf{}
 		}
-		
+
 		// Verify the data source can be initialized
 		dataSource.Init(testConfig)
-		
+
 		// Test basic functionality
 		topics, err := dataSource.GetTopics()
 		if err != nil {
