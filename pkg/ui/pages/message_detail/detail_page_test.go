@@ -110,8 +110,8 @@ func TestGetFormattedKey(t *testing.T) {
 			name:        "JSON format",
 			key:         `{"id": "123"}`,
 			keyFormat:   "json",
-			expected:    `{"id": "123"}`,
-			description: "Should return formatted JSON for json format",
+			expected:    "{\n  \"id\": \"123\"\n}",
+			description: "Should return pretty-printed JSON for json format",
 		},
 		{
 			name:        "Hex format",
@@ -143,6 +143,9 @@ func TestGetFormattedKey(t *testing.T) {
 			} else {
 				// For non-empty keys, check the result contains expected content
 				if tc.keyFormat == "hex" {
+					assert.Equal(t, tc.expected, result, tc.description)
+				} else if tc.keyFormat == "json" {
+					// For JSON format, check that the result is the expected pretty-printed JSON
 					assert.Equal(t, tc.expected, result, tc.description)
 				} else {
 					assert.Contains(t, result, tc.key, tc.description)
@@ -178,15 +181,15 @@ func TestGetFormattedValue(t *testing.T) {
 			name:        "Pretty format",
 			value:       `{"name": "test"}`,
 			valueFormat: "pretty",
-			expected:    `{"name": "test"}`,
-			description: "Should return formatted content for pretty format",
+			expected:    "{\n  \"name\": \"test\"\n}",
+			description: "Should return pretty-printed content for pretty format",
 		},
 		{
 			name:        "JSON format",
 			value:       `{"data": "value"}`,
 			valueFormat: "json",
-			expected:    `{"data": "value"}`,
-			description: "Should return JSON formatted content",
+			expected:    "{\n  \"data\": \"value\"\n}",
+			description: "Should return pretty-printed JSON content",
 		},
 		{
 			name:        "Hex format",
@@ -216,6 +219,9 @@ func TestGetFormattedValue(t *testing.T) {
 				assert.Equal(t, tc.expected, result, tc.description)
 			} else {
 				if tc.valueFormat == "hex" {
+					assert.Equal(t, tc.expected, result, tc.description)
+				} else if tc.valueFormat == "json" || tc.valueFormat == "pretty" {
+					// For JSON/pretty formats, check that the result is the expected pretty-printed JSON
 					assert.Equal(t, tc.expected, result, tc.description)
 				} else {
 					assert.Contains(t, result, tc.value, tc.description)

@@ -77,11 +77,8 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		model.ToggleMetadata()
 		return nil
 	case key.Matches(msg, k.bindings.Copy):
-		// Implement copy functionality
-		err := model.CopyContent()
-		if err != nil {
-			// TODO: Handle error (maybe set status message)
-		}
+		// Implement copy functionality with feedback
+		model.CopyContentWithFeedback()
 		return nil
 	}
 	return nil
@@ -678,7 +675,12 @@ func (v *View) renderShortcuts(model *Model) string {
 
 func (v *View) renderFooter(model *Model) string {
 	footerText := "Detail View | Use 'f' to toggle format, 'h' for headers, 'm' for metadata | Press 'Esc' to go back"
-
+	
+	// Add status message if present
+	if model.statusMsg != "" {
+		footerText += " | " + model.statusMsg
+	}
+	
 	return v.styles.Footer.
 		Width(model.dimensions.Width).
 		Render(footerText)

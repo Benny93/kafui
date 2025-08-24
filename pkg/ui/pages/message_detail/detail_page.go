@@ -1,8 +1,10 @@
 package messagedetail
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
@@ -23,6 +25,8 @@ type Model struct {
 	// State
 	dimensions core.Dimensions
 	error      error
+	statusMsg  string
+	statusTime time.Time
 
 	// Components
 	handlers *Handlers
@@ -147,6 +151,11 @@ func (m *Model) Init() tea.Cmd {
 
 // Update implements the Page interface
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Clear status message after 3 seconds
+	if m.statusMsg != "" && time.Since(m.statusTime) > 3*time.Second {
+		m.statusMsg = ""
+	}
+	
 	return m.handlers.Handle(m, msg)
 }
 
@@ -241,9 +250,9 @@ func (m *Model) GetFormattedKey() string {
 	switch m.displayFormat.KeyFormat {
 	case "hex":
 		return fmt.Sprintf("%x", m.message.Key)
-	case "json":
+	case "json", "pretty":
 		// Try to format as JSON
-		return string(m.message.Key) // Simplified for now
+		return m.formatAsJSON(m.message.Key)
 	default:
 		return string(m.message.Key)
 	}
@@ -260,10 +269,56 @@ func (m *Model) GetFormattedValue() string {
 		return fmt.Sprintf("%x", m.message.Value)
 	case "json", "pretty":
 		// Try to format as JSON
-		return string(m.message.Value) // Simplified for now
+		return m.formatAsJSON(m.message.Value)
 	default:
 		return string(m.message.Value)
 	}
+}
+
+// formatAsJSON attempts to parse and pretty print JSON content
+func (m *Model) formatAsJSON(content string) string {
+	var parsed interface{}
+	
+	// Try to unmarshal as JSON
+	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		// If parsing fails, try to unescape and parse again
+		// This handles cases where JSON is double-encoded
+		var unescapedContent string
+		if err := json.Unmarshal([]byte(content), &unescapedContent); err == nil {
+			// Try parsing the unescaped content
+			if err := json.Unmarshal([]byte(unescapedContent), &parsed); err == nil {
+				// Successfully parsed unescaped content
+				content = unescapedContent
+			} else {
+				// Use the unescaped content as a string
+				parsed = unescapedContent
+			}
+		} else {
+			// If parsing fails, return original content
+			return content
+		}
+	}
+	
+	// Marshal with indentation for pretty printing
+	pretty, err := json.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		// If pretty printing fails, return original content
+		return content
+	}
+	
+	// Apply syntax highlighting if enabled
+	if m.displayFormat.ValueFormat == "pretty" {
+		return m.highlightJSON(string(pretty))
+	}
+	
+	return string(pretty)
+}
+
+// highlightJSON applies syntax highlighting to JSON content
+func (m *Model) highlightJSON(jsonStr string) string {
+	// For now, return the JSON as-is to avoid ANSI escape sequence issues in viewport
+	// TODO: Implement proper syntax highlighting that works with viewport
+	return jsonStr
 }
 
 // ToggleDisplayFormat cycles through display formats
@@ -332,4 +387,19 @@ func (m *Model) CopyContent() error {
 	
 	// Try to copy to clipboard
 	return clipboard.WriteAll(content)
+}
+
+// CopyContentWithFeedback copies content and returns a status message
+func (m *Model) CopyContentWithFeedback() string {
+	err := m.CopyContent()
+	if err != nil {
+		status := fmt.Sprintf("Failed to copy content: %v", err)
+		m.statusMsg = status
+		m.statusTime = time.Now()
+		return status
+	}
+	status := "Content copied to clipboard"
+	m.statusMsg = status
+	m.statusTime = time.Now()
+	return status
 }
