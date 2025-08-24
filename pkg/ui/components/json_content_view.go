@@ -11,13 +11,13 @@ import (
 
 // JSONContentConfig holds configuration for the JSON content viewer
 type JSONContentConfig struct {
-	Width          int
-	Height         int
-	Title          string
-	Content        string
-	DisplayFormat  string // "raw", "json", "pretty"
+	Width           int
+	Height          int
+	Title           string
+	Content         string
+	DisplayFormat   string // "raw", "json", "pretty"
 	ShowLineNumbers bool
-	Focused        bool
+	Focused         bool
 }
 
 // JSONContentView represents a reusable JSON content viewer component
@@ -31,34 +31,36 @@ type JSONContentView struct {
 // NewJSONContentView creates a new JSON content viewer component
 func NewJSONContentView(config JSONContentConfig) *JSONContentView {
 	// Ensure minimum dimensions
-	if config.Width < 10 {
-		config.Width = 10
+	if config.Width < 1 {
+		config.Width = 1
 	}
-	if config.Height < 5 {
-		config.Height = 5
+	if config.Height < 1 {
+		config.Height = 1
 	}
-	
+
 	// Account for borders and title
-	viewportWidth := config.Width - 2
+	// Account for borders (2 chars) and padding (if any)
+	viewportWidth := config.Width - 2 // 2 for borders
 	if viewportWidth < 1 {
 		viewportWidth = 1
 	}
-	
-	viewportHeight := config.Height - 3 // Title + border + content
+
+	// Account for title (1 line) and borders (2 lines)
+	viewportHeight := config.Height - 3
 	if viewportHeight < 1 {
 		viewportHeight = 1
 	}
-	
+
 	vp := viewport.New(viewportWidth, viewportHeight)
-	
+
 	// Create content based on format
 	content := formatContent(config.Content, config.DisplayFormat)
 	if config.ShowLineNumbers {
 		content = addLineNumbers(content)
 	}
-	
+
 	vp.SetContent(content)
-	
+
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Background(lipgloss.Color("62")).
@@ -154,36 +156,36 @@ func addLineNumbers(content string) string {
 // UpdateConfig updates the component configuration
 func (jcv *JSONContentView) UpdateConfig(config JSONContentConfig) {
 	// Ensure minimum dimensions
-	if config.Width < 10 {
-		config.Width = 10
+	if config.Width < 1 {
+		config.Width = 1
 	}
-	if config.Height < 5 {
-		config.Height = 5
+	if config.Height < 1 {
+		config.Height = 1
 	}
-	
+
 	jcv.config = config
-	
+
 	// Update viewport dimensions
 	viewportWidth := config.Width - 2
 	if viewportWidth < 1 {
 		viewportWidth = 1
 	}
-	
+
 	viewportHeight := config.Height - 3 // Title + border + content
 	if viewportHeight < 1 {
 		viewportHeight = 1
 	}
-	
+
 	jcv.viewport.Width = viewportWidth
 	jcv.viewport.Height = viewportHeight
-	
+
 	// Update content
 	content := formatContent(config.Content, config.DisplayFormat)
 	if config.ShowLineNumbers {
 		content = addLineNumbers(content)
 	}
 	jcv.viewport.SetContent(content)
-	
+
 	// Update styles
 	if config.Focused {
 		jcv.borderStyle = jcv.borderStyle.BorderForeground(lipgloss.Color("205")) // Pink for focused
