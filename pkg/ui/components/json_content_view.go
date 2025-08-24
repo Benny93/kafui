@@ -16,7 +16,6 @@ type JSONContentConfig struct {
 	Title          string
 	Content        string
 	DisplayFormat  string // "raw", "json", "pretty"
-	WrapLines      bool
 	ShowLineNumbers bool
 	Focused        bool
 }
@@ -31,7 +30,26 @@ type JSONContentView struct {
 
 // NewJSONContentView creates a new JSON content viewer component
 func NewJSONContentView(config JSONContentConfig) *JSONContentView {
-	vp := viewport.New(config.Width-2, config.Height-2) // Account for borders
+	// Ensure minimum dimensions
+	if config.Width < 10 {
+		config.Width = 10
+	}
+	if config.Height < 5 {
+		config.Height = 5
+	}
+	
+	// Account for borders and title
+	viewportWidth := config.Width - 2
+	if viewportWidth < 1 {
+		viewportWidth = 1
+	}
+	
+	viewportHeight := config.Height - 3 // Title + border + content
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+	
+	vp := viewport.New(viewportWidth, viewportHeight)
 	
 	// Create content based on format
 	content := formatContent(config.Content, config.DisplayFormat)
@@ -72,7 +90,7 @@ func formatContent(content, format string) string {
 
 	switch format {
 	case "json", "pretty":
-		return formatAsJSON(content, format == "pretty")
+		return formatAsJSON(content)
 	case "hex":
 		return fmt.Sprintf("%x", content)
 	default:
@@ -81,7 +99,7 @@ func formatContent(content, format string) string {
 }
 
 // formatAsJSON attempts to parse and pretty print JSON content
-func formatAsJSON(content string, withHighlighting bool) string {
+func formatAsJSON(content string) string {
 	var parsed interface{}
 
 	// Try to unmarshal as JSON
@@ -135,11 +153,29 @@ func addLineNumbers(content string) string {
 
 // UpdateConfig updates the component configuration
 func (jcv *JSONContentView) UpdateConfig(config JSONContentConfig) {
+	// Ensure minimum dimensions
+	if config.Width < 10 {
+		config.Width = 10
+	}
+	if config.Height < 5 {
+		config.Height = 5
+	}
+	
 	jcv.config = config
 	
 	// Update viewport dimensions
-	jcv.viewport.Width = config.Width - 2  // Account for borders
-	jcv.viewport.Height = config.Height - 2 // Account for borders
+	viewportWidth := config.Width - 2
+	if viewportWidth < 1 {
+		viewportWidth = 1
+	}
+	
+	viewportHeight := config.Height - 3 // Title + border + content
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+	
+	jcv.viewport.Width = viewportWidth
+	jcv.viewport.Height = viewportHeight
 	
 	// Update content
 	content := formatContent(config.Content, config.DisplayFormat)
@@ -207,7 +243,6 @@ func (jcv *JSONContentView) View() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
-		lipgloss.NewStyle().MarginTop(1).Render(""), // Spacer
 		contentWithBorder,
 	)
 }

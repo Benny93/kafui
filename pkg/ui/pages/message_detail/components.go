@@ -125,11 +125,11 @@ func (h *Handlers) Handle(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "up":
 			// Scroll the focused viewport up
-			model.view.LineUp(1, model.focusedViewport)
+			model.view.LineUp(1, model)
 			return model, nil
 		case "down":
 			// Scroll the focused viewport down
-			model.view.LineDown(1, model.focusedViewport)
+			model.view.LineDown(1, model)
 			return model, nil
 		case "tab":
 			model.SwitchFocus()
@@ -148,7 +148,7 @@ type View struct {
 	dimensions core.Dimensions
 	theme      core.Theme
 	styles     *ViewStyles
-	keyViewer   *components.JSONContentView
+	keyViewer  *components.JSONContentView
 	valueViewer *components.JSONContentView
 }
 
@@ -302,19 +302,33 @@ func (v *View) renderCompactView(model *Model) string {
 	// Calculate layout dimensions for compact view
 	contentWidth := model.dimensions.Width - 4  // Account for padding
 	contentHeight := model.dimensions.Height - 6 // Account for header and footer
+	if contentWidth < 30 {
+		contentWidth = 30
+	}
+	if contentHeight < 20 {
+		contentHeight = 20
+	}
 
 	// Header section
 	header := v.renderHeader(model)
 
-	// Create compact key section
+	// Calculate section dimensions for compact view
+	sectionWidth := contentWidth
+	sectionHeight := (contentHeight - 6) / 3  // Account for 3 sections with spacing
+	
+	if sectionHeight < 10 {
+		sectionHeight = 10
+	}
+
+	// Update key viewer config
 	keyContent := "<null>"
 	if model.message.Key != "" {
 		keyContent = model.message.Key
 	}
 	
 	keyConfig := components.JSONContentConfig{
-		Width:           contentWidth,
-		Height:          contentHeight/3 - 2,
+		Width:           sectionWidth,
+		Height:          sectionHeight,
 		Title:           "MESSAGE KEY",
 		Content:         keyContent,
 		DisplayFormat:   model.displayFormat.KeyFormat,
@@ -322,21 +336,21 @@ func (v *View) renderCompactView(model *Model) string {
 		Focused:         model.focusedViewport == "key",
 	}
 	
-	v.keyViewer = components.NewJSONContentView(keyConfig)
-	keySection := v.styles.MainPanel.
-		Width(contentWidth).
-		Height(contentHeight/3 - 2).
-		Render(v.keyViewer.View())
+	if v.keyViewer == nil {
+		v.keyViewer = components.NewJSONContentView(keyConfig)
+	} else {
+		v.keyViewer.UpdateConfig(keyConfig)
+	}
 
-	// Create compact value section
+	// Update value viewer config
 	valueContent := "<null>"
 	if model.message.Value != "" {
 		valueContent = model.message.Value
 	}
 	
 	valueConfig := components.JSONContentConfig{
-		Width:           contentWidth,
-		Height:          contentHeight/3 - 2,
+		Width:           sectionWidth,
+		Height:          sectionHeight,
 		Title:           "MESSAGE VALUE",
 		Content:         valueContent,
 		DisplayFormat:   model.displayFormat.ValueFormat,
@@ -344,18 +358,30 @@ func (v *View) renderCompactView(model *Model) string {
 		Focused:         model.focusedViewport == "value",
 	}
 	
-	v.valueViewer = components.NewJSONContentView(valueConfig)
+	if v.valueViewer == nil {
+		v.valueViewer = components.NewJSONContentView(valueConfig)
+	} else {
+		v.valueViewer.UpdateConfig(valueConfig)
+	}
+
+	// Render sections
+	keySection := v.styles.MainPanel.
+		Width(sectionWidth).
+		Height(sectionHeight).
+		Render(v.keyViewer.View())
+
 	valueSection := v.styles.MainPanel.
-		Width(contentWidth).
-		Height(contentHeight/3 - 2).
+		Width(sectionWidth).
+		Height(sectionHeight).
 		Render(v.valueViewer.View())
 
 	// Headers section (if enabled)
 	var headersSection string
 	if model.showHeaders && len(model.message.Headers) > 0 {
+		headersHeight := sectionHeight
 		headersSection = v.styles.MainPanel.
-			Width(contentWidth).
-			Height(contentHeight/3 - 2).
+			Width(sectionWidth).
+			Height(headersHeight).
 			Render(v.renderHeadersSection(model))
 	}
 
@@ -385,27 +411,104 @@ func (v *View) renderHeader(model *Model) string {
 }
 
 func (v *View) renderMainContent(model *Model, width, height int) string {
-	// Adjust height to account for panel borders and padding
-	contentHeight := height - 4 // Account for main panel borders and padding
+	// Ensure minimum dimensions
+	if width < 40 {
+		width = 40
+	}
+	if height < 20 {
+		height = 20
+	}
+	
+	// Calculate content area dimensions
+	// Account for main panel borders and padding
+	contentWidth := width - 4  // 2 for each side border/padding
+	contentHeight := height - 6  // 2 for top/bottom border/padding + 2 for margins
+	
+	if contentWidth < 30 {
+		contentWidth = 30
+	}
+	if contentHeight < 10 {
+		contentHeight = 10
+	}
 
-	// Message key section
+	// Calculate individual section dimensions
+	// Each section gets half the width minus spacing
+	sectionWidth := (contentWidth - 2) / 2  // Account for spacer between sections
+	sectionHeight := contentHeight / 2
+	
+	if sectionWidth < 20 {
+		sectionWidth = 20
+	}
+	if sectionHeight < 10 {
+		sectionHeight = 10
+	}
+
+	// Update key viewer config
+	keyContent := "<null>"
+	if model.message.Key != "" {
+		keyContent = model.message.Key
+	}
+	
+	keyConfig := components.JSONContentConfig{
+		Width:           sectionWidth,
+		Height:          sectionHeight,
+		Title:           "MESSAGE KEY",
+		Content:         keyContent,
+		DisplayFormat:   model.displayFormat.KeyFormat,
+		ShowLineNumbers: true,
+		Focused:         model.focusedViewport == "key",
+	}
+	
+	if v.keyViewer == nil {
+		v.keyViewer = components.NewJSONContentView(keyConfig)
+	} else {
+		v.keyViewer.UpdateConfig(keyConfig)
+	}
+
+	// Update value viewer config
+	valueContent := "<null>"
+	if model.message.Value != "" {
+		valueContent = model.message.Value
+	}
+	
+	valueConfig := components.JSONContentConfig{
+		Width:           sectionWidth,
+		Height:          sectionHeight,
+		Title:           "MESSAGE VALUE",
+		Content:         valueContent,
+		DisplayFormat:   model.displayFormat.ValueFormat,
+		ShowLineNumbers: true,
+		Focused:         model.focusedViewport == "value",
+	}
+	
+	if v.valueViewer == nil {
+		v.valueViewer = components.NewJSONContentView(valueConfig)
+	} else {
+		v.valueViewer.UpdateConfig(valueConfig)
+	}
+
+	// Render sections with proper dimensions
 	keySection := v.styles.MainPanel.
-		Width(width/2 - 2).
-		Height(contentHeight/2 - 1).
-		Render(v.renderKeySection(model))
+		Width(sectionWidth).
+		Height(sectionHeight).
+		Render(v.keyViewer.View())
 
-	// Message value section
 	valueSection := v.styles.MainPanel.
-		Width(width/2 - 2).
-		Height(contentHeight/2 - 1).
-		Render(v.renderValueSection(model))
+		Width(sectionWidth).
+		Height(sectionHeight).
+		Render(v.valueViewer.View())
 
 	// Headers section (if enabled)
 	var headersSection string
 	if model.showHeaders && len(model.message.Headers) > 0 {
+		headersHeight := contentHeight / 4
+		if headersHeight < 8 {
+			headersHeight = 8
+		}
+		
 		headersSection = v.styles.MainPanel.
-			Width(width).
-			Height(contentHeight/4 - 1).
+			Width(contentWidth).
+			Height(headersHeight).
 			Render(v.renderHeadersSection(model))
 	}
 
@@ -430,44 +533,12 @@ func (v *View) renderMainContent(model *Model, width, height int) string {
 }
 
 func (v *View) renderKeySection(model *Model) string {
-	// Create JSON content viewer for key
-	keyContent := "<null>"
-	if model.message.Key != "" {
-		keyContent = model.message.Key
-	}
-	
-	keyConfig := components.JSONContentConfig{
-		Width:           model.dimensions.Width/2 - 10,
-		Height:          model.dimensions.Height/3 - 5,
-		Title:           "MESSAGE KEY",
-		Content:         keyContent,
-		DisplayFormat:   model.displayFormat.KeyFormat,
-		ShowLineNumbers: true,
-		Focused:         model.focusedViewport == "key",
-	}
-	
-	v.keyViewer = components.NewJSONContentView(keyConfig)
+	// Just return the viewer's view since sizing is handled in renderMainContent
 	return v.keyViewer.View()
 }
 
 func (v *View) renderValueSection(model *Model) string {
-	// Create JSON content viewer for value
-	valueContent := "<null>"
-	if model.message.Value != "" {
-		valueContent = model.message.Value
-	}
-	
-	valueConfig := components.JSONContentConfig{
-		Width:           model.dimensions.Width/2 - 10,
-		Height:          model.dimensions.Height/3 - 5,
-		Title:           "MESSAGE VALUE",
-		Content:         valueContent,
-		DisplayFormat:   model.displayFormat.ValueFormat,
-		ShowLineNumbers: true,
-		Focused:         model.focusedViewport == "value",
-	}
-	
-	v.valueViewer = components.NewJSONContentView(valueConfig)
+	// Just return the viewer's view since sizing is handled in renderMainContent
 	return v.valueViewer.View()
 }
 
@@ -692,19 +763,19 @@ func (v *View) SetDimensions(width, height int) {
 }
 
 // LineUp scrolls the focused viewport up
-func (v *View) LineUp(lines int, focusedViewport string) {
-	if v.keyViewer != nil && focusedViewport == "key" {
+func (v *View) LineUp(lines int, model *Model) {
+	if model.focusedViewport == "key" && v.keyViewer != nil {
 		v.keyViewer.LineUp(lines)
-	} else if v.valueViewer != nil && focusedViewport == "value" {
+	} else if model.focusedViewport == "value" && v.valueViewer != nil {
 		v.valueViewer.LineUp(lines)
 	}
 }
 
 // LineDown scrolls the focused viewport down
-func (v *View) LineDown(lines int, focusedViewport string) {
-	if v.keyViewer != nil && focusedViewport == "key" {
+func (v *View) LineDown(lines int, model *Model) {
+	if model.focusedViewport == "key" && v.keyViewer != nil {
 		v.keyViewer.LineDown(lines)
-	} else if v.valueViewer != nil && focusedViewport == "value" {
+	} else if model.focusedViewport == "value" && v.valueViewer != nil {
 		v.valueViewer.LineDown(lines)
 	}
 }
