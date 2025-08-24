@@ -26,8 +26,10 @@ const (
 // Model represents the main application state
 type Model struct {
 	dataSource         api.KafkaDataSource
-	Router             *router.Router  // Exported for testing
-	ShowHelp           bool            // Exported for testing
+	Router             *router.Router     // Exported for testing
+	ShowHelp           bool               // Exported for testing
+	HelpSystem         *core.HelpSystem   // Enhanced help system
+	FocusManager       *core.FocusManager // Focus management
 	width              int
 	height             int
 	
@@ -97,10 +99,15 @@ func initialModel(dataSource api.KafkaDataSource) Model {
 // initialModelWithRouter creates a new Model using the router-based navigation
 func initialModelWithRouter(dataSource api.KafkaDataSource) Model {
 	r := router.NewRouter(dataSource)
+	helpSystem := core.NewHelpSystem()
+	focusManager := core.NewFocusManager()
+	
 	return Model{
-		dataSource: dataSource,
-		Router:     r,
-		ShowHelp:   false,
+		dataSource:   dataSource,
+		Router:       r,
+		ShowHelp:     false,
+		HelpSystem:   helpSystem,
+		FocusManager: focusManager,
 	}
 }
 
@@ -133,12 +140,25 @@ func (m Model) updateWithRouter(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.Router.SetDimensions(msg.Width, msg.Height)
+		m.HelpSystem.SetDimensions(msg.Width, msg.Height)
 
 	case tea.KeyMsg:
-		// Handle global key bindings first
+		// Handle focus management first (if not in help mode)
+		if !m.ShowHelp {
+			if cmd := m.FocusManager.HandleKeyMsg(msg); cmd != nil {
+				return m, cmd
+			}
+		}
+		
+		// Handle global key bindings
 		switch {
 		case key.Matches(msg, core.DefaultGlobalKeys.Help):
 			m.ShowHelp = !m.ShowHelp
+			m.HelpSystem.Toggle()
+			// Update help system with current page
+			if currentPage := m.Router.GetCurrentPage(); currentPage != nil {
+				m.HelpSystem.SetCurrentPage(currentPage)
+			}
 			return m, nil
 		case key.Matches(msg, core.DefaultGlobalKeys.Quit):
 			return m, tea.Quit
@@ -148,6 +168,7 @@ func (m Model) updateWithRouter(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				// Close help if it's open
 				m.ShowHelp = false
+				m.HelpSystem.Hide()
 				return m, nil
 			}
 		}
@@ -391,13 +412,19 @@ func (m Model) View() string {
 // viewWithRouter renders the view using the router system
 func (m Model) viewWithRouter() string {
 	if m.ShowHelp {
-		return m.renderHelp()
+		return m.renderEnhancedHelp()
 	}
 	
 	return m.Router.View()
 }
 
-// renderHelp renders the help overlay
+// renderEnhancedHelp renders the enhanced help overlay
+func (m Model) renderEnhancedHelp() string {
+	// Use the enhanced help system
+	return m.HelpSystem.Render()
+}
+
+// renderHelp renders the legacy help overlay (kept for backward compatibility)
 func (m Model) renderHelp() string {
 	currentPage := m.Router.GetCurrentPage()
 	if currentPage == nil {
