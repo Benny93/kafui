@@ -64,7 +64,7 @@ func TestModelImplementsPageInterface(t *testing.T) {
 	model := NewModel(mockDS, "test-topic", testMessage)
 
 	// Test that model implements the Page interface methods
-	assert.Equal(t, "detail", model.GetID())
+	assert.Equal(t, "message_detail", model.GetID())
 
 	// Test Init returns nil (no initialization needed)
 	cmd := model.Init()

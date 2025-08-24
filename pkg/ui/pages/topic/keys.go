@@ -1,6 +1,7 @@
 package topic
 
 import (
+	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -188,7 +189,7 @@ func (k *Keys) handleBack(model *Model) tea.Cmd {
 	}
 	
 	return func() tea.Msg {
-		return PageChangeMsg{PageID: "main"}
+		return core.PageChangeMsg{PageID: "main"}
 	}
 }
 
@@ -232,7 +233,7 @@ func (k *Keys) handleEnter(model *Model) tea.Cmd {
 	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil {
 		model.selectedMessage = selectedMsg
 		return func() tea.Msg {
-			return PageChangeMsg{PageID: "detail", Data: *selectedMsg}
+			return core.PageChangeMsg{PageID: "detail", Data: *selectedMsg}
 		}
 	}
 	
@@ -316,8 +317,3 @@ func (k *Keys) GetShortcuts() []string {
 	}
 }
 
-// PageChangeMsg represents a page change message
-type PageChangeMsg struct {
-	PageID string
-	Data   interface{}
-}

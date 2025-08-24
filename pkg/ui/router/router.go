@@ -49,6 +49,11 @@ func (r *Router) NavigateTo(pageID string, data interface{}) tea.Cmd {
 		r.history = append(r.history, r.currentPage)
 	}
 	
+	return r.navigateToWithoutHistory(pageID, data)
+}
+
+// navigateToWithoutHistory switches to a specific page without adding to history
+func (r *Router) navigateToWithoutHistory(pageID string, data interface{}) tea.Cmd {
 	// Initialize page if needed
 	if _, exists := r.pages[pageID]; !exists {
 		page := r.createPage(pageID, data)
@@ -86,7 +91,7 @@ func (r *Router) Back() tea.Cmd {
 	if len(r.history) > 0 {
 		lastPage := r.history[len(r.history)-1]
 		r.history = r.history[:len(r.history)-1]
-		return r.NavigateTo(lastPage, nil)
+		return r.navigateToWithoutHistory(lastPage, nil)
 	}
 	return nil
 }
