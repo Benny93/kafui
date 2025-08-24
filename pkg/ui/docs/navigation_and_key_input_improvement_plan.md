@@ -645,3 +645,6 @@ func (m Model) View() string {
 This improvement plan will significantly enhance Kafui's navigation and key input handling systems, making them more robust and maintainable. By implementing a centralized router, standardized page interface, consistent key binding system, and clearer page naming conventions, we'll create a more professional and user-friendly TUI that follows modern Bubble Tea best practices.
 
 The phased approach ensures we can deliver value incrementally while maintaining stability and backward compatibility. The page renaming from "detail" to "message_detail" will make the codebase more intuitive and easier to understand. The end result will be a navigation system that rivals the best terminal applications in terms of usability and reliability.
+
+
+Notes: Running the app (make run-mock) will get you stuck since it is an interactive tui app. You can still run it using the timeout tool if you like
