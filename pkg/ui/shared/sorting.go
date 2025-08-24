@@ -251,9 +251,21 @@ type HighlightConfig struct {
 // DefaultHighlightConfig returns default highlighting configuration
 func DefaultHighlightConfig() HighlightConfig {
 	return HighlightConfig{
-		BackgroundColor: "11", // Bright yellow
-		ForegroundColor: "0",  // Black
-		Bold:            false,
+		BackgroundColor: "",   // No background
+		ForegroundColor: "205", // Pink/magenta for highlighting
+		Bold:            true, // Bold text for emphasis
+		CaseSensitive:   false,
+		UseRegex:        false,
+	}
+}
+
+// SearchHighlightConfig returns highlighting configuration for search matches
+// Only changes font color, no background highlighting
+func SearchHighlightConfig() HighlightConfig {
+	return HighlightConfig{
+		BackgroundColor: "",   // No background
+		ForegroundColor: "205", // Pink/magenta for highlighting
+		Bold:            true,  // Bold text for emphasis
 		CaseSensitive:   false,
 		UseRegex:        false,
 	}
@@ -261,7 +273,7 @@ func DefaultHighlightConfig() HighlightConfig {
 
 // HighlightSearchMatches highlights search query matches in text using lipgloss
 func HighlightSearchMatches(text, searchQuery string) string {
-	return HighlightSearchMatchesWithConfig(text, searchQuery, DefaultHighlightConfig())
+	return HighlightSearchMatchesWithConfig(text, searchQuery, SearchHighlightConfig())
 }
 
 // HighlightSearchMatchesWithConfig highlights search matches with custom configuration
@@ -271,9 +283,15 @@ func HighlightSearchMatchesWithConfig(text, searchQuery string, config Highlight
 	}
 
 	// Define highlight style
-	highlightStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color(config.BackgroundColor)).
-		Foreground(lipgloss.Color(config.ForegroundColor))
+	highlightStyle := lipgloss.NewStyle()
+	
+	// Only set background if it's not empty
+	if config.BackgroundColor != "" {
+		highlightStyle = highlightStyle.Background(lipgloss.Color(config.BackgroundColor))
+	}
+	
+	// Set foreground color
+	highlightStyle = highlightStyle.Foreground(lipgloss.Color(config.ForegroundColor))
 	
 	if config.Bold {
 		highlightStyle = highlightStyle.Bold(true)

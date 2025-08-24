@@ -83,13 +83,33 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	// Log key event details
 	shared.DebugLog("Key Event - Type: %v, String: %s, SearchMode: %v", msg.Type, msg.String(), model.searchMode)
 
-	// Handle ESC key first (back navigation)
+	// If in search mode, let the search bar handle keys
+	// But handle Enter and Esc specially for search confirmation/cancellation
+	if model.searchMode {
+		// Handle Enter to confirm search or resource switch
+		if msg.String() == "enter" {
+			return k.handleEnter(model, msg)
+		}
+		
+		// Handle Esc to cancel search
+		if msg.String() == "esc" {
+			return k.handleBack(model)
+		}
+		
+		// Let the search bar handle other keys
+		var cmd tea.Cmd
+		model.searchBar, cmd = model.searchBar.Update(msg)
+		cmds = append(cmds, cmd)
+		return tea.Batch(cmds...)
+	}
+
+	// Handle ESC key (back navigation when not in search mode)
 	if key.Matches(msg, k.bindings.Back) {
 		shared.DebugLog("Back Key Event - Type: %v, String: %s, SearchMode: %v", msg.Type, msg.String(), model.searchMode)
 		return k.handleBack(model)
 	}
 
-	// Handle other specific key combinations
+	// Handle other specific key combinations (only when not in search mode)
 	switch {
 	case key.Matches(msg, k.bindings.Quit):
 		return k.handleQuit(model)
@@ -101,31 +121,16 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return k.handleEnter(model, msg)
 	}
 
-	// Handle navigation keys if not in search mode
-	if !model.searchMode {
-		switch {
-		case key.Matches(msg, k.bindings.Navigation.Up):
-			return k.handleNavigation(model, "up")
-		case key.Matches(msg, k.bindings.Navigation.Down):
-			return k.handleNavigation(model, "down")
-		case key.Matches(msg, k.bindings.Navigation.Home):
-			return k.handleNavigation(model, "home")
-		case key.Matches(msg, k.bindings.Navigation.End):
-			return k.handleNavigation(model, "end")
-		}
-	}
-
-	// Handle 'q' key for quit (only if not in search mode)
-	if msg.String() == "q" && !model.searchMode {
-		return tea.Quit
-	}
-
-	// If in search mode, let the search bar handle keys
-	if model.searchMode {
-		var cmd tea.Cmd
-		model.searchBar, cmd = model.searchBar.Update(msg)
-		cmds = append(cmds, cmd)
-		return tea.Batch(cmds...)
+	// Handle navigation keys
+	switch {
+	case key.Matches(msg, k.bindings.Navigation.Up):
+		return k.handleNavigation(model, "up")
+	case key.Matches(msg, k.bindings.Navigation.Down):
+		return k.handleNavigation(model, "down")
+	case key.Matches(msg, k.bindings.Navigation.Home):
+		return k.handleNavigation(model, "home")
+	case key.Matches(msg, k.bindings.Navigation.End):
+		return k.handleNavigation(model, "end")
 	}
 
 	// Default table navigation handling
