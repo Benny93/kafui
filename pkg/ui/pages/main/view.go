@@ -95,7 +95,7 @@ func (v *View) updateComponents(model *Model) {
 	model.mainContent.SetDimensions(contentWidth, contentHeight)
 	model.mainContent.SetSearchBar(model.searchBar)
 	model.mainContent.SetTable(model.resourcesTable)
-	model.mainContent.SetShowSearch(true)
+	model.mainContent.SetShowSearch(model.searchMode)
 
 	// Update sidebar (only if not in compact mode)
 	if !compactMode {
