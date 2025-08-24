@@ -240,7 +240,9 @@ func (v *View) renderFullView(model *Model) string {
 	mainContent := v.renderMainContent(model, contentWidth, contentHeight)
 
 	// Sidebar with metadata and actions
-	sidebar := v.renderSidebar(model, sidebarWidth, contentHeight)
+	// Adjust sidebar height to match the main content height
+	sidebarContentHeight := contentHeight - 2 // Account for sidebar padding/borders
+	sidebar := v.renderSidebar(model, sidebarWidth, sidebarContentHeight)
 
 	// Combine main content and sidebar
 	body := lipgloss.JoinHorizontal(
@@ -317,16 +319,19 @@ func (v *View) renderHeader(model *Model) string {
 }
 
 func (v *View) renderMainContent(model *Model, width, height int) string {
+	// Adjust height to account for panel borders and padding
+	contentHeight := height - 4 // Account for main panel borders and padding
+
 	// Message key section
 	keySection := v.styles.MainPanel.
 		Width(width/2 - 2).
-		Height(height/2 - 2).
+		Height(contentHeight/2 - 1).
 		Render(v.renderKeySection(model))
 
 	// Message value section
 	valueSection := v.styles.MainPanel.
 		Width(width/2 - 2).
-		Height(height/2 - 2).
+		Height(contentHeight/2 - 1).
 		Render(v.renderValueSection(model))
 
 	// Headers section (if enabled)
@@ -334,7 +339,7 @@ func (v *View) renderMainContent(model *Model, width, height int) string {
 	if model.showHeaders && len(model.message.Headers) > 0 {
 		headersSection = v.styles.MainPanel.
 			Width(width).
-			Height(height / 4).
+			Height(contentHeight/4 - 1).
 			Render(v.renderHeadersSection(model))
 	}
 
@@ -484,6 +489,7 @@ func (v *View) renderSidebar(model *Model, width, height int) string {
 		v.renderShortcuts(model),
 	)
 
+	// Ensure consistent padding and height
 	return v.styles.Sidebar.
 		Width(width).
 		Height(height).
