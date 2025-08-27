@@ -1,9 +1,9 @@
 package ui
 
 import (
-	"ui_example/ui/components"
-	"ui_example/ui/providers"
-	"ui_example/ui/styles"
+	"github.com/Benny93/kafui/pkg/ui/template/ui/components"
+	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
+	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -212,7 +212,7 @@ func (a *ReusableApp) View() string {
 // renderMinimumSizeView renders the "Window too small!" message
 func (a *ReusableApp) renderMinimumSizeView() string {
 	t := styles.CurrentTheme()
-	
+
 	message := t.S().Base.
 		Padding(1, 4).
 		Foreground(t.White).
@@ -246,7 +246,7 @@ func (a *ReusableApp) updateSidebarSize() tea.Cmd {
 	if a.showDebug {
 		sidebarHeight -= 1 // Account for debug info
 	}
-	
+
 	cmds := []tea.Cmd{
 		a.sidebar.SetSize(DefaultSideBarWidth, sidebarHeight),
 		a.sidebar.SetCompactMode(a.sizeMode <= styles.SizeModeCompact),

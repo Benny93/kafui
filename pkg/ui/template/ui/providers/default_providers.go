@@ -3,7 +3,8 @@ package providers
 import (
 	"strings"
 	"time"
-	"ui_example/ui/styles"
+
+	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -18,28 +19,28 @@ func NewDefaultContentProvider() *DefaultContentProvider {
 
 func (d *DefaultContentProvider) RenderContent(width, height int) string {
 	t := styles.CurrentTheme()
-	
+
 	// Calculate available space for content
-	availableWidth := width - 6  // Account for border and padding
+	availableWidth := width - 6   // Account for border and padding
 	availableHeight := height - 6 // Account for border and padding
-	
+
 	if availableWidth <= 0 || availableHeight <= 0 {
 		return ""
 	}
-	
+
 	// Determine size mode for adaptive content
 	sizeMode := styles.GetSizeMode(width, height)
-	
+
 	// Create the main content sections based on size mode
 	var sections []string
-	
+
 	// Logo section (varies by size mode)
 	logo := styles.RenderLogo(availableWidth, sizeMode, "1.0.0")
 	if logo != "" {
 		sections = append(sections, logo)
 		sections = append(sections, "")
 	}
-	
+
 	// Description with CRUSH styling (adaptive based on size)
 	var description []string
 	if sizeMode >= styles.SizeModeCompact {
@@ -48,7 +49,7 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 			"",
 			"✓ Multiple size modes (minimum/small/compact/normal/big)",
 			"✓ Fixed 31-character sidebar width",
-			"✓ Rounded borders and clean sections", 
+			"✓ Rounded borders and clean sections",
 			"✓ Files, Servers, and Status sections",
 			"✓ Responsive layout with breakpoints",
 			"✓ Real-time data updates",
@@ -64,13 +65,13 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 			"CRUSH UI Framework",
 			"",
 			"✓ Responsive design",
-			"✓ Multiple size modes", 
+			"✓ Multiple size modes",
 			"✓ Real-time updates",
 			"",
 			"Resize window to see modes!",
 		}
 	}
-	
+
 	for _, line := range description {
 		if strings.HasPrefix(line, "✓") {
 			sections = append(sections, t.S().Success.Render(line))
@@ -80,22 +81,22 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 			sections = append(sections, t.S().Text.Render(line))
 		}
 	}
-	
+
 	sections = append(sections, "")
-	
+
 	// Controls section with CRUSH styling (adaptive)
 	if sizeMode >= styles.SizeModeCompact {
 		controlsTitle := styles.Section("Controls", availableWidth)
 		sections = append(sections, controlsTitle)
 		sections = append(sections, "")
-		
+
 		controls := []string{
 			"T / Ctrl+S  Toggle sidebar (normal+ mode)",
 			"Ctrl+R      Refresh data",
 			"Ctrl+D      Toggle debug info",
 			"Q / Ctrl+C  Quit application",
 		}
-		
+
 		for _, control := range controls {
 			parts := strings.SplitN(control, "  ", 2)
 			if len(parts) == 2 {
@@ -111,10 +112,10 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 		// Minimal controls for small screens
 		sections = append(sections, t.S().Muted.Render("Q to quit • Ctrl+D for debug"))
 	}
-	
+
 	// Join all sections
 	content := strings.Join(sections, "\n")
-	
+
 	// Center the content vertically
 	contentLines := strings.Split(content, "\n")
 	if len(contentLines) < availableHeight {
@@ -123,7 +124,7 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 			contentLines = append([]string{""}, contentLines...)
 		}
 	}
-	
+
 	// Center each line horizontally
 	var centeredLines []string
 	for _, line := range contentLines {
@@ -134,7 +135,7 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 		}
 		centeredLines = append(centeredLines, line)
 	}
-	
+
 	return strings.Join(centeredLines, "\n")
 }
 

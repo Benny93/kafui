@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"ui_example/ui/providers"
-	"ui_example/ui/styles"
+
+	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
+	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -42,12 +43,12 @@ func (h *header) Init() tea.Cmd {
 
 func (h *header) Update(msg tea.Msg) (Component, tea.Cmd) {
 	var cmd tea.Cmd
-	
+
 	// Let the provider handle the message
 	if h.provider != nil {
 		cmd = h.provider.HandleHeaderUpdate(msg)
 	}
-	
+
 	return h, cmd
 }
 
@@ -70,7 +71,7 @@ func (h *header) View() string {
 	// Brand section
 	var brandName, appName string
 	var status map[string]interface{}
-	
+
 	if h.provider != nil {
 		brandName = h.provider.GetBrandName()
 		appName = h.provider.GetAppName()
@@ -80,18 +81,18 @@ func (h *header) View() string {
 		appName = "CRUSH UI"
 		status = make(map[string]interface{})
 	}
-	
+
 	b.WriteString(t.S().Base.Foreground(t.Secondary).Render(brandName))
 	b.WriteString(gap)
 	b.WriteString(styles.ApplyBoldForegroundGrad(appName, t.Secondary, t.Primary))
 	b.WriteString(gap)
-	
+
 	// Add debug info to status if needed
 	debugInfo := styles.DebugInfo("Header", h.width, h.height)
 	if debugInfo != "" {
 		status["debug"] = debugInfo
 	}
-	
+
 	availDetailWidth := h.width - leftPadding - rightPadding - lipgloss.Width(b.String()) - minDiags
 	details := h.renderDetails(status, availDetailWidth)
 
@@ -113,7 +114,6 @@ func (h *header) View() string {
 
 	return t.S().Base.Padding(0, rightPadding, 0, leftPadding).Render(b.String())
 }
-
 
 func (h *header) renderDetails(status map[string]interface{}, availWidth int) string {
 	t := styles.CurrentTheme()

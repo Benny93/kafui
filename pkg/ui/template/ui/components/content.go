@@ -1,9 +1,8 @@
 package components
 
 import (
-	"ui_example/ui/providers"
-	"ui_example/ui/styles"
-
+	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
+	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -41,18 +40,18 @@ func (c *content) Init() tea.Cmd {
 
 func (c *content) Update(msg tea.Msg) (Component, tea.Cmd) {
 	var cmd tea.Cmd
-	
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Handle content-specific key events here
 		_ = msg
 	}
-	
+
 	// Let the provider handle the message
 	if c.provider != nil {
 		cmd = c.provider.HandleContentUpdate(msg)
 	}
-	
+
 	return c, cmd
 }
 
@@ -62,13 +61,13 @@ func (c *content) View() string {
 	}
 
 	t := styles.CurrentTheme()
-	
+
 	// Get content from provider
 	var content string
 	if c.provider != nil {
 		content = c.provider.RenderContent(c.width, c.height)
 	}
-	
+
 	// Add debug info at the bottom
 	debugInfo := styles.DebugInfo("Content", c.width, c.height)
 	if content != "" && debugInfo != "" {
@@ -76,7 +75,7 @@ func (c *content) View() string {
 	} else if debugInfo != "" {
 		content = debugInfo
 	}
-	
+
 	// Apply styling based on focus state
 	var style lipgloss.Style
 	if c.focused {
@@ -88,15 +87,14 @@ func (c *content) View() string {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(t.Border)
 	}
-	
+
 	// Size and render the content area
 	return style.
-		Width(c.width - 2). // Account for border
+		Width(c.width - 2).   // Account for border
 		Height(c.height - 2). // Account for border
 		Padding(1).
 		Render(content)
 }
-
 
 func (c *content) SetSize(width, height int) tea.Cmd {
 	c.width = width

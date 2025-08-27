@@ -5,14 +5,14 @@ import (
 	"log"
 	"os"
 
+	"github.com/Benny93/kafui/pkg/ui//ui"
 	tea "github.com/charmbracelet/bubbletea"
-	"ui_example/ui"
 )
 
 func main() {
 	// Use the new reusable app with default configuration
 	app := ui.NewDefaultApp()
-	
+
 	p := tea.NewProgram(
 		app,
 		tea.WithAltScreen(),
