@@ -4,6 +4,7 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/template/ui/components"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
+	"github.com/charmbracelet/bubbles/help"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -23,11 +24,13 @@ type ReusableApp struct {
 	header  components.Header
 	content components.Content
 	sidebar components.Sidebar
+	footer  *components.Footer
 
 	config      *providers.AppConfig
 	sizeMode    styles.SizeMode
 	showSidebar bool
 	showDebug   bool
+	showHelp    bool
 }
 
 // NewReusableApp creates a new app with the provided configuration
@@ -66,10 +69,12 @@ func NewReusableApp(config *providers.AppConfig) *ReusableApp {
 		header:      header,
 		content:     content,
 		sidebar:     sidebar,
+		footer:      components.NewFooter(),
 		config:      config,
 		showSidebar: config.ShowSidebarByDefault,
 		sizeMode:    styles.SizeModeNormal,
 		showDebug:   false,
+		showHelp:    false,
 	}
 }
 
@@ -96,6 +101,7 @@ func (a *ReusableApp) Init() tea.Cmd {
 		a.header.Init(),
 		a.content.Init(),
 		a.sidebar.Init(),
+		a.footer.Init(),
 	)
 }
 
@@ -120,6 +126,7 @@ func (a *ReusableApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, a.header.SetSize(a.width, DefaultHeaderHeight))
 		cmds = append(cmds, a.updateContentSize())
 		cmds = append(cmds, a.updateSidebarSize())
+		cmds = append(cmds, a.footer.SetSize(a.width, 1)) // Footer height is 1
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -138,6 +145,9 @@ func (a *ReusableApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "ctrl+d":
 			a.showDebug = !a.showDebug
+		case "?":
+			a.showHelp = !a.showHelp
+			a.footer.ToggleShowAll()
 		}
 	}
 
@@ -153,6 +163,10 @@ func (a *ReusableApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	sidebarComponent, cmd := a.sidebar.Update(msg)
 	a.sidebar = sidebarComponent.(components.Sidebar)
+	cmds = append(cmds, cmd)
+
+	footerComponent, cmd := a.footer.Update(msg)
+	a.footer = footerComponent.(*components.Footer)
 	cmds = append(cmds, cmd)
 
 	return a, tea.Batch(cmds...)
@@ -201,6 +215,12 @@ func (a *ReusableApp) View() string {
 	}
 
 	components = append(components, mainContent)
+
+	// Footer
+	footer := a.footer.View()
+	if footer != "" {
+		components = append(components, footer)
+	}
 
 	// Combine all components
 	return lipgloss.JoinVertical(
@@ -253,4 +273,15 @@ func (a *ReusableApp) updateSidebarSize() tea.Cmd {
 	}
 
 	return tea.Batch(cmds...)
+}
+
+// SetKeyMap sets the key map for the footer help display
+func (a *ReusableApp) SetKeyMap(keyMap help.KeyMap) {
+	a.footer.SetKeyMap(keyMap)
+}
+
+// ToggleHelp toggles the help display
+func (a *ReusableApp) ToggleHelp() {
+	a.showHelp = !a.showHelp
+	a.footer.ToggleShowAll()
 }

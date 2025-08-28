@@ -10,6 +10,59 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// KeyMap defines the key bindings for the main page
+type KeyMap struct {
+	Search         key.Binding
+	SwitchResource key.Binding
+	Select         key.Binding
+	Back           key.Binding
+	Quit           key.Binding
+	Help           key.Binding
+}
+
+// ShortHelp returns keybindings to be shown in the mini help view. It's part
+// of the key.Map interface.
+func (k KeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Help, k.Search, k.SwitchResource, k.Quit}
+}
+
+// FullHelp returns keybindings for the expanded help view. It's part of the
+// key.Map interface.
+func (k KeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Search, k.SwitchResource, k.Select}, // first column
+		{k.Back, k.Help, k.Quit},               // second column
+	}
+}
+
+// DefaultKeyMap contains the default key bindings for the main page
+var DefaultKeyMap = KeyMap{
+	Search: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "search"),
+	),
+	SwitchResource: key.NewBinding(
+		key.WithKeys(":"),
+		key.WithHelp(":", "switch resource"),
+	),
+	Select: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "select"),
+	),
+	Back: key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "back/cancel"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("q", "ctrl+c"),
+		key.WithHelp("q", "quit"),
+	),
+	Help: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "toggle help"),
+	),
+}
+
 // NewModel creates a new main page model (alias for NewMainPageModel for compatibility)
 func NewModel(dataSource api.KafkaDataSource) *MainPageModel {
 	return NewMainPageModel(dataSource)
@@ -25,7 +78,7 @@ func NewMainPageModel(dataSource api.KafkaDataSource) *MainPageModel {
 	sidebarSections := []providers.SidebarSection{
 		NewResourcesSection(dataSource),
 		NewClusterInfoSection(dataSource),
-		NewShortcutsSection(),
+		// Note: Removing ShortcutsSection as it will be shown in footer instead
 	}
 	
 	// Create app configuration using template providers
@@ -40,6 +93,9 @@ func NewMainPageModel(dataSource api.KafkaDataSource) *MainPageModel {
 	
 	// Create the reusable app with our Kafui providers
 	reusableApp := templateui.NewReusableApp(config)
+	
+	// Set the key map for the footer
+	reusableApp.SetKeyMap(DefaultKeyMap)
 	
 	return &MainPageModel{
 		dataSource:      dataSource,
@@ -94,28 +150,14 @@ func (m *MainPageModel) GetTitle() string {
 
 // GetHelp implements the Page interface
 func (m *MainPageModel) GetHelp() []key.Binding {
-	// Return key bindings for help
+	// Return key bindings for help using the DefaultKeyMap
 	return []key.Binding{
-		key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "search"),
-		),
-		key.NewBinding(
-			key.WithKeys(":"),
-			key.WithHelp(":", "switch resource"),
-		),
-		key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "select"),
-		),
-		key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "back/cancel"),
-		),
-		key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q", "quit"),
-		),
+		DefaultKeyMap.Search,
+		DefaultKeyMap.SwitchResource,
+		DefaultKeyMap.Select,
+		DefaultKeyMap.Back,
+		DefaultKeyMap.Quit,
+		DefaultKeyMap.Help,
 	}
 }
 
