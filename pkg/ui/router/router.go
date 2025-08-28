@@ -141,10 +141,10 @@ func (r *Router) createPage(pageID string, data interface{}) core.Page {
 	case "topic":
 		// Extract topic data
 		if navData, ok := data.(*NavigationData); ok {
-			return topicpage.NewModel(r.dataSource, navData.TopicName, navData.Topic)
+			return topicpage.NewTopicPageModel(r.dataSource, navData.TopicName, navData.Topic)
 		}
 		// Fallback with empty data
-		return topicpage.NewModel(r.dataSource, "unknown", api.Topic{})
+		return topicpage.NewTopicPageModel(r.dataSource, "unknown", api.Topic{})
 		
 	case "message_detail", "detail":
 		// Extract message data - handle both "message_detail" and legacy "detail" page IDs
@@ -212,6 +212,16 @@ func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if topic, ok := data["topic"].(api.Topic); ok {
 					navData.Topic = topic
 				}
+				if resourceItem, ok := data["resourceItem"].(shared.ResourceItem); ok {
+					navData.ResourceItem = resourceItem
+				}
+				if resourceType, ok := data["resourceType"].(string); ok {
+					navData.ResourceType = resourceType
+				}
+			case *NavigationData:
+				navData = data
+			case NavigationData:
+				navData = &data
 			case api.Message:
 				navData.Message = data
 			case shared.ResourceItem:
@@ -220,6 +230,54 @@ func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		
 		return r, r.NavigateTo(msg.PageID, navData)
+	}
+	
+	// Check if current page wants to handle navigation
+	shared.DebugLog("Router.Update: Checking if current page (%s) wants to handle navigation for message type: %T", r.currentPage, msg)
+	newPage, navCmd := currentPage.HandleNavigation(msg)
+	
+	// If page returned a navigation command, execute it to get the actual message
+	if navCmd != nil {
+		shared.DebugLog("Router.Update: Page returned navigation command, executing it")
+		if cmdMsg := navCmd(); cmdMsg != nil {
+			shared.DebugLog("Router.Update: Navigation command returned message: %T", cmdMsg)
+			// Process the returned message (likely a PageChangeMsg) recursively
+			return r.Update(cmdMsg)
+		}
+	}
+	
+	// If page navigation occurred (page returned different page), update router state
+	if newPage != currentPage {
+		// Page navigation occurred, update router state
+		if newPage != nil {
+			// Determine the page ID from the new page
+			newPageID := newPage.GetID()
+			
+			// Add current page to history
+			if r.currentPage != "" && r.currentPage != newPageID {
+				r.history = append(r.history, r.currentPage)
+			}
+			
+			// Blur current page
+			if r.currentPage != "" {
+				if currentPageObj, exists := r.pages[r.currentPage]; exists {
+					currentPageObj.OnBlur()
+				}
+			}
+			
+			// Update router state
+			r.currentPage = newPageID
+			r.pages[newPageID] = newPage
+			
+			// Set dimensions if we have them
+			if r.width > 0 && r.height > 0 {
+				newPage.SetDimensions(r.width, r.height)
+			}
+			
+			// Focus the new page
+			focusCmd := newPage.OnFocus()
+			return r, focusCmd
+		}
 	}
 	
 	// Delegate to current page

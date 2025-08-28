@@ -348,6 +348,7 @@ func (k *KafuiContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
 			}
 		case "enter":
 			// Handle resource selection
+			shared.DebugLog("KafuiContentProvider: Enter key pressed, calling handleResourceSelection()")
 			return k.handleResourceSelection()
 		}
 
@@ -513,18 +514,26 @@ func (k *KafuiContentProvider) handleTopicList(msg TopicListMsg) {
 
 func (k *KafuiContentProvider) handleResourceSelection() tea.Cmd {
 	selectedItem := k.GetSelectedResourceItem()
+	shared.DebugLog("KafuiContentProvider.handleResourceSelection: selectedItem = %v", selectedItem)
 	if selectedItem == nil {
+		shared.DebugLog("KafuiContentProvider.handleResourceSelection: selectedItem is nil, returning nil")
 		return nil
 	}
+
+	resourceType := k.currentResource.GetType()
+	resourceID := k.getItemID(selectedItem)
+	shared.DebugLog("KafuiContentProvider.handleResourceSelection: Creating NavigateToResourceDetailMsg with ResourceType=%v, ResourceID=%s", resourceType, resourceID)
 
 	// Navigate to resource detail page
 	// This would typically send a navigation message
 	return func() tea.Msg {
-		return NavigateToResourceDetailMsg{
-			ResourceType: k.currentResource.GetType(),
-			ResourceID:   k.getItemID(selectedItem),
+		msg := NavigateToResourceDetailMsg{
+			ResourceType: resourceType,
+			ResourceID:   resourceID,
 			Item:         selectedItem,
 		}
+		shared.DebugLog("KafuiContentProvider.handleResourceSelection: Returning NavigateToResourceDetailMsg: %+v", msg)
+		return msg
 	}
 }
 

@@ -29,7 +29,7 @@ func Init(cfgOption string, useMock bool) {
 }
 
 func OpenUI(dataSource api.KafkaDataSource) {
-	p := tea.NewProgram(initialModel(dataSource), tea.WithAltScreen())
+	p := tea.NewProgram(initialModelWithRouter(dataSource), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running program: %v\n", err)
 	}

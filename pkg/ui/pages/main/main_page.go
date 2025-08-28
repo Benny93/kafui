@@ -3,6 +3,7 @@ package mainpage
 import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/charmbracelet/bubbles/key"
@@ -123,12 +124,63 @@ func (m *MainPageModel) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
 	// Handle navigation messages like NavigateToResourceDetailMsg
 	switch msg := msg.(type) {
 	case NavigateToResourceDetailMsg:
-		// This would typically create and return a new resource detail page
-		// For now, just return self
-		_ = msg
-		return m, nil
+		shared.DebugLog("MainPageModel.HandleNavigation: Received NavigateToResourceDetailMsg: %+v", msg)
+		// Convert to PageChangeMsg for router to handle
+		cmd := m.createPageChangeCommand(msg)
+		shared.DebugLog("MainPageModel.HandleNavigation: Created PageChangeCommand, returning it")
+		return m, cmd
 	}
+	shared.DebugLog("MainPageModel.HandleNavigation: Received unhandled message type: %T", msg)
 	return m, nil
+}
+
+// createPageChangeCommand creates a PageChangeMsg for the router to handle
+func (m *MainPageModel) createPageChangeCommand(msg NavigateToResourceDetailMsg) tea.Cmd {
+	switch msg.ResourceType {
+	case TopicResourceType:
+		// Get topic details for navigation
+		topicName := msg.ResourceID
+		topics, err := m.dataSource.GetTopics()
+		var topicDetails api.Topic
+		if err != nil || topics == nil {
+			// If we can't get topics, create a basic topic structure
+			topicDetails = api.Topic{
+				NumPartitions:     1,
+				ReplicationFactor: 1,
+				ConfigEntries:     make(map[string]*string),
+			}
+		} else if details, exists := topics[topicName]; exists {
+			topicDetails = details
+		} else {
+			// Topic not found, create a basic topic structure
+			topicDetails = api.Topic{
+				NumPartitions:     1,
+				ReplicationFactor: 1,
+				ConfigEntries:     make(map[string]*string),
+			}
+		}
+		
+		// Create navigation data
+		navData := map[string]interface{}{
+			"name":  topicName,
+			"topic": topicDetails,
+		}
+		
+		// Return PageChangeMsg for router to handle
+		return core.NewPageChangeMsg("topic", navData)
+		
+	case ConsumerGroupResourceType:
+		// Navigate to consumer group page (not implemented yet)
+		return nil
+	case SchemaResourceType:
+		// Navigate to schema page (not implemented yet)
+		return nil
+	case ContextResourceType:
+		// Navigate to context page (not implemented yet)
+		return nil
+	default:
+		return nil
+	}
 }
 
 // OnFocus implements the Page interface

@@ -9,6 +9,8 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
+	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
+	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
@@ -17,7 +19,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Model represents the topic page state
+// Model represents the topic page state (original business logic model)
 type Model struct {
 	// Data
 	dataSource   api.KafkaDataSource
@@ -69,7 +71,7 @@ type Model struct {
 	connectionStatus string
 }
 
-// NewModel creates a new topic page model
+// NewModel creates a new topic page model (original business logic)
 func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api.Topic) *Model {
 	// Initialize message table
 	columns := []table.Column{
@@ -139,7 +141,9 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 	return m
 }
 
-// Init implements the Page interface
+// Business logic methods for the original Model
+
+// Init implements the Page interface for the original model
 func (m *Model) Init() tea.Cmd {
 	shared.DebugLog("Init page topic")
 
@@ -153,17 +157,17 @@ func (m *Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// Update implements the Page interface
+// Update implements the Page interface for the original model
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m.handlers.Handle(m, msg)
 }
 
-// View implements the Page interface
+// View implements the Page interface for the original model
 func (m *Model) View() string {
 	return m.view.Render(m)
 }
 
-// SetDimensions implements the Page interface
+// SetDimensions implements the Page interface for the original model
 func (m *Model) SetDimensions(width, height int) {
 	m.dimensions = core.Dimensions{Width: width, Height: height}
 
@@ -176,12 +180,12 @@ func (m *Model) SetDimensions(width, height int) {
 	m.view.SetDimensions(width, height)
 }
 
-// GetID implements the Page interface
+// GetID implements the Page interface for the original model
 func (m *Model) GetID() string {
 	return "topic"
 }
 
-// GetTitle implements the Page interface
+// GetTitle implements the Page interface for the original model
 func (m *Model) GetTitle() string {
 	if m.topicName != "" {
 		return fmt.Sprintf("Topic: %s", m.topicName)
@@ -189,7 +193,7 @@ func (m *Model) GetTitle() string {
 	return "Topic"
 }
 
-// GetHelp implements the Page interface
+// GetHelp implements the Page interface for the original model
 func (m *Model) GetHelp() []key.Binding {
 	if m.keys != nil {
 		return m.keys.GetKeyBindings()
@@ -197,13 +201,13 @@ func (m *Model) GetHelp() []key.Binding {
 	return []key.Binding{}
 }
 
-// HandleNavigation implements the Page interface
+// HandleNavigation implements the Page interface for the original model
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
 	// Handle page-specific navigation
 	return m, nil
 }
 
-// OnFocus implements the Page interface
+// OnFocus implements the Page interface for the original model
 func (m *Model) OnFocus() tea.Cmd {
 	// Handle focus gain - restart consumption if it was paused
 	if m.paused {
@@ -212,7 +216,7 @@ func (m *Model) OnFocus() tea.Cmd {
 	return nil
 }
 
-// OnBlur implements the Page interface
+// OnBlur implements the Page interface for the original model
 func (m *Model) OnBlur() tea.Cmd {
 	// Handle focus loss - pause consumption when page loses focus
 	if m.consuming && !m.paused {
@@ -225,8 +229,6 @@ func (m *Model) OnBlur() tea.Cmd {
 func (m *Model) GetTopicName() string {
 	return m.topicName
 }
-
-// Business logic methods
 
 // GetSelectedMessage returns the currently selected message
 func (m *Model) GetSelectedMessage() *api.Message {
@@ -445,4 +447,171 @@ func truncateString(s string, maxLen int) string {
 		return "..."
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// View handles rendering for the topic page (minimal implementation for compatibility)
+type View struct {
+	dimensions core.Dimensions
+}
+
+// NewView creates a new View instance
+func NewView() *View {
+	return &View{}
+}
+
+// Render renders the topic page view (minimal implementation)
+func (v *View) Render(model *Model) string {
+	// For the template-based topic page, this is not used
+	// The rendering is handled by the template providers
+	return "Topic page (template-based rendering)"
+}
+
+// SetDimensions updates the view dimensions
+func (v *View) SetDimensions(width, height int) {
+	v.dimensions = core.Dimensions{Width: width, Height: height}
+}
+
+// TopicPageModel wraps the ReusableApp with topic-specific providers
+type TopicPageModel struct {
+	// Original topic model for business logic
+	topicModel *Model
+	
+	// Template system
+	reusableApp     *templateui.ReusableApp
+	contentProvider *TopicContentProvider
+}
+
+// NewTopicPageModel creates a new topic page model using the template system
+func NewTopicPageModel(dataSource api.KafkaDataSource, topicName string, topicDetails api.Topic) *TopicPageModel {
+	// Create the original topic model for business logic
+	topicModel := NewModel(dataSource, topicName, topicDetails)
+	
+	// Create topic-specific providers
+	contentProvider := NewTopicContentProvider(topicModel)
+	headerProvider := NewTopicHeaderDataProvider(topicModel)
+	
+	// Create sidebar sections
+	sidebarSections := []providers.SidebarSection{
+		NewTopicInfoSection(topicModel),
+		NewMessageInfoSection(topicModel),
+		NewConsumptionControlSection(topicModel),
+		NewTopicShortcutsSection(topicModel),
+	}
+	
+	// Create app configuration using template providers
+	config := &providers.AppConfig{
+		ContentProvider:             contentProvider,
+		HeaderDataProvider:          headerProvider,
+		SidebarSections:            sidebarSections,
+		ShowSidebarByDefault:       true,
+		CompactModeWidthBreakpoint: 120,
+		CompactModeHeightBreakpoint: 30,
+	}
+	
+	// Create the reusable app with our topic providers
+	reusableApp := templateui.NewReusableApp(config)
+	
+	return &TopicPageModel{
+		topicModel:      topicModel,
+		reusableApp:     reusableApp,
+		contentProvider: contentProvider,
+	}
+}
+
+// Init implements the Page interface
+func (t *TopicPageModel) Init() tea.Cmd {
+	// Initialize both the topic model and the reusable app
+	topicCmd := t.topicModel.Init()
+	appCmd := t.reusableApp.Init()
+	return tea.Batch(topicCmd, appCmd)
+}
+
+// Update implements the Page interface
+func (t *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	
+	// Update the topic model first to handle business logic
+	updatedTopicModel, topicCmd := t.topicModel.Update(msg)
+	if updatedModel, ok := updatedTopicModel.(*Model); ok {
+		t.topicModel = updatedModel
+	}
+	if topicCmd != nil {
+		cmds = append(cmds, topicCmd)
+	}
+	
+	// Update the reusable app
+	updatedApp, appCmd := t.reusableApp.Update(msg)
+	if updatedReusableApp, ok := updatedApp.(*templateui.ReusableApp); ok {
+		t.reusableApp = updatedReusableApp
+	}
+	if appCmd != nil {
+		cmds = append(cmds, appCmd)
+	}
+	
+	return t, tea.Batch(cmds...)
+}
+
+// View implements the Page interface
+func (t *TopicPageModel) View() string {
+	return t.reusableApp.View()
+}
+
+// SetDimensions implements the Page interface
+func (t *TopicPageModel) SetDimensions(width, height int) {
+	// Update both models
+	t.topicModel.SetDimensions(width, height)
+	t.reusableApp.Update(tea.WindowSizeMsg{Width: width, Height: height})
+}
+
+// GetID implements the Page interface
+func (t *TopicPageModel) GetID() string {
+	return "topic"
+}
+
+// GetTitle implements the Page interface
+func (t *TopicPageModel) GetTitle() string {
+	return t.topicModel.GetTitle()
+}
+
+// GetHelp implements the Page interface
+func (t *TopicPageModel) GetHelp() []key.Binding {
+	return t.topicModel.GetHelp()
+}
+
+// HandleNavigation implements the Page interface
+func (t *TopicPageModel) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
+	// Handle topic-specific navigation
+	switch msg := msg.(type) {
+	case NavigateToMessageDetailMsg:
+		// This would typically create and return a message detail page
+		// For now, just return self
+		_ = msg
+		return t, nil
+	}
+	return t, nil
+}
+
+// OnFocus implements the Page interface
+func (t *TopicPageModel) OnFocus() tea.Cmd {
+	return t.topicModel.OnFocus()
+}
+
+// OnBlur implements the Page interface
+func (t *TopicPageModel) OnBlur() tea.Cmd {
+	return t.topicModel.OnBlur()
+}
+
+// GetTopicName returns the current topic name
+func (t *TopicPageModel) GetTopicName() string {
+	return t.topicModel.GetTopicName()
+}
+
+// GetSelectedMessage returns the currently selected message
+func (t *TopicPageModel) GetSelectedMessage() *api.Message {
+	return t.topicModel.GetSelectedMessage()
+}
+
+// Navigation message for message detail selection
+type NavigateToMessageDetailMsg struct {
+	Message api.Message
 }
