@@ -5,7 +5,6 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 	"github.com/charmbracelet/bubbles/help"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -252,7 +251,7 @@ func (a *ReusableApp) updateContentSize() tea.Cmd {
 	if a.showSidebar {
 		contentWidth = a.width - DefaultSideBarWidth
 	}
-	contentHeight := a.height - DefaultHeaderHeight
+	contentHeight := a.height - DefaultHeaderHeight - 2
 
 	return a.content.SetSize(contentWidth, contentHeight)
 }
@@ -262,7 +261,7 @@ func (a *ReusableApp) updateSidebarSize() tea.Cmd {
 		return nil
 	}
 
-	sidebarHeight := a.height - DefaultHeaderHeight - 2
+	sidebarHeight := a.height - DefaultHeaderHeight - 4
 	if a.showDebug {
 		sidebarHeight -= 1 // Account for debug info
 	}

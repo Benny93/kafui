@@ -73,30 +73,30 @@ func NewMainPageModel(dataSource api.KafkaDataSource) *MainPageModel {
 	// Create Kafui-specific providers
 	contentProvider := NewKafuiContentProvider(dataSource)
 	headerProvider := NewKafuiHeaderDataProvider(dataSource)
-	
+
 	// Create sidebar sections - convert to template provider interface
 	sidebarSections := []providers.SidebarSection{
 		NewResourcesSection(dataSource),
 		NewClusterInfoSection(dataSource),
 		// Note: Removing ShortcutsSection as it will be shown in footer instead
 	}
-	
+
 	// Create app configuration using template providers
 	config := &providers.AppConfig{
 		ContentProvider:             contentProvider,
 		HeaderDataProvider:          headerProvider,
-		SidebarSections:            sidebarSections,
-		ShowSidebarByDefault:       true,
-		CompactModeWidthBreakpoint: 120,
+		SidebarSections:             sidebarSections,
+		ShowSidebarByDefault:        true,
+		CompactModeWidthBreakpoint:  120,
 		CompactModeHeightBreakpoint: 30,
 	}
-	
+
 	// Create the reusable app with our Kafui providers
 	reusableApp := templateui.NewReusableApp(config)
-	
+
 	// Set the key map for the footer
 	reusableApp.SetKeyMap(DefaultKeyMap)
-	
+
 	return &MainPageModel{
 		dataSource:      dataSource,
 		reusableApp:     reusableApp,
@@ -110,7 +110,6 @@ type MainPageModel struct {
 	reusableApp     *templateui.ReusableApp
 	contentProvider *KafuiContentProvider
 }
-
 
 // Init implements the Page interface
 func (m *MainPageModel) Init() tea.Cmd {
@@ -201,16 +200,16 @@ func (m *MainPageModel) createPageChangeCommand(msg NavigateToResourceDetailMsg)
 				ConfigEntries:     make(map[string]*string),
 			}
 		}
-		
+
 		// Create navigation data
 		navData := map[string]interface{}{
 			"name":  topicName,
 			"topic": topicDetails,
 		}
-		
+
 		// Return PageChangeMsg for router to handle
 		return core.NewPageChangeMsg("topic", navData)
-		
+
 	case ConsumerGroupResourceType:
 		// Navigate to consumer group page (not implemented yet)
 		return nil
@@ -241,4 +240,3 @@ func (m *MainPageModel) OnBlur() tea.Cmd {
 func (m *MainPageModel) GetSelectedResourceItem() interface{} {
 	return m.contentProvider.GetSelectedResourceItem()
 }
-

@@ -34,7 +34,7 @@ func (f *Footer) Update(msg tea.Msg) (Component, tea.Cmd) {
 		f.height = msg.Height
 		f.help.Width = msg.Width
 	}
-	
+
 	return f, nil
 }
 
@@ -43,7 +43,7 @@ func (f *Footer) View() string {
 	if f.keyMap == nil {
 		return ""
 	}
-	
+
 	return f.help.View(f.keyMap)
 }
 
