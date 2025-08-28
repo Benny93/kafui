@@ -78,9 +78,19 @@ func (r *Router) navigateToWithoutHistory(pageID string, data interface{}) tea.C
 	
 	r.currentPage = pageID
 	
-	// Focus the new page
+	// Initialize and focus the new page
 	if page, exists := r.pages[pageID]; exists {
-		return page.OnFocus()
+		initCmd := page.Init()
+		focusCmd := page.OnFocus()
+		
+		// Return both commands batched together
+		if initCmd != nil && focusCmd != nil {
+			return tea.Batch(initCmd, focusCmd)
+		} else if initCmd != nil {
+			return initCmd
+		} else if focusCmd != nil {
+			return focusCmd
+		}
 	}
 	
 	return nil
