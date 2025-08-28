@@ -35,7 +35,7 @@ type Model struct {
 	
 	// Legacy fields for backward compatibility (will be removed)
 	currentPage        pageType
-	mainPage           *mainpage.Model
+	mainPage           *mainpage.MainPageModel
 	topicPage          *topicpage.Model
 	detailPage         *messagedetailpage.Model
 	resourceDetailPage *resourcedetailpage.Model
@@ -212,7 +212,7 @@ func (m Model) updateLegacy(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.currentPage == mainPageType {
 				// Let the main page handle the Back key
 				mainModel, cmd := m.mainPage.Update(msg)
-				if updatedMainPage, ok := mainModel.(*mainpage.Model); ok {
+				if updatedMainPage, ok := mainModel.(*mainpage.MainPageModel); ok {
 					m.mainPage = updatedMainPage
 				}
 				return m, cmd
@@ -341,7 +341,7 @@ func (m Model) updateLegacy(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case mainPageType:
 		var cmd tea.Cmd
 		mainModel, cmd := m.mainPage.Update(msg)
-		if updatedMainPage, ok := mainModel.(*mainpage.Model); ok {
+		if updatedMainPage, ok := mainModel.(*mainpage.MainPageModel); ok {
 			m.mainPage = updatedMainPage
 		}
 		cmds = append(cmds, cmd)
