@@ -23,7 +23,8 @@ func TestViewportFunctionality(t *testing.T) {
 	}
 
 	// Create new model
-	model := NewModel(mockDS, "test-topic", testMessage)
+	pageModel := NewMessageDetailPageModel(mockDS, "test-topic", testMessage)
+		model := pageModel.GetDetailModel()
 
 	// Verify model is initialized
 	assert.NotNil(t, model)

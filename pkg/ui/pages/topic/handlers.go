@@ -118,15 +118,17 @@ func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (
 	shared.DebugLog("Added message to model, total messages: %d", len(model.messages))
 
 	// Continue listening for more messages if we're still consuming
-	var cmds []tea.Cmd
+	// Use a reasonable interval to prevent UI freezing
 	if model.consuming && model.msgChan != nil {
 		shared.DebugLog("Continuing to listen for more messages")
-		cmds = append(cmds, model.consumption.ListenForMessages(model.msgChan))
+		return model, tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
+			return ContinuousListenMsg{}
+		})
 	} else {
 		shared.DebugLog("Not continuing to listen - consuming: %t, msgChan set: %t", model.consuming, model.msgChan != nil)
 	}
 
-	return model, tea.Batch(cmds...)
+	return model, nil
 }
 
 func (h *Handlers) handleStartConsuming(model *Model, msg StartConsumingMsg) (tea.Model, tea.Cmd) {
@@ -179,7 +181,11 @@ func (h *Handlers) handleContinuousListen(model *Model, msg ContinuousListenMsg)
 	// Continue listening for messages if we're still consuming
 	if model.consuming && model.msgChan != nil {
 		shared.DebugLog("Continuing to listen for messages")
-		return model, model.consumption.ListenForMessages(model.msgChan)
+		// Instead of immediately calling ListenForMessages again, we use a longer interval
+		// to prevent tight loops that can freeze the UI
+		return model, tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
+			return ContinuousListenMsg{}
+		})
 	}
 	shared.DebugLog("Not continuing to listen - consumption stopped or channel unavailable")
 	return model, nil
@@ -187,8 +193,11 @@ func (h *Handlers) handleContinuousListen(model *Model, msg ContinuousListenMsg)
 
 func (h *Handlers) handleContinuousErrorListen(model *Model, msg ContinuousErrorListenMsg) (tea.Model, tea.Cmd) {
 	// Continue listening for errors if we're still consuming
+	// Use a reasonable interval to prevent UI freezing
 	if model.consuming && model.errChan != nil {
-		return model, model.consumption.ListenForErrors(model.errChan)
+		return model, tea.Tick(time.Second*1, func(t time.Time) tea.Msg {
+			return ContinuousErrorListenMsg{}
+		})
 	}
 	return model, nil
 }
@@ -281,15 +290,17 @@ func (h *Handlers) handleSpinnerTick(model *Model, msg spinner.TickMsg) (tea.Mod
 // Helper methods
 
 // scheduleMessagePolling creates a command to poll for new messages periodically
+// Use a longer interval to prevent UI freezing
 func (h *Handlers) scheduleMessagePolling() tea.Cmd {
-	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Second*1, func(t time.Time) tea.Msg {
 		return ContinuousListenMsg{}
 	})
 }
 
 // scheduleErrorPolling creates a command to poll for errors periodically
+// Use a longer interval to prevent UI freezing
 func (h *Handlers) scheduleErrorPolling() tea.Cmd {
-	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
 		return ContinuousErrorListenMsg{}
 	})
 }

@@ -30,7 +30,7 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 	if tableHeight < 5 {
 		tableHeight = 5 // Minimum table height
 	}
-	
+
 	// Update table dimensions
 	t.model.messageTable.SetHeight(tableHeight)
 	t.model.messageTable.SetWidth(width - 4) // Account for content padding
@@ -48,14 +48,14 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 	}
 
 	var content strings.Builder
-	
+
 	// Add search bar if in search mode
 	if t.model.searchMode {
 		searchBar := t.renderSearchBar(width)
 		content.WriteString(searchBar)
 		content.WriteString("\n\n")
 	}
-	
+
 	// Render the main table
 	content.WriteString(t.model.messageTable.View())
 
@@ -66,17 +66,17 @@ func (t *TopicContentProvider) renderSearchBar(width int) string {
 	searchStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("205")).
 		Bold(true)
-	
+
 	promptStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240"))
-	
+
 	// Create search prompt
 	prompt := searchStyle.Render("🔍 Search: ")
 	searchValue := t.model.searchInput.Value()
 	if searchValue == "" {
 		searchValue = promptStyle.Render("(type to filter messages...)")
 	}
-	
+
 	// Add cursor if in search mode
 	cursor := ""
 	if t.model.searchMode {
@@ -84,12 +84,12 @@ func (t *TopicContentProvider) renderSearchBar(width int) string {
 			Foreground(lipgloss.Color("205")).
 			Render("█")
 	}
-	
+
 	searchLine := prompt + searchValue + cursor
-	
+
 	// Add help text
 	helpText := promptStyle.Render("ESC to cancel • Enter to search")
-	
+
 	return searchLine + "\n" + helpText
 }
 
@@ -112,7 +112,7 @@ func (t *TopicContentProvider) renderEmpty() string {
 	style := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("243")).
 		Padding(1)
-	
+
 	if t.model.consuming {
 		return style.Render(fmt.Sprintf("%s Waiting for messages...", t.model.spinner.View()))
 	}
@@ -151,12 +151,12 @@ func (t *TopicHeaderDataProvider) GetAppName() string {
 
 func (t *TopicHeaderDataProvider) GetStatusData() map[string]interface{} {
 	return map[string]interface{}{
-		"time":       t.model.lastUpdate.Format("15:04:05"),
-		"status":     t.model.connectionStatus,
-		"topic":      t.model.topicName,
-		"messages":   len(t.model.messages),
-		"consuming":  t.model.consuming,
-		"paused":     t.model.paused,
+		"time":      t.model.lastUpdate.Format("15:04:05"),
+		"status":    t.model.connectionStatus,
+		"topic":     t.model.topicName,
+		"messages":  len(t.model.messages),
+		"consuming": t.model.consuming,
+		"paused":    t.model.paused,
 	}
 }
 

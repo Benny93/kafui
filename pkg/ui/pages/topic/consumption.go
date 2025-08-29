@@ -8,12 +8,6 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
-
-
-
-
-
-
 )
 
 // ConsumptionController handles message consumption logic and error recovery
@@ -130,7 +124,7 @@ func (cc *ConsumptionController) ListenForMessages(msgChan <-chan api.Message) t
 			// Return the message via the command
 			return MessageConsumedMsg{Message: msg}
 
-		case <-time.After(time.Millisecond * 100): // Timeout to prevent blocking
+		case <-time.After(time.Millisecond * 500): // Increased timeout to prevent excessive polling
 			// No message received, continue listening
 			shared.DebugLog("ListenForMessages timeout, continuing...")
 			return ContinuousListenMsg{}
@@ -153,7 +147,7 @@ func (cc *ConsumptionController) ListenForErrors(errChan <-chan error) tea.Cmd {
 			// Return the error via the command
 			return ErrorMsg(err)
 
-		case <-time.After(time.Millisecond * 100): // Timeout to prevent blocking
+		case <-time.After(time.Second * 1): // Increased timeout to prevent excessive polling
 			// No error received, continue listening
 			return ContinuousErrorListenMsg{}
 		}

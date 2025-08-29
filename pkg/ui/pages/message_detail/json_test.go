@@ -22,7 +22,8 @@ func TestJSONPrettyPrinting(t *testing.T) {
 	}
 
 	// Create new model
-	model := NewModel(mockDS, "test-topic", testMessage)
+	pageModel := NewMessageDetailPageModel(mockDS, "test-topic", testMessage)
+		model := pageModel.GetDetailModel()
 
 	// Test JSON key formatting
 	model.displayFormat.KeyFormat = "json"
@@ -63,7 +64,8 @@ func TestNonJSONContent(t *testing.T) {
 	}
 
 	// Create new model
-	model := NewModel(mockDS, "test-topic", testMessage)
+	pageModel := NewMessageDetailPageModel(mockDS, "test-topic", testMessage)
+		model := pageModel.GetDetailModel()
 
 	// Test that non-JSON content is returned as-is
 	model.displayFormat.KeyFormat = "json"

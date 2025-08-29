@@ -54,62 +54,62 @@ func (r *Router) NavigateTo(pageID string, data interface{}) tea.Cmd {
 
 // navigateToWithoutHistory switches to a specific page without adding to history
 func (r *Router) navigateToWithoutHistory(pageID string, data interface{}) tea.Cmd {
-    shared.DebugLog("navigateToWithoutHistory: pageID=%s", pageID)
-    
-    // Initialize page if needed
-    if _, exists := r.pages[pageID]; !exists {
-        shared.DebugLog("Creating new page: %s", pageID)
-        page := r.createPage(pageID, data)
-        if page != nil {
-            r.pages[pageID] = page
-            shared.DebugLog("Created page: %s", pageID)
-            
-            // Set dimensions if we have them
-            if r.width > 0 && r.height > 0 {
-                page.SetDimensions(r.width, r.height)
-                shared.DebugLog("Set dimensions for page: %s (%dx%d)", pageID, r.width, r.height)
-            }
-        } else {
-            shared.DebugLog("Failed to create page: %s", pageID)
-            // If page creation failed, don't navigate
-            return nil
-        }
-    }
-    
-    // Blur current page
-    if r.currentPage != "" {
-        if currentPage, exists := r.pages[r.currentPage]; exists {
-            shared.DebugLog("Blurring current page: %s", r.currentPage)
-            currentPage.OnBlur()
-        }
-    }
-    
-    r.currentPage = pageID
-    shared.DebugLog("Set current page to: %s", pageID)
-    
-    // Initialize and focus the new page
-    if page, exists := r.pages[pageID]; exists {
-        shared.DebugLog("Initializing and focusing page: %s", pageID)
-        initCmd := page.Init()
-        focusCmd := page.OnFocus()
-        shared.DebugLog("Page %s - initCmd: %v, focusCmd: %v", pageID, initCmd != nil, focusCmd != nil)
-        
-        // Return both commands batched together
-        if initCmd != nil && focusCmd != nil {
-            shared.DebugLog("Returning batched commands for page: %s", pageID)
-            return tea.Batch(initCmd, focusCmd)
-        } else if initCmd != nil {
-            shared.DebugLog("Returning init command for page: %s", pageID)
-            return initCmd
-        } else if focusCmd != nil {
-            shared.DebugLog("Returning focus command for page: %s", pageID)
-            return focusCmd
-        } else {
-            shared.DebugLog("No commands to return for page: %s", pageID)
-        }
-    }
-    
-    return nil
+	shared.DebugLog("navigateToWithoutHistory: pageID=%s", pageID)
+
+	// Initialize page if needed
+	if _, exists := r.pages[pageID]; !exists {
+		shared.DebugLog("Creating new page: %s", pageID)
+		page := r.createPage(pageID, data)
+		if page != nil {
+			r.pages[pageID] = page
+			shared.DebugLog("Created page: %s", pageID)
+
+			// Set dimensions if we have them
+			if r.width > 0 && r.height > 0 {
+				page.SetDimensions(r.width, r.height)
+				shared.DebugLog("Set dimensions for page: %s (%dx%d)", pageID, r.width, r.height)
+			}
+		} else {
+			shared.DebugLog("Failed to create page: %s", pageID)
+			// If page creation failed, don't navigate
+			return nil
+		}
+	}
+
+	// Blur current page
+	if r.currentPage != "" {
+		if currentPage, exists := r.pages[r.currentPage]; exists {
+			shared.DebugLog("Blurring current page: %s", r.currentPage)
+			currentPage.OnBlur()
+		}
+	}
+
+	r.currentPage = pageID
+	shared.DebugLog("Set current page to: %s", pageID)
+
+	// Initialize and focus the new page
+	if page, exists := r.pages[pageID]; exists {
+		shared.DebugLog("Initializing and focusing page: %s", pageID)
+		initCmd := page.Init()
+		focusCmd := page.OnFocus()
+		shared.DebugLog("Page %s - initCmd: %v, focusCmd: %v", pageID, initCmd != nil, focusCmd != nil)
+
+		// Return both commands batched together
+		if initCmd != nil && focusCmd != nil {
+			shared.DebugLog("Returning batched commands for page: %s", pageID)
+			return tea.Batch(initCmd, focusCmd)
+		} else if initCmd != nil {
+			shared.DebugLog("Returning init command for page: %s", pageID)
+			return initCmd
+		} else if focusCmd != nil {
+			shared.DebugLog("Returning focus command for page: %s", pageID)
+			return focusCmd
+		} else {
+			shared.DebugLog("No commands to return for page: %s", pageID)
+		}
+	}
+
+	return nil
 }
 
 // Back navigates to the previous page
@@ -175,10 +175,10 @@ func (r *Router) createPage(pageID string, data interface{}) core.Page {
 	case "message_detail", "detail":
 		// Extract message data - handle both "message_detail" and legacy "detail" page IDs
 		if navData, ok := data.(*NavigationData); ok {
-			return messagedetailpage.NewModel(r.dataSource, navData.TopicName, navData.Message)
+			return messagedetailpage.NewMessageDetailPageModel(r.dataSource, navData.TopicName, navData.Message)
 		}
 		// Fallback with empty data
-		return messagedetailpage.NewModel(r.dataSource, "unknown", api.Message{})
+		return messagedetailpage.NewMessageDetailPageModel(r.dataSource, "unknown", api.Message{})
 
 	case "resource_detail":
 		// Extract resource data

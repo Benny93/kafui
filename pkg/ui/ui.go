@@ -37,7 +37,7 @@ type Model struct {
 	currentPage        pageType
 	mainPage           *mainpage.MainPageModel
 	topicPage          *topicpage.Model
-	detailPage         *messagedetailpage.Model
+	detailPage         *messagedetailpage.MessageDetailPageModel
 	resourceDetailPage *resourcedetailpage.Model
 }
 
@@ -294,7 +294,7 @@ func (m Model) updateLegacy(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.topicPage != nil {
 						topicName = m.topicPage.GetTopicName()
 					}
-					m.detailPage = messagedetailpage.NewModel(m.dataSource, topicName, messageData)
+					m.detailPage = messagedetailpage.NewMessageDetailPageModel(m.dataSource, topicName, messageData)
 				}
 			}
 		}
@@ -360,7 +360,7 @@ func (m Model) updateLegacy(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.detailPage != nil {
 			var cmd tea.Cmd
 			detailModel, cmd := m.detailPage.Update(msg)
-			if updatedDetailPage, ok := detailModel.(*messagedetailpage.Model); ok {
+			if updatedDetailPage, ok := detailModel.(*messagedetailpage.MessageDetailPageModel); ok {
 				m.detailPage = updatedDetailPage
 			}
 			cmds = append(cmds, cmd)

@@ -10,10 +10,9 @@
 // - Supporting content search within the message
 //
 // Architecture:
-// - detail_page.go: Core page model and business logic
-// - keys.go: Key binding definitions and key handling logic
-// - handlers.go: Event handling for different message types
-// - view.go: View rendering and UI layout logic
+// - message_detail_page.go: Core page model using template system
+// - message_detail_providers.go: Content and data providers for template system
+// - detail_page_test.go: Tests for the message detail functionality
 //
 // This modular structure separates concerns and improves maintainability
 // while following the established UI patterns in the Kafui application.
