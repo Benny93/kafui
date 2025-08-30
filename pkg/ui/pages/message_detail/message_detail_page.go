@@ -313,9 +313,9 @@ func (m *Model) OnBlur() tea.Cmd {
 
 // KeyMap defines the key bindings for the message detail page
 type KeyMap struct {
+	NextTab        key.Binding
+	PrevTab        key.Binding
 	ToggleFormat   key.Binding
-	ToggleHeaders  key.Binding
-	ToggleMetadata key.Binding
 	SwitchFocus    key.Binding
 	Copy           key.Binding
 	ScrollUp       key.Binding
@@ -327,38 +327,34 @@ type KeyMap struct {
 
 // ShortHelp returns keybindings to be shown in the mini help view
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.ToggleFormat, k.Copy, k.Back, k.Quit}
+	return []key.Binding{k.Help, k.NextTab, k.ToggleFormat, k.Copy, k.Back, k.Quit}
 }
 
 // FullHelp returns keybindings for the expanded help view
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.ToggleFormat, k.ToggleHeaders, k.ToggleMetadata, k.SwitchFocus}, // first column
-		{k.Copy, k.ScrollUp, k.ScrollDown, k.Back, k.Help, k.Quit},         // second column
+		{k.NextTab, k.ToggleFormat, k.SwitchFocus}, // first column
+		{k.Copy, k.ScrollUp, k.ScrollDown, k.Back, k.Help, k.Quit}, // second column
 	}
 }
 
 // DefaultKeyMap contains the default key bindings for the message detail page
 var DefaultKeyMap = KeyMap{
+	NextTab: key.NewBinding(
+		key.WithKeys("shift+tab"),
+		key.WithHelp("shift+tab", "next tab"),
+	),
 	ToggleFormat: key.NewBinding(
 		key.WithKeys("f"),
-		key.WithHelp("f", "toggle format"),
-	),
-	ToggleHeaders: key.NewBinding(
-		key.WithKeys("h"),
-		key.WithHelp("h", "toggle headers"),
-	),
-	ToggleMetadata: key.NewBinding(
-		key.WithKeys("m"),
-		key.WithHelp("m", "toggle metadata"),
+		key.WithHelp("f", "toggle format (Content tab)"),
 	),
 	SwitchFocus: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "switch focus"),
+		key.WithHelp("tab", "switch focus (Content tab)"),
 	),
 	Copy: key.NewBinding(
 		key.WithKeys("c"),
-		key.WithHelp("c", "copy focused content"),
+		key.WithHelp("c", "copy content (Content tab)"),
 	),
 	ScrollUp: key.NewBinding(
 		key.WithKeys("up", "k"),
@@ -490,9 +486,9 @@ func (m *MessageDetailPageModel) GetTitle() string {
 func (m *MessageDetailPageModel) GetHelp() []key.Binding {
 	// Return key bindings for help using the DefaultKeyMap
 	return []key.Binding{
+		DefaultKeyMap.NextTab,
+		DefaultKeyMap.PrevTab,
 		DefaultKeyMap.ToggleFormat,
-		DefaultKeyMap.ToggleHeaders,
-		DefaultKeyMap.ToggleMetadata,
 		DefaultKeyMap.SwitchFocus,
 		DefaultKeyMap.Copy,
 		AdditionalKeys.Refresh,
