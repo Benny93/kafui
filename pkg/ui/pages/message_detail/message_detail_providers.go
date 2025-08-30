@@ -204,7 +204,35 @@ func (m *MessageDetailContentProvider) renderActiveTabContent(width, height int)
 
 // renderSplitContentTab renders the key and value editors side by side
 func (m *MessageDetailContentProvider) renderSplitContentTab() string {
-	return lipgloss.JoinHorizontal(lipgloss.Top, m.keyEditor.View(), m.valueEditor.View())
+	// Get schema information
+	schemaInfo := m.model.GetSchemaInfo()
+	
+	// Prepare key section with schema name
+	keySchemaName := "Schema: N/A"
+	if schemaInfo != nil && schemaInfo.KeySchema != nil && schemaInfo.KeySchema.RecordName != "" {
+		keySchemaName = fmt.Sprintf("Schema: %s", schemaInfo.KeySchema.RecordName)
+	}
+	
+	// Prepare value section with schema name
+	valueSchemaName := "Schema: N/A"
+	if schemaInfo != nil && schemaInfo.ValueSchema != nil && schemaInfo.ValueSchema.RecordName != "" {
+		valueSchemaName = fmt.Sprintf("Schema: %s", schemaInfo.ValueSchema.RecordName)
+	}
+	
+	// Create styled schema headers
+	schemaHeaderStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Italic(true).
+		Padding(0, 1)
+	
+	keySchemaHeader := schemaHeaderStyle.Render(keySchemaName)
+	valueSchemaHeader := schemaHeaderStyle.Render(valueSchemaName)
+	
+	// Combine schema headers with editors
+	keySection := lipgloss.JoinVertical(lipgloss.Left, keySchemaHeader, m.keyEditor.View())
+	valueSection := lipgloss.JoinVertical(lipgloss.Left, valueSchemaHeader, m.valueEditor.View())
+	
+	return lipgloss.JoinHorizontal(lipgloss.Top, keySection, valueSection)
 }
 
 // sizeEditors updates the size of all editors based on current dimensions
