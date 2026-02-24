@@ -120,6 +120,20 @@ func (kp *KafkaDataSourceMock) preloadSchemas() {
 			RecordName: "AuditLogEntry",
 			Schema:     `{"type":"record","name":"AuditLogEntry","namespace":"com.example.audit","fields":[{"name":"eventId","type":"string"},{"name":"actor","type":"string"},{"name":"action","type":"string"},{"name":"resource","type":"string"},{"name":"timestamp","type":"long"},{"name":"details","type":"string"}]}`,
 		},
+		"9": {
+			ID:         9,
+			Subject:    "dbserver1.inventory.products.Key",
+			Version:    1,
+			RecordName: "ProductsKey",
+			Schema:     `{"type":"record","name":"ProductsKey","namespace":"dbserver1.inventory","fields":[{"name":"id","type":"string"}]}`,
+		},
+		"10": {
+			ID:         10,
+			Subject:    "dbserver1.inventory.products.Value",
+			Version:    1,
+			RecordName: "ProductsValue",
+			Schema:     `{"type":"record","name":"ProductsValue","namespace":"dbserver1.inventory","fields":[{"name":"id","type":"string"},{"name":"name","type":"string"},{"name":"quantity","type":"int"},{"name":"price","type":"double"},{"name":"created_at","type":"long"}]}`,
+		},
 	}
 
 	for id, schema := range schemas {
@@ -185,10 +199,11 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	// Get or initialize message counter for this topic
+	// Get or initialize message counter for this topic with realistic starting offset
 	kp.counterMutex.Lock()
 	if _, exists := kp.messageCounters[topicName]; !exists {
-		kp.messageCounters[topicName] = 0
+		// Initialize with realistic Kafka offsets (millions to billions for active topics)
+		kp.messageCounters[topicName] = kp.getRealisticStartingOffset(topicName)
 	}
 	kp.counterMutex.Unlock()
 
@@ -251,6 +266,9 @@ func (kp *KafkaDataSourceMock) generateMessage(topicName string) api.Message {
 	var msg api.Message
 
 	switch {
+	case strings.Contains(topicName, "dbserver"):
+		// CDC topics - these typically have key schemas (check first!)
+		msg = kp.generateCDCEvent(topicName, counter)
 	case strings.Contains(topicName, "user"):
 		msg = kp.generateUserEvent(topicName, counter)
 	case strings.Contains(topicName, "order"):
@@ -269,11 +287,43 @@ func (kp *KafkaDataSourceMock) generateMessage(topicName string) api.Message {
 		msg = kp.generateGenericEvent(topicName, counter)
 	}
 
-	// Assign partition based on counter (simulates Kafka partitioning)
-	msg.Partition = int32(counter % 5) // 5 partitions
-	msg.Offset = counter
+	// Simulate realistic Kafka offsets with partition-based variation
+	// Real Kafka offsets are per-partition and can be very large
+	partition := int32(kp.randSource.Intn(5))
+	msg.Partition = partition
+	// Add partition-based offset variation (each partition has independent offsets)
+	// Offsets in real Kafka can be in the millions/billions for active topics
+	msg.Offset = counter + int64(partition)*1000000
 
 	return msg
+}
+
+// getRealisticStartingOffset returns a realistic starting offset based on topic name
+func (kp *KafkaDataSourceMock) getRealisticStartingOffset(topicName string) int64 {
+	// Different topics have different message volumes
+	// Production-like topics have higher offsets
+	baseOffsets := map[string]int64{
+		"clickstream":  15678234, // High-volume analytics
+		"order":        8921560,  // Active order processing
+		"payment":      4567890,  // Payment transactions
+		"user":         1254300,  // User events
+		"inventory":    2345670,  // Inventory updates
+		"notification": 6789010,  // Notifications
+		"audit":        23456780, // Audit logs (long retention)
+		"dbserver":     456780,   // CDC data
+	}
+
+	// Find matching topic type
+	for topicType, baseOffset := range baseOffsets {
+		if strings.Contains(topicName, topicType) {
+			// Add some randomness (±10%)
+			variation := int64(kp.randSource.Intn(20) - 10)
+			return baseOffset + (baseOffset * variation / 100)
+		}
+	}
+
+	// Default offset for unknown topics
+	return 100000 + int64(kp.randSource.Intn(50000))
 }
 
 // generateUserEvent creates user-related events
@@ -301,8 +351,6 @@ func (kp *KafkaDataSourceMock) generateUserEvent(topicName string, counter int64
 	return api.Message{
 		Key:           fmt.Sprintf("user-%d", counter),
 		Value:         value,
-		Offset:        counter,
-		Partition:     int32(counter % 5),
 		KeySchemaID:   "",
 		ValueSchemaID: "1",
 		Headers: []api.MessageHeader{
@@ -342,8 +390,6 @@ func (kp *KafkaDataSourceMock) generateOrderEvent(topicName string, counter int6
 	return api.Message{
 		Key:           fmt.Sprintf("order-%d", counter),
 		Value:         value,
-		Offset:        counter,
-		Partition:     int32(counter % 5),
 		KeySchemaID:   "",
 		ValueSchemaID: "2",
 		Headers: []api.MessageHeader{
@@ -377,8 +423,6 @@ func (kp *KafkaDataSourceMock) generatePaymentEvent(topicName string, counter in
 	return api.Message{
 		Key:           fmt.Sprintf("payment-%d", counter),
 		Value:         value,
-		Offset:        counter,
-		Partition:     int32(counter % 5),
 		KeySchemaID:   "",
 		ValueSchemaID: "5",
 		Headers: []api.MessageHeader{
@@ -421,8 +465,6 @@ func (kp *KafkaDataSourceMock) generateClickstreamEvent(topicName string, counte
 	return api.Message{
 		Key:           fmt.Sprintf("session-%d", counter),
 		Value:         value,
-		Offset:        counter,
-		Partition:     int32(counter % 5),
 		KeySchemaID:   "",
 		ValueSchemaID: "6",
 		Headers: []api.MessageHeader{
@@ -453,8 +495,6 @@ func (kp *KafkaDataSourceMock) generateNotificationEvent(topicName string, count
 	return api.Message{
 		Key:           fmt.Sprintf("notif-%d", counter),
 		Value:         value,
-		Offset:        counter,
-		Partition:     int32(counter % 5),
 		KeySchemaID:   "",
 		ValueSchemaID: "7",
 		Headers: []api.MessageHeader{
@@ -491,8 +531,6 @@ func (kp *KafkaDataSourceMock) generateAuditEvent(topicName string, counter int6
 	return api.Message{
 		Key:           fmt.Sprintf("audit-%d", counter),
 		Value:         value,
-		Offset:        counter,
-		Partition:     int32(counter % 5),
 		KeySchemaID:   "",
 		ValueSchemaID: "8",
 		Headers: []api.MessageHeader{
@@ -524,14 +562,68 @@ func (kp *KafkaDataSourceMock) generateInventoryEvent(topicName string, counter 
 	return api.Message{
 		Key:           fmt.Sprintf("%s:prod-%d", warehouse, counter%500),
 		Value:         value,
-		Offset:        counter,
-		Partition:     int32(counter % 5),
 		KeySchemaID:   "4",
 		ValueSchemaID: "",
 		Headers: []api.MessageHeader{
 			{Key: "correlationId", Value: fmt.Sprintf("inv-corr-%d", counter)},
 			{Key: "source", Value: "inventory-service"},
 			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+		},
+	}
+}
+
+// generateCDCEvent creates CDC (Change Data Capture) events with key schemas
+func (kp *KafkaDataSourceMock) generateCDCEvent(topicName string, counter int64) api.Message {
+	// Parse topic name to extract table info (e.g., dbserver1.inventory.products)
+	parts := strings.Split(topicName, ".")
+	operation := []string{"c", "u", "d"}[counter%3] // create, update, delete
+
+	timestamp := time.Now().Add(-time.Duration(kp.randSource.Intn(7200)) * time.Second)
+
+	var key, value string
+
+	if len(parts) >= 3 {
+		// CDC key format (Debezium style)
+		key = fmt.Sprintf(`{"schema": {"type": "struct", "fields": [{"type": "string", "field": "id"}], "optional": false}, "payload": {"id": %d}}`, counter)
+
+		// CDC value format (Debezium style)
+		value = fmt.Sprintf(`{
+			"schema": {
+				"type": "struct",
+				"fields": [
+					{"type": "string", "field": "id"},
+					{"type": "string", "field": "name"},
+					{"type": "int32", "field": "quantity"},
+					{"type": "double", "field": "price"},
+					{"type": "long", "field": "created_at"}
+				]
+			},
+			"payload": {
+				"id": "%d",
+				"name": "Product %d",
+				"quantity": %d,
+				"price": %.2f,
+				"created_at": %d
+			}
+		}`, counter, counter%1000, 100+kp.randSource.Intn(900),
+			float64(10+kp.randSource.Intn(500)), timestamp.UnixMilli())
+	} else {
+		// Fallback for non-standard CDC topics
+		key = fmt.Sprintf(`{"id": %d}`, counter)
+		value = fmt.Sprintf(`{"data": "record-%d", "timestamp": %d}`, counter, timestamp.UnixMilli())
+	}
+
+	return api.Message{
+		Key:           key,
+		Value:         value,
+		KeySchemaID:   "9",  // CDC key schema
+		ValueSchemaID: "10", // CDC value schema
+		Headers: []api.MessageHeader{
+			{Key: "correlationId", Value: fmt.Sprintf("cdc-corr-%d", counter)},
+			{Key: "source", Value: "debezium-connector"},
+			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+			{Key: "op", Value: operation},
+			{Key: "ts_ms", Value: fmt.Sprintf("%d", timestamp.UnixMilli())},
 		},
 	}
 }
@@ -553,8 +645,6 @@ func (kp *KafkaDataSourceMock) generateGenericEvent(topicName string, counter in
 	return api.Message{
 		Key:           fmt.Sprintf("key-%d", counter),
 		Value:         value,
-		Offset:        counter,
-		Partition:     int32(counter % 5),
 		KeySchemaID:   "",
 		ValueSchemaID: "",
 		Headers: []api.MessageHeader{
@@ -640,7 +730,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("604800000"), // 7 days
+			"retention.ms":   strPtr("604800000"), // 7 days
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 125430,
@@ -651,7 +741,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("2592000000"), // 30 days
+			"retention.ms":   strPtr("2592000000"), // 30 days
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 892156,
@@ -662,7 +752,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("7776000000"), // 90 days
+			"retention.ms":   strPtr("7776000000"), // 90 days
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 456789,
@@ -673,7 +763,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("604800000"),
+			"retention.ms":   strPtr("604800000"),
 			"cleanup.policy": strPtr("compact"),
 		},
 		MessageCount: 234567,
@@ -684,7 +774,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("259200000"), // 3 days
+			"retention.ms":   strPtr("259200000"), // 3 days
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 678901,
@@ -695,7 +785,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 2,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("86400000"), // 1 day
+			"retention.ms":   strPtr("86400000"), // 1 day
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 15678234,
@@ -706,7 +796,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("31536000000"), // 1 year
+			"retention.ms":   strPtr("31536000000"), // 1 year
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 2345678,
@@ -718,7 +808,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("604800000"),
+			"retention.ms":   strPtr("604800000"),
 			"cleanup.policy": strPtr("compact"),
 		},
 		MessageCount: 45678,
@@ -729,7 +819,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("604800000"),
+			"retention.ms":   strPtr("604800000"),
 			"cleanup.policy": strPtr("compact"),
 		},
 		MessageCount: 23456,
@@ -741,7 +831,7 @@ func generateDevTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("2592000000"), // 30 days
+			"retention.ms":   strPtr("2592000000"), // 30 days
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 1234,
@@ -760,7 +850,7 @@ func generateTestTopics() map[string]api.Topic {
 		ReplicationFactor: 2,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("86400000"), // 1 day
+			"retention.ms":   strPtr("86400000"), // 1 day
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 5000,
@@ -771,7 +861,7 @@ func generateTestTopics() map[string]api.Topic {
 		ReplicationFactor: 2,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("604800000"), // 7 days
+			"retention.ms":   strPtr("604800000"), // 7 days
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 25000,
@@ -782,7 +872,7 @@ func generateTestTopics() map[string]api.Topic {
 		ReplicationFactor: 2,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("604800000"),
+			"retention.ms":   strPtr("604800000"),
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 12000,
@@ -816,8 +906,8 @@ func generateProdTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("604800000"),
-			"cleanup.policy": strPtr("delete"),
+			"retention.ms":        strPtr("604800000"),
+			"cleanup.policy":      strPtr("delete"),
 			"min.insync.replicas": strPtr("2"),
 		},
 		MessageCount: 45678901,
@@ -828,8 +918,8 @@ func generateProdTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("2592000000"),
-			"cleanup.policy": strPtr("delete"),
+			"retention.ms":        strPtr("2592000000"),
+			"cleanup.policy":      strPtr("delete"),
 			"min.insync.replicas": strPtr("2"),
 		},
 		MessageCount: 123456789,
@@ -840,8 +930,8 @@ func generateProdTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("7776000000"),
-			"cleanup.policy": strPtr("delete"),
+			"retention.ms":        strPtr("7776000000"),
+			"cleanup.policy":      strPtr("delete"),
 			"min.insync.replicas": strPtr("2"),
 		},
 		MessageCount: 67890123,
@@ -852,8 +942,8 @@ func generateProdTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("604800000"),
-			"cleanup.policy": strPtr("compact"),
+			"retention.ms":        strPtr("604800000"),
+			"cleanup.policy":      strPtr("compact"),
 			"min.insync.replicas": strPtr("2"),
 		},
 		MessageCount: 34567890,
@@ -864,8 +954,8 @@ func generateProdTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("259200000"),
-			"cleanup.policy": strPtr("delete"),
+			"retention.ms":        strPtr("259200000"),
+			"cleanup.policy":      strPtr("delete"),
 			"min.insync.replicas": strPtr("2"),
 		},
 		MessageCount: 89012345,
@@ -876,7 +966,7 @@ func generateProdTopics() map[string]api.Topic {
 		ReplicationFactor: 2,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("86400000"),
+			"retention.ms":   strPtr("86400000"),
 			"cleanup.policy": strPtr("delete"),
 		},
 		MessageCount: 987654321,
@@ -887,8 +977,8 @@ func generateProdTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("31536000000"),
-			"cleanup.policy": strPtr("delete"),
+			"retention.ms":        strPtr("31536000000"),
+			"cleanup.policy":      strPtr("delete"),
 			"min.insync.replicas": strPtr("2"),
 		},
 		MessageCount: 234567890,
@@ -899,8 +989,8 @@ func generateProdTopics() map[string]api.Topic {
 		ReplicationFactor: 3,
 		ReplicaAssignment: map[int32][]int32{},
 		ConfigEntries: map[string]*string{
-			"retention.ms": strPtr("86400000"),
-			"cleanup.policy": strPtr("delete"),
+			"retention.ms":        strPtr("86400000"),
+			"cleanup.policy":      strPtr("delete"),
 			"min.insync.replicas": strPtr("2"),
 		},
 		MessageCount: 12345678,

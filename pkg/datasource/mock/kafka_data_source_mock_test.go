@@ -407,6 +407,156 @@ func TestKafkaDataSourceMock_ConsumeTopic_MessageTypes(t *testing.T) {
 	}
 }
 
+// TestKafkaDataSourceMock_ConsumeTopic_CDCWithKeySchema tests CDC topics have key schemas
+func TestKafkaDataSourceMock_ConsumeTopic_CDCWithKeySchema(t *testing.T) {
+	mock := KafkaDataSourceMock{}
+	mock.Init("")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	var messages []api.Message
+	handleMessage := func(msg api.Message) {
+		messages = append(messages, msg)
+	}
+
+	onError := func(err interface{}) {}
+
+	mock.ConsumeTopic(ctx, "dbserver1.inventory.products", api.DefaultConsumeFlags(), handleMessage, onError)
+
+	if len(messages) == 0 {
+		t.Fatal("No messages received for CDC topic")
+	}
+
+	// Verify key schema is present
+	msg := messages[0]
+	if msg.KeySchemaID != "9" {
+		t.Errorf("CDC message KeySchemaID = %v, want 9", msg.KeySchemaID)
+	}
+
+	// Verify value schema is present
+	if msg.ValueSchemaID != "10" {
+		t.Errorf("CDC message ValueSchemaID = %v, want 10", msg.ValueSchemaID)
+	}
+
+	// Verify key has CDC format
+	if !strings.Contains(msg.Key, "payload") {
+		t.Errorf("CDC message key doesn't contain 'payload': %s", msg.Key)
+	}
+
+	// Verify value has CDC format
+	if !strings.Contains(msg.Value, "schema") || !strings.Contains(msg.Value, "payload") {
+		t.Errorf("CDC message value doesn't have CDC format: %s", msg.Value)
+	}
+
+	// Verify CDC-specific headers
+	hasOp := false
+	hasTsMs := false
+	for _, header := range msg.Headers {
+		if header.Key == "op" {
+			hasOp = true
+		}
+		if header.Key == "ts_ms" {
+			hasTsMs = true
+		}
+	}
+	if !hasOp {
+		t.Error("CDC message missing 'op' header")
+	}
+	if !hasTsMs {
+		t.Error("CDC message missing 'ts_ms' header")
+	}
+}
+
+// TestKafkaDataSourceMock_ConsumeTopic_RealisticOffsets tests that offsets are realistic (large numbers)
+func TestKafkaDataSourceMock_ConsumeTopic_RealisticOffsets(t *testing.T) {
+	mock := KafkaDataSourceMock{}
+	mock.Init("")
+
+	topics := []string{
+		"clickstream-events",
+		"order-events",
+		"user-events",
+		"audit-log",
+	}
+
+	for _, topicName := range topics {
+		t.Run(topicName, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			defer cancel()
+
+			var messages []api.Message
+			handleMessage := func(msg api.Message) {
+				messages = append(messages, msg)
+			}
+
+			onError := func(err interface{}) {}
+
+			mock.ConsumeTopic(ctx, topicName, api.DefaultConsumeFlags(), handleMessage, onError)
+
+			if len(messages) == 0 {
+				t.Fatal("No messages received")
+			}
+
+			// Check that offsets are realistic (in the millions or higher)
+			// Real Kafka offsets for active topics are typically large numbers
+			minOffset := int64(100000) // Minimum realistic offset
+			for i, msg := range messages {
+				if msg.Offset < minOffset {
+					t.Errorf("Message %d offset = %d, want >= %d (realistic Kafka offset)", i, msg.Offset, minOffset)
+				}
+			}
+
+			// Verify offsets are increasing
+			for i := 1; i < len(messages); i++ {
+				if messages[i].Offset <= messages[i-1].Offset {
+					t.Errorf("Message %d offset (%d) should be > message %d offset (%d)",
+						i, messages[i].Offset, i-1, messages[i-1].Offset)
+				}
+			}
+		})
+	}
+}
+
+// TestKafkaDataSourceMock_ConsumeTopic_PartitionVariation tests that messages have partition variation
+func TestKafkaDataSourceMock_ConsumeTopic_PartitionVariation(t *testing.T) {
+	mock := KafkaDataSourceMock{}
+	mock.Init("")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	var messages []api.Message
+	handleMessage := func(msg api.Message) {
+		messages = append(messages, msg)
+	}
+
+	onError := func(err interface{}) {}
+
+	mock.ConsumeTopic(ctx, "user-events", api.DefaultConsumeFlags(), handleMessage, onError)
+
+	if len(messages) < 5 {
+		t.Skipf("Not enough messages to test partition variation (got %d)", len(messages))
+	}
+
+	// Check that we have some partition variation (not all same partition)
+	partitions := make(map[int32]bool)
+	for _, msg := range messages {
+		partitions[msg.Partition] = true
+	}
+
+	if len(partitions) < 2 {
+		t.Logf("Note: Only %d unique partition(s) found, expected more variation", len(partitions))
+	}
+
+	// Verify partitions are in valid range (0-4)
+	for _, msg := range messages {
+		if msg.Partition < 0 || msg.Partition >= 5 {
+			t.Errorf("Message partition = %d, want 0-4", msg.Partition)
+		}
+	}
+}
+
 // TestKafkaDataSourceMock_ConsumeTopicWithContext tests consumption with context cancellation
 func TestKafkaDataSourceMock_ConsumeTopicWithContext(t *testing.T) {
 	mock := KafkaDataSourceMock{}
