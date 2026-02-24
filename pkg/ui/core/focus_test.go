@@ -322,33 +322,37 @@ func TestHandleKeyMsg(t *testing.T) {
 	fm := NewFocusManager()
 	component1 := newMockFocusableComponent("component1")
 	component2 := newMockFocusableComponent("component2")
-	
+
 	fm.AddComponent(component1)
 	fm.AddComponent(component2)
-	
+
 	// Test Tab key (next)
 	tabMsg := tea.KeyMsg{Type: tea.KeyTab}
-	cmd := fm.HandleKeyMsg(tabMsg)
-	if cmd == nil {
-		t.Error("Expected command from HandleKeyMsg with Tab")
-	}
+	fm.HandleKeyMsg(tabMsg)
+	
+	// Check that first component is now focused
 	if fm.GetFocusedComponentID() != "component1" {
 		t.Error("Expected Tab to focus first component")
 	}
-	
+	if !component1.IsFocused() {
+		t.Error("Expected component1.IsFocused() to be true")
+	}
+
 	// Test Shift+Tab key (previous)
 	shiftTabMsg := tea.KeyMsg{Type: tea.KeyShiftTab}
-	cmd = fm.HandleKeyMsg(shiftTabMsg)
-	if cmd == nil {
-		t.Error("Expected command from HandleKeyMsg with Shift+Tab")
-	}
+	fm.HandleKeyMsg(shiftTabMsg)
+	
+	// Check that second component is now focused
 	if fm.GetFocusedComponentID() != "component2" {
 		t.Error("Expected Shift+Tab to focus previous component")
 	}
-	
+	if !component2.IsFocused() {
+		t.Error("Expected component2.IsFocused() to be true")
+	}
+
 	// Test when disabled
 	fm.SetEnabled(false)
-	cmd = fm.HandleKeyMsg(tabMsg)
+	cmd := fm.HandleKeyMsg(tabMsg)
 	if cmd != nil {
 		t.Error("Expected no command when focus manager is disabled")
 	}

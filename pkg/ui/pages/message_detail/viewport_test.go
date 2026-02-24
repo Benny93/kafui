@@ -5,7 +5,6 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/datasource/mock"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -24,29 +23,26 @@ func TestViewportFunctionality(t *testing.T) {
 
 	// Create new model
 	pageModel := NewMessageDetailPageModel(mockDS, "test-topic", testMessage)
-		model := pageModel.GetDetailModel()
 
 	// Verify model is initialized
-	assert.NotNil(t, model)
+	assert.NotNil(t, pageModel)
 
-	// Check initial focus
-	assert.Equal(t, "value", model.focusedViewport)
+	// Check initial focus via detail model
+	detailModel := pageModel.GetDetailModel()
+	assert.Equal(t, "value", detailModel.focusedViewport)
 
 	// Test switching focus
-	model.SwitchFocus()
-	assert.Equal(t, "key", model.focusedViewport)
+	detailModel.SwitchFocus()
+	assert.Equal(t, "key", detailModel.focusedViewport)
 
-	model.SwitchFocus()
-	assert.Equal(t, "value", model.focusedViewport)
+	detailModel.SwitchFocus()
+	assert.Equal(t, "value", detailModel.focusedViewport)
 
-	// Test window size update
-	msg := tea.WindowSizeMsg{Width: 100, Height: 50}
-	updatedModel, cmd := model.Update(msg)
+	// Test SetDimensions
+	pageModel.SetDimensions(100, 50)
 
-	assert.IsType(t, &Model{}, updatedModel)
-	assert.Nil(t, cmd)
-
-	updatedDetailModel := updatedModel.(*Model)
+	// Check dimensions were updated
+	updatedDetailModel := pageModel.GetDetailModel()
 	assert.Equal(t, 100, updatedDetailModel.dimensions.Width)
 	assert.Equal(t, 50, updatedDetailModel.dimensions.Height)
 }

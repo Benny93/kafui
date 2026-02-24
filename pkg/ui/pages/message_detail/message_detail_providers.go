@@ -327,8 +327,8 @@ func (m *MessageDetailContentProvider) renderHeaders() string {
 	headers.WriteString("Headers:\n")
 	headers.WriteString("────────\n")
 
-	for key, value := range m.model.message.Headers {
-		headers.WriteString(fmt.Sprintf("%-20s: %s\n", key, value))
+	for _, header := range m.model.message.Headers {
+		headers.WriteString(fmt.Sprintf("%-20s: %s\n", header.Key, header.Value))
 	}
 
 	return headers.String()

@@ -3,6 +3,7 @@ package messagedetail
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -215,9 +216,23 @@ func (m *Model) CopyContent() error {
 	default:
 		content = m.GetFormattedValue()
 	}
-	
+
 	// Try to copy to clipboard
 	return clipboard.WriteAll(content)
+}
+
+// addLineNumbers adds line numbers to multi-line content
+func addLineNumbers(content string) string {
+	if content == "<null>" || content == "" {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	result := make([]string, len(lines))
+	for i, line := range lines {
+		result[i] = fmt.Sprintf("%4d %s", i+1, line)
+	}
+	return strings.Join(result, "\n")
 }
 
 // CopyContentWithFeedback copies content and returns a status message
