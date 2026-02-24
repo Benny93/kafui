@@ -197,14 +197,15 @@ func (k *Keys) handleBack(model *Model) tea.Cmd {
 		model.FilterMessages()
 		return nil
 	}
-	
-	// Return to main page - cancel consumption first
+
+	// Return to previous page - cancel consumption first
 	if model.cancelConsumption != nil {
 		model.cancelConsumption()
 	}
-	
+
+	// Use BackMsg to navigate back without adding to history
 	return func() tea.Msg {
-		return core.PageChangeMsg{PageID: "main"}
+		return core.BackMsg{}
 	}
 }
 

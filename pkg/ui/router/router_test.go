@@ -381,3 +381,97 @@ func TestCreatePageFallbacks(t *testing.T) {
 		})
 	}
 }
+
+// TestBackMsgHandling verifies that BackMsg doesn't add to history
+func TestBackMsgHandling(t *testing.T) {
+	dataSource := &mockDataSource{}
+	router := NewRouter(dataSource)
+
+	// Navigate: main -> topic -> message_detail
+	router.NavigateTo("main", nil)
+	router.NavigateTo("topic", &NavigationData{TopicName: "test-topic"})
+	router.NavigateTo("message_detail", &NavigationData{TopicName: "test-topic"})
+
+	// Verify initial history
+	initialHistory := router.GetHistory()
+	expectedInitialLen := 2 // [main, topic]
+	if len(initialHistory) != expectedInitialLen {
+		t.Errorf("Expected initial history length %d, got %d", expectedInitialLen, len(initialHistory))
+	}
+
+	// Simulate BackMsg (like pressing Esc on message detail)
+	backMsg := core.BackMsg{}
+	router.Update(backMsg)
+
+	// After back, should be on topic page
+	if router.GetCurrentPageID() != "topic" {
+		t.Errorf("Expected current page to be 'topic' after BackMsg, got '%s'", router.GetCurrentPageID())
+	}
+
+	// History should NOT have grown - it should have one less entry
+	historyAfterBack := router.GetHistory()
+	expectedAfterBackLen := 1 // [main]
+	if len(historyAfterBack) != expectedAfterBackLen {
+		t.Errorf("Expected history length %d after back, got %d. History: %v", expectedAfterBackLen, len(historyAfterBack), historyAfterBack)
+	}
+
+	// Now simulate going forward again: topic -> message_detail
+	router.NavigateTo("message_detail", &NavigationData{TopicName: "test-topic"})
+
+	// History should be: [main, topic]
+	historyAfterForward := router.GetHistory()
+	expectedAfterForwardLen := 2 // [main, topic]
+	if len(historyAfterForward) != expectedAfterForwardLen {
+		t.Errorf("Expected history length %d after forward, got %d. History: %v", expectedAfterForwardLen, len(historyAfterForward), historyAfterForward)
+	}
+
+	// Press Esc again (BackMsg)
+	router.Update(backMsg)
+
+	// Should be back on topic
+	if router.GetCurrentPageID() != "topic" {
+		t.Errorf("Expected current page to be 'topic' after second BackMsg, got '%s'", router.GetCurrentPageID())
+	}
+
+	// History should still be: [main] (not growing)
+	finalHistory := router.GetHistory()
+	expectedFinalLen := 1 // [main]
+	if len(finalHistory) != expectedFinalLen {
+		t.Errorf("Expected final history length %d, got %d. History: %v", expectedFinalLen, len(finalHistory), finalHistory)
+	}
+}
+
+// TestHistoryDoesNotGrow verifies that back-and-forth navigation doesn't create history loops
+func TestHistoryDoesNotGrow(t *testing.T) {
+	dataSource := &mockDataSource{}
+	router := NewRouter(dataSource)
+
+	// Navigate: main -> topic -> message_detail
+	router.NavigateTo("main", nil)
+	router.NavigateTo("topic", &NavigationData{TopicName: "test-topic"})
+	router.NavigateTo("message_detail", &NavigationData{TopicName: "test-topic"})
+
+	// Record baseline history length
+	baselineHistoryLen := len(router.GetHistory())
+
+	// Simulate multiple back-and-forth navigations
+	for i := 0; i < 5; i++ {
+		// Go back (Esc)
+		router.Update(core.BackMsg{})
+		if router.GetCurrentPageID() != "topic" {
+			t.Errorf("Iteration %d: Expected 'topic' after back, got '%s'", i, router.GetCurrentPageID())
+		}
+
+		// Go forward again
+		router.NavigateTo("message_detail", &NavigationData{TopicName: "test-topic"})
+		if router.GetCurrentPageID() != "message_detail" {
+			t.Errorf("Iteration %d: Expected 'message_detail' after forward, got '%s'", i, router.GetCurrentPageID())
+		}
+	}
+
+	// History should not have grown beyond the baseline
+	finalHistoryLen := len(router.GetHistory())
+	if finalHistoryLen != baselineHistoryLen {
+		t.Errorf("History grew from %d to %d after back-and-forth navigation. History: %v", baselineHistoryLen, finalHistoryLen, router.GetHistory())
+	}
+}

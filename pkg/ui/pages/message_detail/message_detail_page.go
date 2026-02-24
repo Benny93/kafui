@@ -522,10 +522,8 @@ func (m *MessageDetailPageModel) HandleNavigation(msg tea.Msg) (core.Page, tea.C
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
-			// Navigate back to topic page
-			return m, core.NewPageChangeMsg("topic", map[string]interface{}{
-				"name": m.topicName,
-			})
+			// Go back to previous page without adding to history
+			return m, func() tea.Msg { return core.BackMsg{} }
 		}
 	}
 	return m, nil

@@ -39,8 +39,9 @@ func NewKeys() *Keys {
 func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, k.bindings.Back):
+		// Go back to previous page without adding to history
 		return func() tea.Msg {
-			return PageChangeMsg{PageID: "main"}
+			return core.BackMsg{}
 		}
 	case key.Matches(msg, k.bindings.Quit):
 		return tea.Quit
@@ -54,12 +55,6 @@ func (k *Keys) GetKeyBindings() []key.Binding {
 		k.bindings.Back,
 		k.bindings.Quit,
 	}
-}
-
-// PageChangeMsg represents a page change message
-type PageChangeMsg struct {
-	PageID string
-	Data   interface{}
 }
 
 // Handlers manages event handling for the resource detail page

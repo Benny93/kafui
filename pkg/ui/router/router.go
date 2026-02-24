@@ -223,6 +223,10 @@ func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle navigation messages
 	switch msg := msg.(type) {
+	case core.BackMsg:
+		// Handle back navigation without adding to history
+		return r, r.Back()
+
 	case core.PageChangeMsg:
 		// Create navigation data from the message
 		var navData *NavigationData
