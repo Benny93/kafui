@@ -1,7 +1,14 @@
 # Project Structure Analysis
 
 ## Overview
-Kafui is a terminal-based UI application for Kafka management and monitoring written in Go. It uses a hybrid UI approach with **Bubble Tea** (Charm framework) as the primary TUI framework, while maintaining some **tview** components during migration. The application follows a modular, component-based architecture with clear separation of concerns.
+Kafui is a terminal-based UI application for Kafka management and monitoring written in Go. It uses the **Bubble Tea** framework (Charm) as its TUI framework with a modular, component-based architecture. The application features a modern MVU (Model-View-Update) pattern with reusable components, template-based page layouts, and comprehensive test coverage.
+
+**Key Technologies:**
+- **TUI Framework**: `github.com/charmbracelet/bubbletea` - Event-driven reactive UI
+- **Components**: `github.com/charmbracelet/bubbles` - Pre-built UI components (tables, text input, lists)
+- **Styling**: `github.com/charmbracelet/lipgloss` - Terminal styling and layout
+- **Kafka Client**: `github.com/IBM/sarama` - Apache Kafka client library
+- **CLI Framework**: `github.com/spf13/cobra` - Command-line interface framework
 
 ## Project Structure
 
@@ -36,164 +43,116 @@ kafui/
 │   │       ├── kafka_data_source_mock.go
 │   │       └── kafka_data_source_mock_test.go
 │   │
-│   ├── ui/                          # Bubble Tea UI layer (Modern)
-│   │   ├── ui.go                    # Root UI controller
-│   │   ├── ui_test.go
-│   │   ├── kafui.go                 # UI initialization
-│   │   ├── README.md                # Resource management documentation
-│   │   ├── UI_ARCHITECTURE.md       # Comprehensive UI architecture docs
-│   │   │
-│   │   ├── core/                    # Core UI interfaces and utilities
-│   │   │   ├── interfaces.go        # Page interface, Dimensions, Theme
-│   │   │   ├── interfaces_test.go
-│   │   │   ├── messages.go          # Centralized message types
-│   │   │   ├── keys.go              # Key binding utilities
-│   │   │   ├── keys_test.go
-│   │   │   ├── help.go              # Help system
-│   │   │   ├── help_test.go
-│   │   │   ├── focus.go             # Focus management
-│   │   │   ├── focus_test.go
-│   │   │   ├── styles.go            # Shared styles
-│   │   │   ├── utils.go             # Utility functions
-│   │   │   └── utils_test.go
-│   │   │
-│   │   ├── components/              # Reusable UI components
-│   │   │   ├── layout.go            # Responsive layout system
-│   │   │   ├── sidebar.go           # Sidebar component
-│   │   │   ├── footer.go            # Smart footer component
-│   │   │   ├── header.go            # Header component
-│   │   │   ├── main_content.go      # Main content area
-│   │   │   ├── search_bar.go        # Advanced search bar
-│   │   │   ├── json_content_view.go # JSON viewer with syntax highlighting
-│   │   │   ├── json_content_view_test.go
-│   │   │   ├── modal.go             # Modal dialogs
-│   │   │   ├── styles.go            # Component styles
-│   │   │   ├── fuzzy.go             # Fuzzy matching engine
-│   │   │   ├── fuzzy_matching_test.go
-│   │   │   ├── example_usage.go     # Usage examples
-│   │   │   └── README.md
-│   │   │
-│   │   ├── pages/                   # Modular page implementations
-│   │   │   │
-│   │   │   ├── main/                # Main resource browser page
-│   │   │   │   ├── main_page.go     # Core page logic
-│   │   │   │   ├── main_page_test.go
-│   │   │   │   ├── handlers.go      # Event handling
-│   │   │   │   ├── keys.go          # Key bindings
-│   │   │   │   ├── view.go          # View rendering
-│   │   │   │   ├── types.go         # Data structures
-│   │   │   │   ├── resource_manager.go # Resource management
-│   │   │   │   ├── sidebar_sections.go # Sidebar configuration
-│   │   │   │   ├── providers.go     # Data providers
-│   │   │   │   ├── package.go       # Package documentation
-│   │   │   │   └── README.md
-│   │   │   │
-│   │   │   ├── topic/               # Topic message consumption page
-│   │   │   │   ├── topic_page.go    # Core topic page logic
-│   │   │   │   ├── topic_page_test.go
-│   │   │   │   ├── handlers.go      # Event and message handling
-│   │   │   │   ├── keys.go          # Topic-specific key bindings
-│   │   │   │   ├── view.go          # Topic view rendering
-│   │   │   │   ├── types.go         # Topic-specific types
-│   │   │   │   ├── consumption.go   # Real-time consumption controller
-│   │   │   │   ├── search.go        # Message search
-│   │   │   │   ├── search_test.go
-│   │   │   │   ├── enter_key_test.go
-│   │   │   │   └── package.go
-│   │   │   │
-│   │   │   ├── message_detail/      # Message detail view page
-│   │   │   │   ├── message_detail_page.go
-│   │   │   │   ├── message_detail_page_test.go
-│   │   │   │   ├── message_detail_providers.go
-│   │   │   │   ├── package.go
-│   │   │   │   ├── json_test.go
-│   │   │   │   └── viewport_test.go
-│   │   │   │
-│   │   │   └── resource_detail/     # Resource detail view page
-│   │   │       ├── resource_detail_page.go
-│   │   │       ├── resource_detail_page_test.go
-│   │   │       ├── components.go
-│   │   │       ├── package.go
-│   │   │       └── types.go
-│   │   │
-│   │   ├── router/                  # Page routing and navigation
-│   │   │   ├── router.go
-│   │   │   └── router_test.go
-│   │   │
-│   │   ├── shared/                  # Shared utilities and types
-│   │   │   ├── types.go             # Common types (ResourceItem, etc.)
-│   │   │   ├── sorting.go           # Natural sorting utilities
-│   │   │   ├── sorting_test.go
-│   │   │   ├── highlight_test.go
-│   │   │   └── debug.go             # Debug utilities
-│   │   │
-│   │   ├── template/                # UI templates and examples
-│   │   │   └── ui/
-│   │   │       ├── reusable_app.go  # Reusable app template
-│   │   │       ├── components/      # Template components
-│   │   │       │   ├── interfaces.go
-│   │   │       │   ├── header.go
-│   │   │       │   ├── sidebar.go
-│   │   │       │   ├── content.go
-│   │   │       │   └── footer.go
-│   │   │       │   └── footer_test.go
-│   │   │       ├── providers/       # Data providers
-│   │   │       │   ├── interfaces.go
-│   │   │       │   ├── default_providers.go
-│   │   │       │   └── default_sections.go
-│   │   │       └── styles/          # Theme and styling
-│   │   │           ├── theme.go
-│   │   │           └── utils.go
-│   │   │
-│   │   └── docs/                    # UI documentation
-│   │       ├── UI_ARCHITECTURE.md
-│   │       ├── advanced_bubble_tea_layouts.md
-│   │       ├── bubble_tea_layout_guide.md
-│   │       ├── bubbletea_readme.md
-│   │       ├── IMPLEMENTATION_SUMMARY.md
-│   │       ├── kafui_layout_patterns.md
-│   │       ├── layout_design_summary.md
-│   │       ├── layout_improvements.md
-│   │       ├── navigation_and_key_input_improvement_plan.md
-│   │       ├── navigation_example.md
-│   │       ├── NAVIGATION_FIX_SUMMARY.md
-│   │       ├── PHASE3_IMPLEMENTATION_SUMMARY.md
-│   │       ├── RESOURCE_SWITCHING_IMPLEMENTATION.md
-│   │       ├── technical_implementation_plan.md
-│   │       ├── ui_improvements_plan.md
-│   │       └── ui_modernization_summary.md
-│   │
-│   └── kafui/                       # Legacy tview UI layer (being phased out)
-│       ├── kafui.go                 # Core application logic
-│       ├── kafui_test.go
-│       ├── ui.go                    # UI orchestration
-│       ├── ui_test.go
-│       ├── page_main.go             # Main page (tview)
-│       ├── page_main_test.go
-│       ├── page_topic.go            # Topic page (tview)
-│       ├── page_topic_test.go
-│       ├── page_detail.go           # Detail views (tview)
-│       ├── page_detail_test.go
-│       ├── search_bar.go            # Search functionality
-│       ├── search_bar_test.go
-│       ├── search_bar_advanced_test.go
-│       ├── table_input.go           # Table input components
-│       ├── table_input_test.go
-│       ├── resource.go              # Resource abstraction
-│       ├── resource_test.go
-│       ├── resource_topic.go        # Topic resource
-│       ├── resource_topic_test.go
-│       ├── resource_group.go        # Consumer group resource
-│       ├── resource_group_test.go
-│       ├── resource_context.go      # Context resource
-│       ├── resource_context_test.go
-│       ├── helper.go                # Helper functions
-│       ├── helper_test.go
-│       ├── constants.go             # Constants
-│       ├── constants_test.go
-│       ├── integration_test.go
-│       ├── benchmark_test.go
-│       └── ui_workflow_test.go
+│   └── ui/                          # Bubble Tea UI layer
+│       ├── ui.go                    # Root UI controller
+│       ├── kafui.go                 # UI initialization
+│       │
+│       ├── core/                    # Core UI interfaces and utilities
+│       │   ├── interfaces.go        # Page interface, Dimensions, Theme
+│       │   ├── interfaces_test.go
+│       │   ├── messages.go          # Centralized message types
+│       │   ├── keys.go              # Key binding utilities
+│       │   ├── keys_test.go
+│       │   ├── help.go              # Help system
+│       │   ├── help_test.go
+│       │   ├── focus.go             # Focus management
+│       │   ├── focus_test.go
+│       │   ├── styles.go            # Shared styles
+│       │   ├── utils.go             # Utility functions
+│       │   └── utils_test.go
+│       │
+│       ├── components/              # Reusable UI components
+│       │   ├── layout.go            # Responsive layout system
+│       │   ├── sidebar.go           # Sidebar component
+│       │   ├── footer.go            # Smart footer component
+│       │   ├── header.go            # Header component
+│       │   ├── main_content.go      # Main content area
+│       │   ├── search_bar.go        # Advanced search bar
+│       │   ├── json_content_view.go # JSON viewer with syntax highlighting
+│       │   ├── json_content_view_test.go
+│       │   ├── modal.go             # Modal dialogs
+│       │   ├── styles.go            # Component styles
+│       │   ├── fuzzy.go             # Fuzzy matching engine
+│       │   ├── fuzzy_matching_test.go
+│       │   ├── example_usage.go     # Usage examples
+│       │   └── README.md
+│       │
+│       ├── pages/                   # Modular page implementations
+│       │   │
+│       │   ├── main/                # Main resource browser page
+│       │   │   ├── main_page.go     # Core page logic
+│       │   │   ├── providers.go     # Data providers for template
+│       │   │   ├── sidebar_sections.go # Sidebar configuration
+│       │   │   ├── resource_manager.go # Resource management
+│       │   │   ├── types.go         # Data structures
+│       │   │   └── README.md
+│       │   │
+│       │   ├── topic/               # Topic message consumption page
+│       │   │   ├── topic_page.go    # Core topic page logic
+│       │   │   ├── topic_page_test.go
+│       │   │   ├── consumption.go   # Real-time consumption controller
+│       │   │   ├── handlers.go      # Event and message handling
+│       │   │   ├── keys.go          # Topic-specific key bindings
+│       │   │   ├── types.go         # Topic-specific types
+│       │   │   ├── search.go        # Message search
+│       │   │   ├── search_test.go
+│       │   │   ├── enter_key_test.go
+│       │   │   └── package.go
+│       │   │
+│       │   ├── message_detail/      # Message detail view page
+│       │   │   ├── message_detail_page.go
+│       │   │   ├── message_detail_page_test.go
+│       │   │   ├── message_detail_providers.go
+│       │   │   ├── package.go
+│       │   │   ├── json_test.go
+│       │   │   └── viewport_test.go
+│       │   │
+│       │   └── resource_detail/     # Resource detail view page
+│       │       ├── resource_detail_page.go
+│       │       ├── resource_detail_page_test.go
+│       │       ├── components.go
+│       │       ├── package.go
+│       │       └── types.go
+│       │
+│       ├── router/                  # Page routing and navigation
+│       │   ├── router.go
+│       │   └── router_test.go
+│       │
+│       ├── shared/                  # Shared utilities and types
+│       │   ├── types.go             # Common types (ResourceItem, etc.)
+│       │   ├── sorting.go           # Natural sorting utilities
+│       │   ├── sorting_test.go
+│       │   ├── highlight_test.go
+│       │   └── debug.go             # Debug utilities
+│       │
+│       ├── template/ui/             # UI templates and reusable app system
+│       │   ├── reusable_app.go      # Reusable application template
+│       │   ├── components/          # Template components
+│       │   │   ├── interfaces.go
+│       │   │   ├── header.go
+│       │   │   ├── sidebar.go
+│       │   │   ├── content.go
+│       │   │   ├── footer.go
+│       │   │   └── footer_test.go
+│       │   ├── providers/           # Data providers
+│       │   │   ├── interfaces.go
+│       │   │   ├── default_providers.go
+│       │   │   └── default_sections.go
+│       │   └── styles/              # Theme and styling
+│       │       ├── theme.go
+│       │       └── utils.go
+│       │
+│       └── docs/                    # UI documentation
+│           ├── UI_ARCHITECTURE.md
+│           ├── advanced_bubble_tea_layouts.md
+│           ├── bubble_tea_layout_guide.md
+│           ├── IMPLEMENTATION_SUMMARY.md
+│           ├── kafui_layout_patterns.md
+│           ├── layout_design_summary.md
+│           ├── NAVIGATION_FIX_SUMMARY.md
+│           ├── PHASE3_IMPLEMENTATION_SUMMARY.md
+│           ├── RESOURCE_SWITCHING_IMPLEMENTATION.md
+│           └── ui_modernization_summary.md
 │
 └── test/                            # Integration and end-to-end tests
     ├── docker/                      # Docker test environment
@@ -214,17 +173,20 @@ kafui/
 - Provides abstraction between UI and data sources
 
 ### Data Source Layer (`pkg/datasource/`)
+
 #### Kafka Implementation (`kafds/`)
 - **`datasource_kaf.go`** - Main Kafka datasource using kaf configuration
 - **`consume.go`** - Real-time message consumption with context management
 - **`oauth.go`** - OAuth2 authentication support
 - **`scram_client.go`** - SCRAM authentication client
 - **`consume_interfaces.go`** - Consumer interfaces for extensibility
+- **`mocks.go`** - Mock implementations for testing
 
 #### Mock Implementation (`mock/`)
 - **`kafka_data_source_mock.go`** - Mock data source for testing without Kafka
+- Provides deterministic test data for UI testing
 
-### UI Layer (`pkg/ui/`) - Modern Bubble Tea Implementation
+### UI Layer (`pkg/ui/`) - Bubble Tea Implementation
 
 #### Core (`core/`)
 - **`interfaces.go`** - Standardized `Page` interface that all pages implement
@@ -239,33 +201,36 @@ Reusable UI building blocks:
 - **`layout.go`** - Responsive layout system with header, sidebar, main content
 - **`sidebar.go`** - Configurable sidebar with resource navigation
 - **`footer.go`** - Smart footer with mode-aware rendering
+- **`header.go`** - Header with title and status indicators
 - **`search_bar.go`** - Advanced search with fuzzy matching and multiple modes
 - **`json_content_view.go`** - JSON viewer with syntax highlighting
-- **`modal.go`** - Dialog system for confirmations
-- **`fuzzy.go`** - Fuzzy matching engine
-- **`styles.go`** - Component-specific styles
+- **`modal.go`** - Dialog system for confirmations and alerts
+- **`fuzzy.go`** - Fuzzy matching engine for search
 
 #### Pages (`pages/`) - Modular Page Architecture
-Each page follows a consistent structure with separated concerns:
+Each page follows a consistent structure using the template system:
 
 **Main Page (`main/`)**:
 - Resource browser for Topics, Consumer Groups, Schemas, Contexts
 - Resource switching with `:` command
 - Search functionality with `/` command
 - ResourceManager for data loading and caching
+- Uses template-based layout with custom providers
 
 **Topic Page (`topic/`)**:
 - Real-time message consumption from Kafka topics
 - Pause/resume functionality
 - Message filtering and search
 - Connection status monitoring
-- Error recovery with exponential backoff
+- Error recovery with retry logic
+- Schema information display for Avro messages
 
 **Message Detail Page (`message_detail/`)**:
 - Detailed message view with multiple format options (raw, pretty, JSON, hex)
 - Syntax-highlighted JSON display
 - Scrollable viewport for large content
 - Metadata display (headers, offset, partition)
+- Copy to clipboard functionality
 
 **Resource Detail Page (`resource_detail/`)**:
 - Detailed view of Kafka resources
@@ -275,21 +240,23 @@ Each page follows a consistent structure with separated concerns:
 #### Router (`router/`)
 - **`router.go`** - Page routing and navigation management
 - Handles page transitions and state management
+- Back/forward navigation support
 
-#### Template (`template/ui/`)
-- **`reusable_app.go`** - Reusable application template
-- **`components/`** - Template components for custom UIs
+#### Template System (`template/ui/`)
+- **`reusable_app.go`** - Reusable application template with header, sidebar, content, footer
+- **`components/`** - Template components for consistent UI structure
 - **`providers/`** - Data providers and section configurations
-- **`styles/`** - Theme definitions and utilities
+- **`styles/`** - Theme definitions and styling utilities
 
-### Legacy UI Layer (`pkg/kafui/`) - tview (Being Phased Out)
-The legacy tview implementation is maintained during the migration to Bubble Tea:
-- **`kafui.go`** - Core application logic
-- **`ui.go`** - UI orchestration
-- **`page_*.go`** - Various page implementations
-- **`resource_*.go`** - Resource management implementations
-- **`search_bar.go`** - Search functionality
-- **`table_input.go`** - Table input components
+#### Shared Utilities (`shared/`)
+- **`types.go`** - Common types (ResourceItem, ViewDimensions, PageState)
+- **`sorting.go`** - Natural sorting utilities
+- **`debug.go`** - Debug logging utilities
+
+#### Documentation (`docs/`)
+- Architecture documents and implementation guides
+- Layout patterns and design summaries
+- Migration and implementation summaries
 
 ## Testing Strategy
 
@@ -297,6 +264,7 @@ The legacy tview implementation is maintained during the migration to Bubble Tea
 - Comprehensive unit tests alongside implementations (`*_test.go`)
 - Component-level testing in `pkg/ui/components/`
 - Page-level testing in `pkg/ui/pages/*/`
+- Mock data source for isolated testing
 
 ### Integration Tests
 - **`test/integration/e2e_test.go`** - End-to-end tests
@@ -351,24 +319,23 @@ The legacy tview implementation is maintained during the migration to Bubble Tea
 ## Dependencies
 
 ### Core Dependencies
-- **Bubble Tea** (`github.com/charmbracelet/bubbletea`) - TUI framework
-- **Bubbles** (`github.com/charmbracelet/bubbles`) - TUI components
-- **Lipgloss** (`github.com/charmbracelet/lipgloss`) - Styling
-- **tview** (`github.com/rivo/tview`) - Legacy TUI framework (during migration)
-- **tcell** (`github.com/gdamore/tcell/v2`) - Terminal cell handling (for tview)
-- **Sarama** (`github.com/IBM/sarama`) - Kafka client library
-- **kaf** (`github.com/birdayz/kaf`) - Kafka CLI tool (config compatibility)
-- **Cobra** (`github.com/spf13/cobra`) - CLI framework
-- **colorjson** (`github.com/TylerBrock/colorjson`) - JSON coloring
-- **prettyjson** (`github.com/hokaccha/go-prettyjson`) - JSON pretty printing
-- **schema-registry** (`github.com/Landoop/schema-registry`) - Schema registry client
-- **goavro** (`github.com/linkedin/goavro/v2`) - Avro encoding/decoding
-- **protocompile** (`github.com/bufbuild/protocompile`) - Protocol Buffers compilation
-- **protoreflect** (`github.com/jhump/protoreflect`) - Protocol Buffers reflection
+- **Bubble Tea** (`github.com/charmbracelet/bubbletea` v1.3.6) - TUI framework
+- **Bubbles** (`github.com/charmbracelet/bubbles` v0.21.0) - TUI components
+- **Lipgloss** (`github.com/charmbracelet/lipgloss` v1.1.0) - Styling
+- **Sarama** (`github.com/IBM/sarama` v1.45.1) - Kafka client library
+- **kaf** (`github.com/birdayz/kaf` v0.2.9) - Kafka CLI tool (config compatibility)
+- **Cobra** (`github.com/spf13/cobra` v1.9.1) - CLI framework
+- **Clipboard** (`github.com/atotto/clipboard` v0.1.4) - Clipboard access
+- **PrettyJSON** (`github.com/hokaccha/go-prettyjson`) - JSON pretty printing
+- **Schema Registry** (`github.com/Landoop/schema-registry`) - Schema registry client
+- **GoAvro** (`github.com/linkedin/goavro/v2` v2.13.1) - Avro encoding/decoding
+- **ProtoCompile** (`github.com/bufbuild/protocompile` v0.14.1) - Protocol Buffers compilation
+- **ProtoReflect** (`github.com/jhump/protoreflect` v1.17.0) - Protocol Buffers reflection
+- **SCRAM** (`github.com/xdg/scram` v1.0.5) - SCRAM authentication
+- **OAuth2** (`golang.org/x/oauth2` v0.28.0) - OAuth2 authentication
 
 ### Testing Dependencies
-- **testify** (`github.com/stretchr/testify`) - Testing toolkit
-- **mockery** - Mock generation (via go:generate)
+- **testify** (`github.com/stretchr/testify` v1.10.0) - Testing toolkit
 
 ## Architecture Patterns
 
@@ -393,14 +360,11 @@ The Bubble Tea UI follows the MVU pattern:
 - Command batching for efficient updates
 - Channel-based communication for real-time data
 
-### 5. Modular Page Structure
-Each page module follows a consistent pattern:
-- **Core logic** (`*_page.go`) - Main business logic
-- **Handlers** (`handlers.go`) - Event processing
-- **Keys** (`keys.go`) - Input handling
-- **View** (`view.go`) - Rendering
-- **Types** (`types.go`) - Data structures
-- **Components** (`components.go`) - UI components (optional)
+### 5. Template System
+- Reusable app template with header, sidebar, content, footer
+- Provider pattern for data injection
+- Consistent styling and layout across pages
+- Responsive design with size mode detection
 
 ## Key Features
 
@@ -464,40 +428,45 @@ go run main.go
 # Run with custom config
 go run main.go --config /path/to/config.yaml
 
-# Run with mock data
+# Run with mock data (for testing without Kafka)
 go run main.go --mock
 ```
 
-## Migration Notes
+## Architecture History
 
-### tview to Bubble Tea Migration
-The project is undergoing a migration from tview to Bubble Tea:
-- **Legacy**: `pkg/kafui/` contains tview implementation
-- **Modern**: `pkg/ui/` contains Bubble Tea implementation
-- **Status**: Core pages implemented in Bubble Tea, legacy maintained for compatibility
+### tview to Bubble Tea Migration (Completed 2026-02-24)
+The project successfully migrated from tview to Bubble Tea:
+- **Old UI**: `pkg/kafui/` - Removed on 2026-02-24
+- **New UI**: `pkg/ui/` - Full Bubble Tea implementation
+- **Dependencies Removed**: tview, tcell/v2, colorjson
 
-### Migration Benefits
+### Migration Benefits Achieved
 - Better composability with Bubble Tea's MVU pattern
 - More maintainable modular architecture
 - Improved testability with isolated components
 - Modern styling with lipgloss
 - Active community and ecosystem (Charm)
+- Template-based reusable app system
 
 ## Future Enhancements
 
 ### Planned Features
+- **Context Switching UI** - Visual interface for switching between Kafka clusters
+- **Schema Resource Implementation** - Schema Registry integration with full CRUD
+- **Consumer Group Detail Page** - Dedicated page for consumer group analysis
 - Plugin system for custom resource types
 - Advanced filtering with regex support
-- Theme customization
-- Export functionality
-- Bulk operations
-- Real-time resource monitoring
+- Theme customization (light/dark modes)
+- Export functionality (JSON, CSV)
+- Bulk operations on resources
+- Real-time resource monitoring with WebSocket
 - Multi-cluster operations
 - Audit logging
 
 ### Architecture Improvements
-- Complete tview migration
-- State persistence layer
-- Performance optimizations for large datasets
+- State persistence layer (save/restore UI state)
+- Performance optimizations for large datasets (1000+ items)
 - Enhanced error recovery mechanisms
-- Improved accessibility
+- Improved accessibility (screen reader support)
+- Benchmark tests for performance monitoring
+- Enhanced integration test coverage
