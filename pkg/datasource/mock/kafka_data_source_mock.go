@@ -3,6 +3,8 @@ package mock
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,38 +13,126 @@ import (
 
 var currentContext string = "kafka-dev"
 
+// Mock data stores for different contexts
+var mockContexts = map[string]*mockContextData{
+	"kafka-dev": {
+		topics:         generateDevTopics(),
+		consumerGroups: generateDevConsumerGroups(),
+		description:    "Development Kafka Cluster",
+	},
+	"kafka-test": {
+		topics:         generateTestTopics(),
+		consumerGroups: generateTestConsumerGroups(),
+		description:    "Test Kafka Cluster",
+	},
+	"kafka-prod": {
+		topics:         generateProdTopics(),
+		consumerGroups: generateProdConsumerGroups(),
+		description:    "Production Kafka Cluster",
+	},
+}
+
+type mockContextData struct {
+	topics         map[string]api.Topic
+	consumerGroups []api.ConsumerGroup
+	description    string
+}
+
 type KafkaDataSourceMock struct {
 	// Schema cache for performance - cached on data source side
 	schemaCache map[string]*api.SchemaInfo
 	schemaMutex sync.RWMutex
+	// Message counters per topic for realistic offset tracking
+	messageCounters map[string]int64
+	counterMutex    sync.RWMutex
+	// Random seed for varied data
+	randSource *rand.Rand
 }
 
 func (kp *KafkaDataSourceMock) Init(cfgOption string) {
 	// Initialize schema cache
 	kp.schemaCache = make(map[string]*api.SchemaInfo)
+	// Initialize message counters
+	kp.messageCounters = make(map[string]int64)
+	// Initialize random source
+	kp.randSource = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// Pre-populate schema cache with common schemas
+	kp.preloadSchemas()
+}
+
+// preloadSchemas loads common schemas into cache
+func (kp *KafkaDataSourceMock) preloadSchemas() {
+	schemas := map[string]*api.SchemaInfo{
+		"1": {
+			ID:         1,
+			Subject:    "user-events-value",
+			Version:    1,
+			RecordName: "UserRegisteredEvent",
+			Schema:     `{"type":"record","name":"UserRegisteredEvent","namespace":"com.example.user","fields":[{"name":"userId","type":"string"},{"name":"email","type":"string"},{"name":"registeredAt","type":"long"},{"name":"preferences","type":{"type":"map","values":"string"}}]}`,
+		},
+		"2": {
+			ID:         2,
+			Subject:    "order-events-value",
+			Version:    1,
+			RecordName: "OrderCreatedEvent",
+			Schema:     `{"type":"record","name":"OrderCreatedEvent","namespace":"com.example.orders","fields":[{"name":"orderId","type":"string"},{"name":"customerId","type":"string"},{"name":"amount","type":"double"},{"name":"items","type":{"type":"array","items":"string"}},{"name":"createdAt","type":"long"}]}`,
+		},
+		"3": {
+			ID:         3,
+			Subject:    "order-events-value",
+			Version:    2,
+			RecordName: "OrderCreatedEvent",
+			Schema:     `{"type":"record","name":"OrderCreatedEvent","namespace":"com.example.orders","fields":[{"name":"orderId","type":"string"},{"name":"customerId","type":"string"},{"name":"amount","type":"double"},{"name":"items","type":{"type":"array","items":"OrderItem"}},{"name":"createdAt","type":"long"},{"name":"metadata","type":["null",{"type":"map","values":"string"}],"default":null}],"types":[{"name":"OrderItem","type":"record","fields":[{"name":"productId","type":"string"},{"name":"quantity","type":"int"},{"name":"price","type":"double"}]}]}`,
+		},
+		"4": {
+			ID:         4,
+			Subject:    "inventory-events-key",
+			Version:    1,
+			RecordName: "InventoryKey",
+			Schema:     `{"type":"record","name":"InventoryKey","namespace":"com.example.inventory","fields":[{"name":"warehouseId","type":"string"},{"name":"productId","type":"string"}]}`,
+		},
+		"5": {
+			ID:         5,
+			Subject:    "payment-events-value",
+			Version:    1,
+			RecordName: "PaymentProcessedEvent",
+			Schema:     `{"type":"record","name":"PaymentProcessedEvent","namespace":"com.example.payments","fields":[{"name":"paymentId","type":"string"},{"name":"orderId","type":"string"},{"name":"amount","type":"double"},{"name":"status","type":{"type":"enum","name":"PaymentStatus","symbols":["SUCCESS","FAILED","PENDING"]}},{"name":"processedAt","type":"long"}]}`,
+		},
+		"6": {
+			ID:         6,
+			Subject:    "clickstream-value",
+			Version:    1,
+			RecordName: "PageViewEvent",
+			Schema:     `{"type":"record","name":"PageViewEvent","namespace":"com.example.analytics","fields":[{"name":"sessionId","type":"string"},{"name":"userId","type":["null","string"],"default":null},{"name":"url","type":"string"},{"name":"referrer","type":["null","string"],"default":null},{"name":"timestamp","type":"long"},{"name":"userAgent","type":"string"}]}`,
+		},
+		"7": {
+			ID:         7,
+			Subject:    "notification-events-value",
+			Version:    1,
+			RecordName: "NotificationSentEvent",
+			Schema:     `{"type":"record","name":"NotificationSentEvent","namespace":"com.example.notifications","fields":[{"name":"notificationId","type":"string"},{"name":"userId","type":"string"},{"name":"channel","type":{"type":"enum","name":"Channel","symbols":["EMAIL","SMS","PUSH","WEBHOOK"]}},{"name":"templateId","type":"string"},{"name":"sentAt","type":"long"}]}`,
+		},
+		"8": {
+			ID:         8,
+			Subject:    "audit-log-value",
+			Version:    1,
+			RecordName: "AuditLogEntry",
+			Schema:     `{"type":"record","name":"AuditLogEntry","namespace":"com.example.audit","fields":[{"name":"eventId","type":"string"},{"name":"actor","type":"string"},{"name":"action","type":"string"},{"name":"resource","type":"string"},{"name":"timestamp","type":"long"},{"name":"details","type":"string"}]}`,
+		},
+	}
+
+	for id, schema := range schemas {
+		kp.schemaCache[id] = schema
+	}
 }
 
 // SetContext implements api.KafkaDataSource.
 func (kp *KafkaDataSourceMock) SetContext(contextName string) error {
-	currentContext = contextName
+	if _, exists := mockContexts[contextName]; exists {
+		currentContext = contextName
+	}
 	return nil
-}
-
-// GetTopics retrieves a list of Kafka topics
-func (kp *KafkaDataSourceMock) GetTopics() (map[string]api.Topic, error) {
-	// Logic to fetch the list of topics from Kafka
-	topics := make(map[string]api.Topic)
-	for i := 0; i < 100; i++ {
-		topics[fmt.Sprintf("Topic %d", i)] = api.Topic{
-			ReplicationFactor: 1,
-			ReplicaAssignment: map[int32][]int32{},
-			NumPartitions:     1,
-			ConfigEntries:     make(map[string]*string),
-		}
-
-	} // Additional topics
-
-	return topics, nil
 }
 
 func (kp *KafkaDataSourceMock) GetContext() string {
@@ -51,23 +141,42 @@ func (kp *KafkaDataSourceMock) GetContext() string {
 
 // GetContexts retrieves a list of Kafka contexts
 func (kp *KafkaDataSourceMock) GetContexts() ([]string, error) {
-	// Logic to fetch the list of contexts from Kafka
-	contexts := []string{"kafka-dev", "kafka-test", "kafka-prod"} // Example contexts
+	contexts := make([]string, 0, len(mockContexts))
+	for ctx := range mockContexts {
+		contexts = append(contexts, ctx)
+	}
 	return contexts, nil
 }
 
-func (kp *KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) {
-	// Mocked data
-	groups := []api.ConsumerGroup{
-		{Name: "Group1", State: "Active", Consumers: 3},
-		{Name: "Group2", State: "Idle", Consumers: 2},
-		// Add more mock ConsumerGroup structs as needed
+// GetTopics retrieves a list of Kafka topics for the current context
+func (kp *KafkaDataSourceMock) GetTopics() (map[string]api.Topic, error) {
+	ctxData, exists := mockContexts[currentContext]
+	if !exists {
+		return make(map[string]api.Topic), nil
 	}
 
-	// Return mocked data
+	// Return a copy to prevent external modification
+	topics := make(map[string]api.Topic, len(ctxData.topics))
+	for name, topic := range ctxData.topics {
+		topics[name] = topic
+	}
+	return topics, nil
+}
+
+// GetConsumerGroups retrieves consumer groups for the current context
+func (kp *KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) {
+	ctxData, exists := mockContexts[currentContext]
+	if !exists {
+		return []api.ConsumerGroup{}, nil
+	}
+
+	// Return a copy to prevent external modification
+	groups := make([]api.ConsumerGroup, len(ctxData.consumerGroups))
+	copy(groups, ctxData.consumerGroups)
 	return groups, nil
 }
 
+// ConsumeTopic simulates real-time message consumption from a Kafka topic
 func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error {
 	// Simulate initial connection delay
 	select {
@@ -76,46 +185,30 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 	case <-time.After(50 * time.Millisecond):
 	}
 
+	// Get or initialize message counter for this topic
+	kp.counterMutex.Lock()
+	if _, exists := kp.messageCounters[topicName]; !exists {
+		kp.messageCounters[topicName] = 0
+	}
+	kp.counterMutex.Unlock()
+
 	// Simulate continuous message consumption like real Kafka
-	// Keep generating messages until context is cancelled
-	messageIndex := 0
 	for {
 		// Check if context is cancelled before processing
 		select {
 		case <-ctx.Done():
-			return ctx.Err() // Return when context is cancelled
+			return ctx.Err()
 		default:
 			// Continue processing
 		}
 
-		description := "Lorem ipsum dolor sit amet con et just me incididunt ut lab inductor laris martinus"
-		// Simulate receiving a message
-		msg := api.Message{
-			Key:       fmt.Sprintf("purchase_%s_%d", topicName, messageIndex),
-			Value:     fmt.Sprintf(`{"product_id": %d, "quantity": %d, "timestamp": "%s", "description": "%s"}`, messageIndex+1, messageIndex*2+1, time.Now().Format(time.RFC3339), description),
-			Offset:    int64(messageIndex + 1),
-			Partition: int32(messageIndex % 3), // Distribute across 3 partitions
-			Headers: []api.MessageHeader{
-				{Key: "correlationId", Value: fmt.Sprintf("%d", messageIndex+123)},
-				{Key: "source", Value: "mock-service"},
-				{Key: "timestamp", Value: time.Now().Format(time.RFC3339)},
-			},
-		}
-
-		// Simulate some messages having Avro schemas (about 30% of messages)
-		if messageIndex%3 == 0 {
-			// Simulate key schema for some messages
-			if messageIndex%6 == 0 {
-				msg.KeySchemaID = fmt.Sprintf("%d", (messageIndex%4)+1)
-			}
-			// Simulate value schema
-			msg.ValueSchemaID = fmt.Sprintf("%d", (messageIndex%5)+1)
-		}
+		// Generate a realistic message based on topic name
+		msg := kp.generateMessage(topicName)
 
 		// Check context again before calling handler with panic recovery
 		select {
 		case <-ctx.Done():
-			return ctx.Err() // Context cancelled, stop processing
+			return ctx.Err()
 		default:
 			// Call the message handler function with panic recovery
 			func() {
@@ -125,7 +218,6 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 						// Call onError if context is still active
 						select {
 						case <-ctx.Done():
-							// Context cancelled, don't call onError
 							return
 						default:
 							onError(fmt.Errorf("panic in message handler: %v", r))
@@ -136,15 +228,340 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 			}()
 		}
 
-		messageIndex++
-
-		// Simulate realistic processing time between messages with context check
+		// Simulate realistic processing time between messages (100ms - 2s)
+		delay := time.Duration(100+kp.randSource.Intn(1900)) * time.Millisecond
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(500 * time.Millisecond): // Slower message rate for better visibility
+		case <-time.After(delay):
 			// Continue to next iteration
 		}
+	}
+}
+
+// generateMessage creates a realistic message based on topic name
+func (kp *KafkaDataSourceMock) generateMessage(topicName string) api.Message {
+	// Increment counter for this topic
+	kp.counterMutex.Lock()
+	kp.messageCounters[topicName]++
+	counter := kp.messageCounters[topicName]
+	kp.counterMutex.Unlock()
+
+	// Generate message based on topic pattern
+	var msg api.Message
+
+	switch {
+	case strings.Contains(topicName, "user"):
+		msg = kp.generateUserEvent(topicName, counter)
+	case strings.Contains(topicName, "order"):
+		msg = kp.generateOrderEvent(topicName, counter)
+	case strings.Contains(topicName, "payment"):
+		msg = kp.generatePaymentEvent(topicName, counter)
+	case strings.Contains(topicName, "click"):
+		msg = kp.generateClickstreamEvent(topicName, counter)
+	case strings.Contains(topicName, "notification"):
+		msg = kp.generateNotificationEvent(topicName, counter)
+	case strings.Contains(topicName, "audit"):
+		msg = kp.generateAuditEvent(topicName, counter)
+	case strings.Contains(topicName, "inventory"):
+		msg = kp.generateInventoryEvent(topicName, counter)
+	default:
+		msg = kp.generateGenericEvent(topicName, counter)
+	}
+
+	// Assign partition based on counter (simulates Kafka partitioning)
+	msg.Partition = int32(counter % 5) // 5 partitions
+	msg.Offset = counter
+
+	return msg
+}
+
+// generateUserEvent creates user-related events
+func (kp *KafkaDataSourceMock) generateUserEvent(topicName string, counter int64) api.Message {
+	eventTypes := []string{"UserRegisteredEvent", "UserLoggedInEvent", "UserUpdatedEvent", "UserDeletedEvent"}
+	eventType := eventTypes[counter%int64(len(eventTypes))]
+
+	timestamp := time.Now().Add(-time.Duration(kp.randSource.Intn(3600)) * time.Second)
+
+	value := fmt.Sprintf(`{
+		"eventType": "%s",
+		"userId": "user-%d",
+		"email": "user%d@example.com",
+		"registeredAt": %d,
+		"preferences": {
+			"theme": "%s",
+			"language": "%s",
+			"notifications": "%s"
+		}
+	}`, eventType, counter, counter, timestamp.UnixMilli(),
+		[]string{"dark", "light", "auto"}[kp.randSource.Intn(3)],
+		[]string{"en", "de", "fr", "es"}[kp.randSource.Intn(4)],
+		[]string{"enabled", "disabled"}[kp.randSource.Intn(2)])
+
+	return api.Message{
+		Key:           fmt.Sprintf("user-%d", counter),
+		Value:         value,
+		Offset:        counter,
+		Partition:     int32(counter % 5),
+		KeySchemaID:   "",
+		ValueSchemaID: "1",
+		Headers: []api.MessageHeader{
+			{Key: "correlationId", Value: fmt.Sprintf("corr-%d", counter)},
+			{Key: "source", Value: "user-service"},
+			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+			{Key: "event-type", Value: eventType},
+		},
+	}
+}
+
+// generateOrderEvent creates order-related events
+func (kp *KafkaDataSourceMock) generateOrderEvent(topicName string, counter int64) api.Message {
+	statuses := []string{"CREATED", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"}
+	status := statuses[counter%int64(len(statuses))]
+
+	amount := float64(counter*100+int64(kp.randSource.Intn(1000))) / 100.0
+	timestamp := time.Now().Add(-time.Duration(kp.randSource.Intn(7200)) * time.Second)
+
+	items := []string{}
+	numItems := 1 + kp.randSource.Intn(5)
+	for i := 0; i < numItems; i++ {
+		items = append(items, fmt.Sprintf(`{"productId": "prod-%d", "quantity": %d, "price": %.2f}`,
+			kp.randSource.Intn(1000), 1+kp.randSource.Intn(10), float64(10+kp.randSource.Intn(500))))
+	}
+
+	value := fmt.Sprintf(`{
+		"orderId": "order-%d",
+		"customerId": "customer-%d",
+		"status": "%s",
+		"amount": %.2f,
+		"items": [%s],
+		"createdAt": %d
+	}`, counter, counter%100, status, amount,
+		strings.Join(items, ","), timestamp.UnixMilli())
+
+	return api.Message{
+		Key:           fmt.Sprintf("order-%d", counter),
+		Value:         value,
+		Offset:        counter,
+		Partition:     int32(counter % 5),
+		KeySchemaID:   "",
+		ValueSchemaID: "2",
+		Headers: []api.MessageHeader{
+			{Key: "correlationId", Value: fmt.Sprintf("order-corr-%d", counter)},
+			{Key: "source", Value: "order-service"},
+			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+			{Key: "trace-id", Value: fmt.Sprintf("trace-%d", kp.randSource.Intn(10000))},
+		},
+	}
+}
+
+// generatePaymentEvent creates payment-related events
+func (kp *KafkaDataSourceMock) generatePaymentEvent(topicName string, counter int64) api.Message {
+	statuses := []string{"SUCCESS", "FAILED", "PENDING"}
+	status := statuses[counter%int64(len(statuses))]
+
+	amount := float64(counter*50+int64(kp.randSource.Intn(500))) / 100.0
+	timestamp := time.Now().Add(-time.Duration(kp.randSource.Intn(3600)) * time.Second)
+
+	value := fmt.Sprintf(`{
+		"paymentId": "payment-%d",
+		"orderId": "order-%d",
+		"amount": %.2f,
+		"status": "%s",
+		"paymentMethod": "%s",
+		"processedAt": %d
+	}`, counter, counter%100, amount, status,
+		[]string{"CREDIT_CARD", "DEBIT_CARD", "PAYPAL", "BANK_TRANSFER"}[counter%int64(4)],
+		timestamp.UnixMilli())
+
+	return api.Message{
+		Key:           fmt.Sprintf("payment-%d", counter),
+		Value:         value,
+		Offset:        counter,
+		Partition:     int32(counter % 5),
+		KeySchemaID:   "",
+		ValueSchemaID: "5",
+		Headers: []api.MessageHeader{
+			{Key: "correlationId", Value: fmt.Sprintf("payment-corr-%d", counter)},
+			{Key: "source", Value: "payment-service"},
+			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+			{Key: "idempotency-key", Value: fmt.Sprintf("idem-%d", counter)},
+		},
+	}
+}
+
+// generateClickstreamEvent creates analytics events
+func (kp *KafkaDataSourceMock) generateClickstreamEvent(topicName string, counter int64) api.Message {
+	pages := []string{"/home", "/products", "/cart", "/checkout", "/account", "/search"}
+	page := pages[counter%int64(len(pages))]
+
+	browsers := []string{"Chrome", "Firefox", "Safari", "Edge"}
+	browser := browsers[counter%int64(len(browsers))]
+
+	timestamp := time.Now().Add(-time.Duration(kp.randSource.Intn(300)) * time.Second)
+
+	var userId interface{}
+	if counter%3 == 0 {
+		userId = fmt.Sprintf("user-%d", counter%100)
+	} else {
+		userId = nil
+	}
+
+	value := fmt.Sprintf(`{
+		"sessionId": "session-%d",
+		"userId": %v,
+		"url": "https://example.com%s",
+		"referrer": "https://google.com",
+		"timestamp": %d,
+		"userAgent": "Mozilla/5.0 (%s)",
+		"ipAddress": "192.168.%d.%d"
+	}`, counter, userId, page, timestamp.UnixMilli(),
+		browser, kp.randSource.Intn(256), kp.randSource.Intn(256))
+
+	return api.Message{
+		Key:           fmt.Sprintf("session-%d", counter),
+		Value:         value,
+		Offset:        counter,
+		Partition:     int32(counter % 5),
+		KeySchemaID:   "",
+		ValueSchemaID: "6",
+		Headers: []api.MessageHeader{
+			{Key: "correlationId", Value: fmt.Sprintf("click-corr-%d", counter)},
+			{Key: "source", Value: "analytics-service"},
+			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+		},
+	}
+}
+
+// generateNotificationEvent creates notification events
+func (kp *KafkaDataSourceMock) generateNotificationEvent(topicName string, counter int64) api.Message {
+	channels := []string{"EMAIL", "SMS", "PUSH", "WEBHOOK"}
+	channel := channels[counter%int64(len(channels))]
+
+	timestamp := time.Now().Add(-time.Duration(kp.randSource.Intn(1800)) * time.Second)
+
+	value := fmt.Sprintf(`{
+		"notificationId": "notif-%d",
+		"userId": "user-%d",
+		"channel": "%s",
+		"templateId": "template-%d",
+		"subject": "Notification %d",
+		"sentAt": %d,
+		"status": "SENT"
+	}`, counter, counter%100, channel, counter%10, counter, timestamp.UnixMilli())
+
+	return api.Message{
+		Key:           fmt.Sprintf("notif-%d", counter),
+		Value:         value,
+		Offset:        counter,
+		Partition:     int32(counter % 5),
+		KeySchemaID:   "",
+		ValueSchemaID: "7",
+		Headers: []api.MessageHeader{
+			{Key: "correlationId", Value: fmt.Sprintf("notif-corr-%d", counter)},
+			{Key: "source", Value: "notification-service"},
+			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+			{Key: "priority", Value: []string{"LOW", "MEDIUM", "HIGH"}[counter%3]},
+		},
+	}
+}
+
+// generateAuditEvent creates audit log events
+func (kp *KafkaDataSourceMock) generateAuditEvent(topicName string, counter int64) api.Message {
+	actions := []string{"CREATE", "READ", "UPDATE", "DELETE"}
+	action := actions[counter%int64(len(actions))]
+
+	resources := []string{"USER", "ORDER", "PRODUCT", "INVOICE"}
+	resource := resources[counter%int64(len(resources))]
+
+	timestamp := time.Now().Add(-time.Duration(kp.randSource.Intn(86400)) * time.Second)
+
+	value := fmt.Sprintf(`{
+		"eventId": "audit-%d",
+		"actor": "user-%d",
+		"action": "%s",
+		"resource": "%s",
+		"resourceId": "res-%d",
+		"timestamp": %d,
+		"details": "Action performed successfully",
+		"ipAddress": "10.0.%d.%d"
+	}`, counter, counter%50, action, resource, counter%1000, timestamp.UnixMilli(),
+		kp.randSource.Intn(256), kp.randSource.Intn(256))
+
+	return api.Message{
+		Key:           fmt.Sprintf("audit-%d", counter),
+		Value:         value,
+		Offset:        counter,
+		Partition:     int32(counter % 5),
+		KeySchemaID:   "",
+		ValueSchemaID: "8",
+		Headers: []api.MessageHeader{
+			{Key: "correlationId", Value: fmt.Sprintf("audit-corr-%d", counter)},
+			{Key: "source", Value: "audit-service"},
+			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+			{Key: "severity", Value: "INFO"},
+		},
+	}
+}
+
+// generateInventoryEvent creates inventory events
+func (kp *KafkaDataSourceMock) generateInventoryEvent(topicName string, counter int64) api.Message {
+	warehouses := []string{"WH-EAST", "WH-WEST", "WH-CENTRAL", "WH-EUROPE"}
+	warehouse := warehouses[counter%int64(len(warehouses))]
+
+	timestamp := time.Now().Add(-time.Duration(kp.randSource.Intn(7200)) * time.Second)
+
+	value := fmt.Sprintf(`{
+		"warehouseId": "%s",
+		"productId": "prod-%d",
+		"quantity": %d,
+		"reserved": %d,
+		"available": %d,
+		"lastUpdated": %d
+	}`, warehouse, counter%500, 100+kp.randSource.Intn(900),
+		kp.randSource.Intn(100), 100+kp.randSource.Intn(800), timestamp.UnixMilli())
+
+	return api.Message{
+		Key:           fmt.Sprintf("%s:prod-%d", warehouse, counter%500),
+		Value:         value,
+		Offset:        counter,
+		Partition:     int32(counter % 5),
+		KeySchemaID:   "4",
+		ValueSchemaID: "",
+		Headers: []api.MessageHeader{
+			{Key: "correlationId", Value: fmt.Sprintf("inv-corr-%d", counter)},
+			{Key: "source", Value: "inventory-service"},
+			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+		},
+	}
+}
+
+// generateGenericEvent creates generic events for unknown topics
+func (kp *KafkaDataSourceMock) generateGenericEvent(topicName string, counter int64) api.Message {
+	timestamp := time.Now().Add(-time.Duration(kp.randSource.Intn(3600)) * time.Second)
+
+	value := fmt.Sprintf(`{
+		"id": "event-%d",
+		"topic": "%s",
+		"timestamp": %d,
+		"data": {
+			"index": %d,
+			"value": "data-point-%d"
+		}
+	}`, counter, topicName, timestamp.UnixMilli(), counter, counter)
+
+	return api.Message{
+		Key:           fmt.Sprintf("key-%d", counter),
+		Value:         value,
+		Offset:        counter,
+		Partition:     int32(counter % 5),
+		KeySchemaID:   "",
+		ValueSchemaID: "",
+		Headers: []api.MessageHeader{
+			{Key: "correlationId", Value: fmt.Sprintf("corr-%d", counter)},
+			{Key: "source", Value: "generic-service"},
+			{Key: "timestamp", Value: timestamp.Format(time.RFC3339)},
+		},
 	}
 }
 
@@ -204,45 +621,336 @@ func (kp *KafkaDataSourceMock) cacheSchema(schemaID string, schema *api.SchemaIn
 
 // simulateSchemaFetch simulates fetching schema from registry
 func (kp *KafkaDataSourceMock) simulateSchemaFetch(schemaID, schemaType string) *api.SchemaInfo {
-	// Simulate some common Avro schema types
-	mockSchemas := map[string]*api.SchemaInfo{
-		"1": {
-			ID:         1,
-			Subject:    "user-events-value",
-			Version:    1,
-			RecordName: "UserRegisteredEvent",
-			Schema:     `{"type":"record","name":"UserRegisteredEvent","fields":[{"name":"userId","type":"string"},{"name":"email","type":"string"}]}`},
-		"2": {
-			ID:         2,
-			Subject:    "order-events-value",
-			Version:    1,
-			RecordName: "OrderCreatedEvent",
-			Schema:     `{"type":"record","name":"OrderCreatedEvent","fields":[{"name":"orderId","type":"string"},{"name":"amount","type":"double"}]}`},
-		"3": {
-			ID:         3,
-			Subject:    "product-events-value",
-			Version:    2,
-			RecordName: "AddedItemToCartEvent",
-			Schema:     `{"type":"record","name":"AddedItemToCartEvent","fields":[{"name":"productId","type":"string"},{"name":"quantity","type":"int"}]}`},
-		"4": {
-			ID:         4,
-			Subject:    "inventory-events-key",
-			Version:    1,
-			RecordName: "InventoryKey",
-			Schema:     `{"type":"record","name":"InventoryKey","fields":[{"name":"warehouseId","type":"string"},{"name":"productId","type":"string"}]}`},
-		"5": {
-			ID:         5,
-			Subject:    "payment-events-value",
-			Version:    1,
-			RecordName: "PaymentProcessedEvent",
-			Schema:     `{"type":"record","name":"PaymentProcessedEvent","fields":[{"name":"paymentId","type":"string"},{"name":"status","type":"string"}]}`},
-	}
-
-	// Return mock schema if it exists
-	if schema, exists := mockSchemas[schemaID]; exists {
+	// Return from preloaded cache if exists
+	if schema, exists := kp.schemaCache[schemaID]; exists {
 		return schema
 	}
 
 	// Return nil for non-Avro or unknown schemas
 	return nil
+}
+
+// generateDevTopics generates realistic development environment topics
+func generateDevTopics() map[string]api.Topic {
+	topics := make(map[string]api.Topic)
+
+	// Event-driven architecture topics
+	topics["user-events"] = api.Topic{
+		NumPartitions:     6,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("604800000"), // 7 days
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 125430,
+	}
+
+	topics["order-events"] = api.Topic{
+		NumPartitions:     12,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("2592000000"), // 30 days
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 892156,
+	}
+
+	topics["payment-events"] = api.Topic{
+		NumPartitions:     8,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("7776000000"), // 90 days
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 456789,
+	}
+
+	topics["inventory-events"] = api.Topic{
+		NumPartitions:     6,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("604800000"),
+			"cleanup.policy": strPtr("compact"),
+		},
+		MessageCount: 234567,
+	}
+
+	topics["notification-events"] = api.Topic{
+		NumPartitions:     4,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("259200000"), // 3 days
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 678901,
+	}
+
+	topics["clickstream-events"] = api.Topic{
+		NumPartitions:     16,
+		ReplicationFactor: 2,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("86400000"), // 1 day
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 15678234,
+	}
+
+	topics["audit-log"] = api.Topic{
+		NumPartitions:     8,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("31536000000"), // 1 year
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 2345678,
+	}
+
+	// CDC topics
+	topics["dbserver1.inventory.products"] = api.Topic{
+		NumPartitions:     4,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("604800000"),
+			"cleanup.policy": strPtr("compact"),
+		},
+		MessageCount: 45678,
+	}
+
+	topics["dbserver1.customers.users"] = api.Topic{
+		NumPartitions:     4,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("604800000"),
+			"cleanup.policy": strPtr("compact"),
+		},
+		MessageCount: 23456,
+	}
+
+	// Dead letter queue
+	topics["dead-letter-queue"] = api.Topic{
+		NumPartitions:     3,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("2592000000"), // 30 days
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 1234,
+	}
+
+	return topics
+}
+
+// generateTestTopics generates realistic test environment topics
+func generateTestTopics() map[string]api.Topic {
+	topics := make(map[string]api.Topic)
+
+	// Mirror of prod topics but smaller
+	topics["user-events"] = api.Topic{
+		NumPartitions:     3,
+		ReplicationFactor: 2,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("86400000"), // 1 day
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 5000,
+	}
+
+	topics["order-events"] = api.Topic{
+		NumPartitions:     6,
+		ReplicationFactor: 2,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("604800000"), // 7 days
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 25000,
+	}
+
+	topics["payment-events"] = api.Topic{
+		NumPartitions:     4,
+		ReplicationFactor: 2,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("604800000"),
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 12000,
+	}
+
+	topics["test-topic-a"] = api.Topic{
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries:     map[string]*string{},
+		MessageCount:      100,
+	}
+
+	topics["test-topic-b"] = api.Topic{
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries:     map[string]*string{},
+		MessageCount:      50,
+	}
+
+	return topics
+}
+
+// generateProdTopics generates realistic production environment topics
+func generateProdTopics() map[string]api.Topic {
+	topics := make(map[string]api.Topic)
+
+	topics["user-events"] = api.Topic{
+		NumPartitions:     24,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("604800000"),
+			"cleanup.policy": strPtr("delete"),
+			"min.insync.replicas": strPtr("2"),
+		},
+		MessageCount: 45678901,
+	}
+
+	topics["order-events"] = api.Topic{
+		NumPartitions:     48,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("2592000000"),
+			"cleanup.policy": strPtr("delete"),
+			"min.insync.replicas": strPtr("2"),
+		},
+		MessageCount: 123456789,
+	}
+
+	topics["payment-events"] = api.Topic{
+		NumPartitions:     32,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("7776000000"),
+			"cleanup.policy": strPtr("delete"),
+			"min.insync.replicas": strPtr("2"),
+		},
+		MessageCount: 67890123,
+	}
+
+	topics["inventory-events"] = api.Topic{
+		NumPartitions:     24,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("604800000"),
+			"cleanup.policy": strPtr("compact"),
+			"min.insync.replicas": strPtr("2"),
+		},
+		MessageCount: 34567890,
+	}
+
+	topics["notification-events"] = api.Topic{
+		NumPartitions:     16,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("259200000"),
+			"cleanup.policy": strPtr("delete"),
+			"min.insync.replicas": strPtr("2"),
+		},
+		MessageCount: 89012345,
+	}
+
+	topics["clickstream-events"] = api.Topic{
+		NumPartitions:     64,
+		ReplicationFactor: 2,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("86400000"),
+			"cleanup.policy": strPtr("delete"),
+		},
+		MessageCount: 987654321,
+	}
+
+	topics["audit-log"] = api.Topic{
+		NumPartitions:     32,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("31536000000"),
+			"cleanup.policy": strPtr("delete"),
+			"min.insync.replicas": strPtr("2"),
+		},
+		MessageCount: 234567890,
+	}
+
+	topics["fraud-detection"] = api.Topic{
+		NumPartitions:     16,
+		ReplicationFactor: 3,
+		ReplicaAssignment: map[int32][]int32{},
+		ConfigEntries: map[string]*string{
+			"retention.ms": strPtr("86400000"),
+			"cleanup.policy": strPtr("delete"),
+			"min.insync.replicas": strPtr("2"),
+		},
+		MessageCount: 12345678,
+	}
+
+	return topics
+}
+
+// generateDevConsumerGroups generates consumer groups for dev environment
+func generateDevConsumerGroups() []api.ConsumerGroup {
+	return []api.ConsumerGroup{
+		{Name: "order-processor", State: "Active", Consumers: 3},
+		{Name: "payment-service", State: "Active", Consumers: 2},
+		{Name: "notification-sender", State: "Active", Consumers: 4},
+		{Name: "analytics-consumer", State: "Idle", Consumers: 1},
+		{Name: "audit-logger", State: "Active", Consumers: 2},
+		{Name: "inventory-sync", State: "Empty", Consumers: 0},
+		{Name: "search-indexer", State: "Active", Consumers: 3},
+		{Name: "email-service", State: "Active", Consumers: 2},
+	}
+}
+
+// generateTestConsumerGroups generates consumer groups for test environment
+func generateTestConsumerGroups() []api.ConsumerGroup {
+	return []api.ConsumerGroup{
+		{Name: "test-consumer-group", State: "Active", Consumers: 1},
+		{Name: "integration-test-consumer", State: "Idle", Consumers: 0},
+		{Name: "load-test-processor", State: "Empty", Consumers: 0},
+	}
+}
+
+// generateProdConsumerGroups generates consumer groups for prod environment
+func generateProdConsumerGroups() []api.ConsumerGroup {
+	return []api.ConsumerGroup{
+		{Name: "order-processor-prod", State: "Active", Consumers: 12},
+		{Name: "payment-service-prod", State: "Active", Consumers: 8},
+		{Name: "notification-sender-prod", State: "Active", Consumers: 6},
+		{Name: "analytics-consumer-prod", State: "Active", Consumers: 4},
+		{Name: "audit-logger-prod", State: "Active", Consumers: 3},
+		{Name: "inventory-sync-prod", State: "Active", Consumers: 4},
+		{Name: "search-indexer-prod", State: "Active", Consumers: 6},
+		{Name: "email-service-prod", State: "Active", Consumers: 4},
+		{Name: "fraud-detection-prod", State: "Active", Consumers: 8},
+		{Name: "reporting-service-prod", State: "Idle", Consumers: 2},
+		{Name: "data-warehouse-sync", State: "Active", Consumers: 4},
+		{Name: "ml-pipeline-consumer", State: "Active", Consumers: 6},
+	}
+}
+
+// strPtr returns a pointer to a string
+func strPtr(s string) *string {
+	return &s
 }
