@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -99,7 +100,11 @@ func (cc *ConsumptionController) ListenForMessages(msgChan <-chan api.Message) t
 		select {
 		case msg, ok := <-msgChan:
 			if !ok {
-				return ErrorMsg(fmt.Errorf("message channel was closed"))
+				return ErrorMsg(shared.NewUIError(
+					shared.ErrorTypeDataLoad,
+					"Message stream closed unexpectedly",
+					nil,
+				))
 			}
 
 			// Return the message via the command
@@ -118,7 +123,11 @@ func (cc *ConsumptionController) ListenForErrors(errChan <-chan error) tea.Cmd {
 		select {
 		case err, ok := <-errChan:
 			if !ok {
-				return ErrorMsg(fmt.Errorf("error channel was closed"))
+				return ErrorMsg(shared.NewUIError(
+					shared.ErrorTypeConnection,
+					"Error stream closed unexpectedly",
+					nil,
+				))
 			}
 
 			// Return the error via the command
@@ -217,7 +226,11 @@ func (cc *ConsumptionController) HandlePanicRecovery() tea.Cmd {
 	return func() tea.Msg {
 		if r := recover(); r != nil {
 			err := fmt.Errorf("panic in consumption: %v", r)
-			return ErrorMsg(err)
+			return ErrorMsg(shared.NewUIError(
+				shared.ErrorTypeDataLoad,
+				"Unexpected error during message consumption",
+				err,
+			))
 		}
 		return nil
 	}
@@ -226,11 +239,19 @@ func (cc *ConsumptionController) HandlePanicRecovery() tea.Cmd {
 // ValidateConsumptionFlags validates the consumption configuration
 func (cc *ConsumptionController) ValidateConsumptionFlags(flags api.ConsumeFlags) error {
 	if flags.OffsetFlag == "" {
-		return fmt.Errorf("offset flag cannot be empty")
+		return shared.NewUIError(
+			shared.ErrorTypeValidation,
+			"Offset flag cannot be empty",
+			nil,
+		)
 	}
 
 	if flags.Tail < 0 {
-		return fmt.Errorf("invalid tail: %d", flags.Tail)
+		return shared.NewUIError(
+			shared.ErrorTypeValidation,
+			fmt.Sprintf("Invalid tail value: %d (must be non-negative)", flags.Tail),
+			nil,
+		)
 	}
 
 	return nil

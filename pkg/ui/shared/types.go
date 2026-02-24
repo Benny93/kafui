@@ -235,11 +235,14 @@ func NewUIError(errorType, message string, cause error) UIError {
 
 // Common error types
 const (
-	ErrorTypeDataLoad    = "data_load"
-	ErrorTypeValidation  = "validation"
-	ErrorTypeNavigation  = "navigation"
-	ErrorTypeRender      = "render"
-	ErrorTypeConfiguration = "configuration"
+	ErrorTypeDataLoad       = "data_load"
+	ErrorTypeValidation     = "validation"
+	ErrorTypeNavigation     = "navigation"
+	ErrorTypeRender         = "render"
+	ErrorTypeConfiguration  = "configuration"
+	ErrorTypeConnection     = "connection"
+	ErrorTypeAuthentication = "authentication"
+	ErrorTypeTimeout        = "timeout"
 )
 
 // Helper functions for common operations
