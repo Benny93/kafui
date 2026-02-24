@@ -512,35 +512,18 @@ func NewTopicPageModel(dataSource api.KafkaDataSource, topicName string, topicDe
 
 // Init implements the Page interface
 func (t *TopicPageModel) Init() tea.Cmd {
-	// Initialize both the topic model and the reusable app
-	topicCmd := t.topicModel.Init()
-	appCmd := t.reusableApp.Init()
-	return tea.Batch(topicCmd, appCmd)
+	// Initialize the reusable app (which will initialize providers)
+	return t.reusableApp.Init()
 }
 
 // Update implements the Page interface
 func (t *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-	
-	// Update the topic model first to handle business logic
-	updatedTopicModel, topicCmd := t.topicModel.Update(msg)
-	if updatedModel, ok := updatedTopicModel.(*Model); ok {
-		t.topicModel = updatedModel
-	}
-	if topicCmd != nil {
-		cmds = append(cmds, topicCmd)
-	}
-	
-	// Update the reusable app
-	updatedApp, appCmd := t.reusableApp.Update(msg)
+	// Update the reusable app (which delegates to content provider)
+	updatedApp, cmd := t.reusableApp.Update(msg)
 	if updatedReusableApp, ok := updatedApp.(*templateui.ReusableApp); ok {
 		t.reusableApp = updatedReusableApp
 	}
-	if appCmd != nil {
-		cmds = append(cmds, appCmd)
-	}
-	
-	return t, tea.Batch(cmds...)
+	return t, cmd
 }
 
 // View implements the Page interface
