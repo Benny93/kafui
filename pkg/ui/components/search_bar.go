@@ -3,7 +3,6 @@ package components
 import (
 	"fmt"
 
-	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -287,7 +286,6 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		shared.DebugLog("SearchBar received key event - Key: %s, Focused: %v, ResourceMode: %v", msg.String(), sb.focused, sb.isResourceMode)
 		switch msg.String() {
 		case "enter":
 			if sb.textInput.Value() != "" {
@@ -315,7 +313,6 @@ func (sb SearchBarModel) Update(msg tea.Msg) (SearchBarModel, tea.Cmd) {
 			return sb, nil
 
 		case "esc":
-			shared.DebugLog("SearchBar handling ESC key - Focused: %v, ResourceMode: %v", sb.focused, sb.isResourceMode)
 			// Clear search or exit - always reset to normal search mode
 			sb.textInput.SetValue("")
 			sb.resultCount = 0

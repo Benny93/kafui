@@ -5,11 +5,11 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	mainpage "github.com/Benny93/kafui/pkg/ui/pages/main"
 	messagedetailpage "github.com/Benny93/kafui/pkg/ui/pages/message_detail"
 	resourcedetailpage "github.com/Benny93/kafui/pkg/ui/pages/resource_detail"
 	topicpage "github.com/Benny93/kafui/pkg/ui/pages/topic"
-	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -54,23 +54,17 @@ func (r *Router) NavigateTo(pageID string, data interface{}) tea.Cmd {
 
 // navigateToWithoutHistory switches to a specific page without adding to history
 func (r *Router) navigateToWithoutHistory(pageID string, data interface{}) tea.Cmd {
-	shared.DebugLog("navigateToWithoutHistory: pageID=%s", pageID)
-
 	// Initialize page if needed
 	if _, exists := r.pages[pageID]; !exists {
-		shared.DebugLog("Creating new page: %s", pageID)
 		page := r.createPage(pageID, data)
 		if page != nil {
 			r.pages[pageID] = page
-			shared.DebugLog("Created page: %s", pageID)
 
 			// Set dimensions if we have them
 			if r.width > 0 && r.height > 0 {
 				page.SetDimensions(r.width, r.height)
-				shared.DebugLog("Set dimensions for page: %s (%dx%d)", pageID, r.width, r.height)
 			}
 		} else {
-			shared.DebugLog("Failed to create page: %s", pageID)
 			// If page creation failed, don't navigate
 			return nil
 		}
@@ -79,33 +73,24 @@ func (r *Router) navigateToWithoutHistory(pageID string, data interface{}) tea.C
 	// Blur current page
 	if r.currentPage != "" {
 		if currentPage, exists := r.pages[r.currentPage]; exists {
-			shared.DebugLog("Blurring current page: %s", r.currentPage)
 			currentPage.OnBlur()
 		}
 	}
 
 	r.currentPage = pageID
-	shared.DebugLog("Set current page to: %s", pageID)
 
 	// Initialize and focus the new page
 	if page, exists := r.pages[pageID]; exists {
-		shared.DebugLog("Initializing and focusing page: %s", pageID)
 		initCmd := page.Init()
 		focusCmd := page.OnFocus()
-		shared.DebugLog("Page %s - initCmd: %v, focusCmd: %v", pageID, initCmd != nil, focusCmd != nil)
 
 		// Return both commands batched together
 		if initCmd != nil && focusCmd != nil {
-			shared.DebugLog("Returning batched commands for page: %s", pageID)
 			return tea.Batch(initCmd, focusCmd)
 		} else if initCmd != nil {
-			shared.DebugLog("Returning init command for page: %s", pageID)
 			return initCmd
 		} else if focusCmd != nil {
-			shared.DebugLog("Returning focus command for page: %s", pageID)
 			return focusCmd
-		} else {
-			shared.DebugLog("No commands to return for page: %s", pageID)
 		}
 	}
 
@@ -186,31 +171,12 @@ func (r *Router) createPage(pageID string, data interface{}) core.Page {
 			return resourcedetailpage.NewModel(navData.ResourceItem, navData.ResourceType)
 		}
 		// Fallback with minimal resource
-		minimalResource := &minimalResourceItem{id: "unknown"}
+		minimalResource := &shared.MinimalResourceItem{ID: "unknown"}
 		return resourcedetailpage.NewModel(minimalResource, "unknown")
 
 	default:
 		// Default to main page for unknown page IDs
 		return mainpage.NewModel(r.dataSource)
-	}
-}
-
-// minimalResourceItem is a minimal implementation of ResourceItem for fallback cases
-type minimalResourceItem struct {
-	id string
-}
-
-func (m *minimalResourceItem) GetID() string {
-	return m.id
-}
-
-func (m *minimalResourceItem) GetValues() []string {
-	return []string{m.id}
-}
-
-func (m *minimalResourceItem) GetDetails() map[string]string {
-	return map[string]string{
-		"Name": m.id,
 	}
 }
 
@@ -263,14 +229,11 @@ func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Check if current page wants to handle navigation
-	shared.DebugLog("Router.Update: Checking if current page (%s) wants to handle navigation for message type: %T", r.currentPage, msg)
 	newPage, navCmd := currentPage.HandleNavigation(msg)
 
 	// If page returned a navigation command, execute it to get the actual message
 	if navCmd != nil {
-		shared.DebugLog("Router.Update: Page returned navigation command, executing it")
 		if cmdMsg := navCmd(); cmdMsg != nil {
-			shared.DebugLog("Router.Update: Navigation command returned message: %T", cmdMsg)
 			// Process the returned message (likely a PageChangeMsg) recursively
 			return r.Update(cmdMsg)
 		}

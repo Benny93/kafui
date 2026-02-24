@@ -1,7 +1,6 @@
 package components
 
 import (
-	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,24 +41,9 @@ func (c *content) Init() tea.Cmd {
 func (c *content) Update(msg tea.Msg) (Component, tea.Cmd) {
 	var cmd tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		// Handle content-specific key events here
-		shared.DebugLog("Content.Update: Received KeyMsg: %s", msg.String())
-		_ = msg
-	}
-
 	// Let the provider handle the message
 	if c.provider != nil {
-		shared.DebugLog("Content.Update: Delegating message %T to provider", msg)
 		cmd = c.provider.HandleContentUpdate(msg)
-		if cmd != nil {
-			shared.DebugLog("Content.Update: Provider returned a command")
-		} else {
-			shared.DebugLog("Content.Update: Provider returned nil command")
-		}
-	} else {
-		shared.DebugLog("Content.Update: No provider available")
 	}
 
 	return c, cmd

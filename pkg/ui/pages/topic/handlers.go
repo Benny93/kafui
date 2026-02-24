@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -25,24 +24,6 @@ func NewHandlers(model *Model) *Handlers {
 func (h *Handlers) Handle(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	h.model = model // Update model reference
 	var cmds []tea.Cmd
-
-	// Add type information to debug logging
-	switch msg.(type) {
-	case spinner.TickMsg:
-		shared.DebugLog("Topic Update - spinner.TickMsg")
-	case tea.KeyMsg:
-		shared.DebugLog("Topic Update - tea.KeyMsg: %s", msg.(tea.KeyMsg).String())
-	case MessageConsumedMsg:
-		shared.DebugLog("Topic Update - MessageConsumedMsg")
-	case StartConsumingMsg:
-		shared.DebugLog("Topic Update - StartConsumingMsg")
-	case ContinuousListenMsg:
-		shared.DebugLog("Topic Update - ContinuousListenMsg")
-	case ContinuousErrorListenMsg:
-		shared.DebugLog("Topic Update - ContinuousErrorListenMsg")
-	default:
-		shared.DebugLog("Topic Update - %T: %v", msg, msg)
-	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -111,29 +92,21 @@ func (h *Handlers) handleKeyMsg(model *Model, msg tea.KeyMsg) (tea.Model, tea.Cm
 }
 
 func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (tea.Model, tea.Cmd) {
-	shared.DebugLog("handleMessageConsumed called - partition=%d, offset=%d", msg.Message.Partition, msg.Message.Offset)
-
 	// Add the consumed message
 	model.AddMessage(msg.Message)
-	shared.DebugLog("Added message to model, total messages: %d", len(model.messages))
 
 	// Continue listening for more messages if we're still consuming
 	// Use a reasonable interval to prevent UI freezing
 	if model.consuming && model.msgChan != nil {
-		shared.DebugLog("Continuing to listen for more messages")
 		return model, tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
 			return ContinuousListenMsg{}
 		})
-	} else {
-		shared.DebugLog("Not continuing to listen - consuming: %t, msgChan set: %t", model.consuming, model.msgChan != nil)
 	}
 
 	return model, nil
 }
 
 func (h *Handlers) handleStartConsuming(model *Model, msg StartConsumingMsg) (tea.Model, tea.Cmd) {
-	shared.DebugLog("handleStartConsuming called with channels - MsgChan: %v, ErrChan: %v", msg.MsgChan != nil, msg.ErrChan != nil)
-
 	// Set consumption state
 	model.consuming = true
 	model.loading = false
@@ -141,24 +114,16 @@ func (h *Handlers) handleStartConsuming(model *Model, msg StartConsumingMsg) (te
 	model.errChan = msg.ErrChan
 	model.cancelConsumption = msg.Cancel
 	model.SetConnectionStatus(StatusConnected)
-	shared.DebugLog("Set consumption state - consuming: %t, msgChan set: %t, errChan set: %t", model.consuming, model.msgChan != nil, model.errChan != nil)
 
 	// Start listening for messages and errors
 	var cmds []tea.Cmd
 	if msg.MsgChan != nil {
-		shared.DebugLog("Starting message listener")
 		cmds = append(cmds, model.consumption.ListenForMessages(msg.MsgChan))
-	} else {
-		shared.DebugLog("Warning: MsgChan is nil, not starting message listener")
 	}
 	if msg.ErrChan != nil {
-		shared.DebugLog("Starting error listener")
 		cmds = append(cmds, model.consumption.ListenForErrors(msg.ErrChan))
-	} else {
-		shared.DebugLog("Warning: ErrChan is nil, not starting error listener")
 	}
 
-	shared.DebugLog("handleStartConsuming returning %d commands", len(cmds))
 	return model, tea.Batch(cmds...)
 }
 
@@ -176,18 +141,14 @@ func (h *Handlers) handleStopConsuming(model *Model, msg StopConsumingMsg) (tea.
 }
 
 func (h *Handlers) handleContinuousListen(model *Model, msg ContinuousListenMsg) (tea.Model, tea.Cmd) {
-	shared.DebugLog("handleContinuousListen called - consuming: %t, msgChan set: %t", model.consuming, model.msgChan != nil)
-
 	// Continue listening for messages if we're still consuming
 	if model.consuming && model.msgChan != nil {
-		shared.DebugLog("Continuing to listen for messages")
 		// Instead of immediately calling ListenForMessages again, we use a longer interval
 		// to prevent tight loops that can freeze the UI
 		return model, tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
 			return ContinuousListenMsg{}
 		})
 	}
-	shared.DebugLog("Not continuing to listen - consumption stopped or channel unavailable")
 	return model, nil
 }
 

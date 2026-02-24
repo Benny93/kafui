@@ -269,3 +269,22 @@ func CalculateContentDimensions(totalWidth, totalHeight, sidebarWidth, footerHei
 func IsValidDimensions(width, height int) bool {
 	return width >= MinContentWidth && height >= MinContentHeight
 }
+
+// MinimalResourceItem is a minimal implementation of ResourceItem for fallback cases
+type MinimalResourceItem struct {
+	ID string
+}
+
+func (m *MinimalResourceItem) GetID() string {
+	return m.ID
+}
+
+func (m *MinimalResourceItem) GetValues() []string {
+	return []string{m.ID}
+}
+
+func (m *MinimalResourceItem) GetDetails() map[string]string {
+	return map[string]string{
+		"Name": m.ID,
+	}
+}

@@ -8,7 +8,6 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
-	"github.com/Benny93/kafui/pkg/ui/shared"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/charmbracelet/bubbles/key"
@@ -145,15 +144,12 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 
 // Init implements the Page interface for the original model
 func (m *Model) Init() tea.Cmd {
-	shared.DebugLog("Init page topic")
-
 	// Set initial loading state
 	m.loading = true
 	cmds := []tea.Cmd{
 		m.consumption.StartConsuming(),
 		m.spinner.Tick,
 	}
-	shared.DebugLog("Init returning %d commands", len(cmds))
 	return tea.Batch(cmds...)
 }
 
@@ -258,15 +254,11 @@ func (m *Model) loadSchemaInfoForMessage(msg *api.Message) {
 	// Load schema information from data source
 	schemaInfo, err := m.dataSource.GetMessageSchemaInfo(msg.KeySchemaID, msg.ValueSchemaID)
 	if err != nil {
-		shared.DebugLog("Failed to load schema info: %v", err)
 		m.selectedMessageSchema = nil
 		return
 	}
 
 	m.selectedMessageSchema = schemaInfo
-	shared.DebugLog("Loaded schema info for message - KeySchema: %v, ValueSchema: %v",
-		schemaInfo != nil && schemaInfo.KeySchema != nil,
-		schemaInfo != nil && schemaInfo.ValueSchema != nil)
 }
 
 // FilterMessages filters messages based on search input

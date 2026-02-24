@@ -3,7 +3,6 @@ package mainpage
 import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
-	"github.com/Benny93/kafui/pkg/ui/shared"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/charmbracelet/bubbles/key"
@@ -165,13 +164,10 @@ func (m *MainPageModel) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
 	// Handle navigation messages like NavigateToResourceDetailMsg
 	switch msg := msg.(type) {
 	case NavigateToResourceDetailMsg:
-		shared.DebugLog("MainPageModel.HandleNavigation: Received NavigateToResourceDetailMsg: %+v", msg)
 		// Convert to PageChangeMsg for router to handle
 		cmd := m.createPageChangeCommand(msg)
-		shared.DebugLog("MainPageModel.HandleNavigation: Created PageChangeCommand, returning it")
 		return m, cmd
 	}
-	shared.DebugLog("MainPageModel.HandleNavigation: Received unhandled message type: %T", msg)
 	return m, nil
 }
 

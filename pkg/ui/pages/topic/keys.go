@@ -2,7 +2,6 @@ package topic
 
 import (
 	"github.com/Benny93/kafui/pkg/ui/core"
-	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -108,9 +107,6 @@ func NewKeys() *Keys {
 // HandleKey processes key events
 func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	var cmds []tea.Cmd
-
-	// Log key event details
-	shared.DebugLog("Topic Key Event - Type: %v, String: %s, SearchMode: %v", msg.Type, msg.String(), model.searchMode)
 
 	// If in search mode, let the search input handle keys
 	// But handle Enter and Esc specially for search confirmation/cancellation

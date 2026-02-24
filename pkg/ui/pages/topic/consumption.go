@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
-	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -27,12 +26,9 @@ func NewConsumptionController(model *Model) *ConsumptionController {
 // StartConsuming initiates message consumption for the topic
 func (cc *ConsumptionController) StartConsuming() tea.Cmd {
 	return func() tea.Msg {
-		shared.DebugLog("Starting consumption for topic: %s", cc.model.topicName)
-
 		// Set consuming state
 		cc.model.loading = true
 		cc.model.SetConnectionStatus(StatusConnecting)
-		shared.DebugLog("Set consuming state and connection status")
 
 		// Create context and channels for consumption
 		ctx, cancel := context.WithCancel(context.Background())
@@ -49,7 +45,6 @@ func (cc *ConsumptionController) StartConsuming() tea.Cmd {
 				return
 			default:
 				// Channel full, skip message to prevent blocking
-				shared.DebugLog("Message channel full, skipping message")
 			}
 		}
 
@@ -63,35 +58,26 @@ func (cc *ConsumptionController) StartConsuming() tea.Cmd {
 				return
 			default:
 				// Channel full, skip error to prevent blocking
-				shared.DebugLog("Error channel full, skipping error")
 			}
 		}
 
 		// Start consumption in a goroutine
 		go func() {
-			shared.DebugLog("Starting goroutine for topic consumption: %s", cc.model.topicName)
 			defer func() {
-				shared.DebugLog("Consumption goroutine ending for topic: %s", cc.model.topicName)
 				if r := recover(); r != nil {
 					// Handle panic by sending error
-					shared.DebugLog("Panic in consumption: %v", r)
 					onError(fmt.Errorf("panic in consumption: %v", r))
 				}
 				close(msgChan)
 				close(errChan)
 			}()
 
-			shared.DebugLog("Calling dataSource.ConsumeTopic for: %s", cc.model.topicName)
 			err := cc.model.dataSource.ConsumeTopic(ctx, cc.model.topicName, cc.model.consumeFlags, handleMessage, onError)
 			if err != nil {
-				shared.DebugLog("Error from ConsumeTopic: %v", err)
 				onError(err)
-			} else {
-				shared.DebugLog("ConsumeTopic completed successfully")
 			}
 		}()
 
-		shared.DebugLog("Successfully started consumption setup")
 		return StartConsumingMsg{
 			MsgChan: msgChan,
 			ErrChan: errChan,
@@ -103,7 +89,6 @@ func (cc *ConsumptionController) StartConsuming() tea.Cmd {
 // StopConsuming stops message consumption
 func (cc *ConsumptionController) StopConsuming() tea.Cmd {
 	return func() tea.Msg {
-		shared.DebugLog("Stopping consumption for topic: %s", cc.model.topicName)
 		return StopConsumingMsg{}
 	}
 }
@@ -111,22 +96,17 @@ func (cc *ConsumptionController) StopConsuming() tea.Cmd {
 // ListenForMessages creates a command to listen for incoming messages
 func (cc *ConsumptionController) ListenForMessages(msgChan <-chan api.Message) tea.Cmd {
 	return func() tea.Msg {
-		shared.DebugLog("ListenForMessages called, waiting for message...")
 		select {
 		case msg, ok := <-msgChan:
 			if !ok {
-				shared.DebugLog("Message channel closed")
 				return ErrorMsg(fmt.Errorf("message channel was closed"))
 			}
-
-			shared.DebugLog("Received message: partition=%d, offset=%d", msg.Partition, msg.Offset)
 
 			// Return the message via the command
 			return MessageConsumedMsg{Message: msg}
 
-		case <-time.After(time.Millisecond * 500): // Increased timeout to prevent excessive polling
+		case <-time.After(time.Millisecond * 500):
 			// No message received, continue listening
-			shared.DebugLog("ListenForMessages timeout, continuing...")
 			return ContinuousListenMsg{}
 		}
 	}
@@ -138,16 +118,13 @@ func (cc *ConsumptionController) ListenForErrors(errChan <-chan error) tea.Cmd {
 		select {
 		case err, ok := <-errChan:
 			if !ok {
-				shared.DebugLog("Error channel closed")
 				return ErrorMsg(fmt.Errorf("error channel was closed"))
 			}
-
-			shared.DebugLog("Received consumption error: %v", err)
 
 			// Return the error via the command
 			return ErrorMsg(err)
 
-		case <-time.After(time.Second * 1): // Increased timeout to prevent excessive polling
+		case <-time.After(time.Second * 1):
 			// No error received, continue listening
 			return ContinuousErrorListenMsg{}
 		}
@@ -160,14 +137,11 @@ func (cc *ConsumptionController) RetryConnection() tea.Cmd {
 		cc.model.retryCount++
 
 		if cc.model.retryCount > cc.retryPolicy.MaxRetries {
-			shared.DebugLog("Max retries exceeded (%d), giving up", cc.retryPolicy.MaxRetries)
 			return ConnectionFailedMsg{
 				Attempts:  cc.model.retryCount,
 				LastError: cc.model.lastError,
 			}
 		}
-
-		shared.DebugLog("Retrying connection, attempt %d/%d", cc.model.retryCount, cc.retryPolicy.MaxRetries)
 
 		// Schedule retry after delay
 		return cc.ScheduleRetry(cc.model.lastError)
@@ -179,7 +153,6 @@ func (cc *ConsumptionController) ScheduleRetry(err error) tea.Cmd {
 	delay := cc.calculateRetryDelay(cc.model.retryCount)
 
 	return tea.Tick(delay, func(t time.Time) tea.Msg {
-		shared.DebugLog("Executing scheduled retry")
 		return RetryConsumptionMsg{
 			Attempt:   cc.model.retryCount,
 			LastError: err,
@@ -244,7 +217,6 @@ func (cc *ConsumptionController) HandlePanicRecovery() tea.Cmd {
 	return func() tea.Msg {
 		if r := recover(); r != nil {
 			err := fmt.Errorf("panic in consumption: %v", r)
-			shared.DebugLog("Recovered from panic: %v", err)
 			return ErrorMsg(err)
 		}
 		return nil
@@ -274,8 +246,8 @@ func (cc *ConsumptionController) GetConsumptionStats() ConsumptionStats {
 		IsPaused:         cc.model.paused,
 		ConnectionStatus: cc.model.connectionStatus,
 		LastError:        cc.model.lastError,
-		StartTime:        time.Time{},             // TODO: Track start time
-		Duration:         time.Since(time.Time{}), // TODO: Calculate duration
+		StartTime:        time.Time{},
+		Duration:         time.Since(time.Time{}),
 	}
 }
 
