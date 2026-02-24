@@ -19,6 +19,7 @@ const (
 var (
 	logMutex       sync.Mutex
 	logInitialized bool
+	logLineCount   int
 )
 
 // InitDebugLog initializes the debug logging by cleaning up any existing log file
@@ -34,47 +35,31 @@ func InitDebugLog() {
 	if _, err := os.Stat(logFileName); err == nil {
 		os.Remove(logFileName)
 	}
+	logLineCount = 0
 
 	logInitialized = true
 }
 
 // rotateLogIfNeeded checks if the log file is too large and rotates it
 func rotateLogIfNeeded() error {
-	// Check if file exists and get line count
-	file, err := os.Open(logFileName)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // File doesn't exist, no rotation needed
-		}
-		return err
-	}
-
-	// Count lines in the file
-	scanner := bufio.NewScanner(file)
-	lineCount := 0
-	for scanner.Scan() {
-		lineCount++
-	}
-	file.Close()
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
 	// If file is not too large, no rotation needed
-	if lineCount <= maxLogLines {
+	if logLineCount <= maxLogLines {
 		return nil
 	}
 
 	// Read all lines
-	file, err = os.Open(logFileName)
+	file, err := os.Open(logFileName)
 	if err != nil {
+		if os.IsNotExist(err) {
+			logLineCount = 0
+			return nil
+		}
 		return err
 	}
 	defer file.Close()
 
 	var lines []string
-	scanner = bufio.NewScanner(file)
+	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
@@ -97,13 +82,20 @@ func rotateLogIfNeeded() error {
 	defer file.Close()
 
 	writer := bufio.NewWriter(file)
+	writtenLines := 0
 	for i := startIndex; i < len(lines); i++ {
 		if _, err := writer.WriteString(lines[i] + "\n"); err != nil {
 			return err
 		}
+		writtenLines++
 	}
 
-	return writer.Flush()
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+
+	logLineCount = writtenLines
+	return nil
 }
 
 func DebugLog(format string, args ...interface{}) {
@@ -137,7 +129,9 @@ func DebugLog(format string, args ...interface{}) {
 	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
 	logMsg := fmt.Sprintf("%s: %s\n", timestamp, fmt.Sprintf(format, args...))
 
-	f.WriteString(logMsg)
+	if _, err := f.WriteString(logMsg); err == nil {
+		logLineCount++
+	}
 }
 
 // tryLockWithTimeout attempts to acquire the log mutex with a timeout
@@ -147,11 +141,15 @@ func tryLockWithTimeout() bool {
 		logMutex.Lock()
 		done <- true
 	}()
-	
+
 	select {
 	case <-done:
 		return true
 	case <-time.After(100 * time.Millisecond):
+		go func() {
+			<-done
+			logMutex.Unlock()
+		}()
 		return false
 	}
 }
