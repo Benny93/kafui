@@ -333,15 +333,15 @@ func highlightMatchingText(text, query string) string {
 	if query == "" {
 		return text
 	}
-	
+
 	// Convert to lowercase for case-insensitive comparison
 	lowerText := strings.ToLower(text)
 	lowerQuery := strings.ToLower(query)
-	
+
 	// Find all occurrences of the query in the text
 	var result strings.Builder
 	start := 0
-	
+
 	for {
 		index := strings.Index(lowerText[start:], lowerQuery)
 		if index == -1 {
@@ -349,20 +349,20 @@ func highlightMatchingText(text, query string) string {
 			result.WriteString(text[start:])
 			break
 		}
-		
+
 		// Add text before the match
 		actualIndex := start + index
 		result.WriteString(text[start:actualIndex])
-		
+
 		// Add highlighted match (using Lip Gloss styling)
 		match := text[actualIndex : actualIndex+len(query)]
 		highlighted := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render(match)
 		result.WriteString(highlighted)
-		
+
 		// Move start position
 		start = actualIndex + len(query)
 	}
-	
+
 	return result.String()
 }
 
@@ -467,7 +467,7 @@ func (v *View) SetDimensions(width, height int) {
 type TopicPageModel struct {
 	// Original topic model for business logic
 	topicModel *Model
-	
+
 	// Template system
 	reusableApp     *templateui.ReusableApp
 	contentProvider *TopicContentProvider
@@ -477,11 +477,11 @@ type TopicPageModel struct {
 func NewTopicPageModel(dataSource api.KafkaDataSource, topicName string, topicDetails api.Topic) *TopicPageModel {
 	// Create the original topic model for business logic
 	topicModel := NewModel(dataSource, topicName, topicDetails)
-	
+
 	// Create topic-specific providers
 	contentProvider := NewTopicContentProvider(topicModel)
 	headerProvider := NewTopicHeaderDataProvider(topicModel)
-	
+
 	// Create sidebar sections
 	sidebarSections := []providers.SidebarSection{
 		NewTopicInfoSection(topicModel),
@@ -489,20 +489,20 @@ func NewTopicPageModel(dataSource api.KafkaDataSource, topicName string, topicDe
 		NewConsumptionControlSection(topicModel),
 		NewTopicShortcutsSection(topicModel),
 	}
-	
+
 	// Create app configuration using template providers
 	config := &providers.AppConfig{
 		ContentProvider:             contentProvider,
 		HeaderDataProvider:          headerProvider,
-		SidebarSections:            sidebarSections,
-		ShowSidebarByDefault:       true,
-		CompactModeWidthBreakpoint: 120,
+		SidebarSections:             sidebarSections,
+		ShowSidebarByDefault:        true,
+		CompactModeWidthBreakpoint:  120,
 		CompactModeHeightBreakpoint: 30,
 	}
-	
+
 	// Create the reusable app with our topic providers
 	reusableApp := templateui.NewReusableApp(config)
-	
+
 	return &TopicPageModel{
 		topicModel:      topicModel,
 		reusableApp:     reusableApp,
@@ -540,6 +540,9 @@ func (t *TopicPageModel) SetDimensions(width, height int) {
 
 // GetID implements the Page interface
 func (t *TopicPageModel) GetID() string {
+	if t.topicModel != nil && t.topicModel.topicName != "" {
+		return "topic:" + t.topicModel.topicName
+	}
 	return "topic"
 }
 

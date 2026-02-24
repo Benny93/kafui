@@ -1,6 +1,8 @@
 package topic
 
 import (
+	"fmt"
+
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,10 +25,10 @@ type keyMap struct {
 }
 
 type NavigationKeys struct {
-	Up    key.Binding
-	Down  key.Binding
-	Home  key.Binding
-	End   key.Binding
+	Up   key.Binding
+	Down key.Binding
+	Home key.Binding
+	End  key.Binding
 }
 
 type MessageControlKeys struct {
@@ -118,7 +120,7 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 			model.FilterMessages()
 			return nil
 		}
-		
+
 		// Handle Esc to cancel search
 		if msg.String() == "esc" {
 			model.searchMode = false
@@ -127,7 +129,7 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 			model.FilterMessages()
 			return nil
 		}
-		
+
 		// Let the search input handle other keys
 		var cmd tea.Cmd
 		model.searchInput, cmd = model.searchInput.Update(msg)
@@ -240,15 +242,16 @@ func (k *Keys) handleEnter(model *Model) tea.Cmd {
 		model.FilterMessages()
 		return nil
 	}
-	
-	// Navigate to message detail page
+
+	// Navigate to message detail page with a unique ID
 	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil {
 		model.selectedMessage = selectedMsg
 		return func() tea.Msg {
-			return core.PageChangeMsg{PageID: "detail", Data: *selectedMsg}
+			pageID := fmt.Sprintf("detail:%s:%d:%d", model.topicName, selectedMsg.Partition, selectedMsg.Offset)
+			return core.PageChangeMsg{PageID: pageID, Data: *selectedMsg}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -322,10 +325,9 @@ func (k *Keys) GetShortcuts() []string {
 		"/     Search messages",
 		"r     Retry connection",
 		"c     Copy key",
-		"v     Copy value", 
+		"v     Copy value",
 		"d     Show details",
 		"Esc   Exit search",
 		"q/Esc Back to topics",
 	}
 }
-

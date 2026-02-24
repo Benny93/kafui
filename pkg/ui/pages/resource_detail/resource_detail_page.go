@@ -14,11 +14,11 @@ type Model struct {
 	// Data
 	resourceItem shared.ResourceItem
 	resourceType string
-	
+
 	// State
 	dimensions core.Dimensions
 	error      error
-	
+
 	// Components
 	handlers *Handlers
 	keys     *Keys
@@ -63,6 +63,9 @@ func (m *Model) SetDimensions(width, height int) {
 
 // GetID implements the Page interface
 func (m *Model) GetID() string {
+	if m.resourceItem != nil {
+		return "resource_detail:" + m.resourceItem.GetID()
+	}
 	return "resource_detail"
 }
 

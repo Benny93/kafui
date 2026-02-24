@@ -2,14 +2,15 @@ package router
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
-	"github.com/Benny93/kafui/pkg/ui/shared"
 	mainpage "github.com/Benny93/kafui/pkg/ui/pages/main"
 	messagedetailpage "github.com/Benny93/kafui/pkg/ui/pages/message_detail"
 	resourcedetailpage "github.com/Benny93/kafui/pkg/ui/pages/resource_detail"
 	topicpage "github.com/Benny93/kafui/pkg/ui/pages/topic"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -145,7 +146,13 @@ func (r *Router) ClearHistory() {
 
 // createPage creates a new page instance based on pageID and data
 func (r *Router) createPage(pageID string, data interface{}) core.Page {
-	switch pageID {
+	// Support dynamic page IDs like "topic:my-topic"
+	baseID := pageID
+	if idx := strings.Index(pageID, ":"); idx != -1 {
+		baseID = pageID[:idx]
+	}
+
+	switch baseID {
 	case "main":
 		return mainpage.NewModel(r.dataSource)
 

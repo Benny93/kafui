@@ -203,8 +203,8 @@ func (m *MainPageModel) createPageChangeCommand(msg NavigateToResourceDetailMsg)
 			"topic": topicDetails,
 		}
 
-		// Return PageChangeMsg for router to handle
-		return core.NewPageChangeMsg("topic", navData)
+		// Return PageChangeMsg for router to handle with a specific topic ID
+		return core.NewPageChangeMsg("topic:"+topicName, navData)
 
 	case ConsumerGroupResourceType:
 		// Navigate to consumer group page (not implemented yet)

@@ -10,18 +10,18 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/core"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/atotto/clipboard"
 )
 
 // Model represents the detail page state for viewing individual messages (kept for compatibility)
 type Model struct {
 	// Data
-	topicName    string
-	message      api.Message
-	dataSource   api.KafkaDataSource
-	schemaInfo   *api.MessageSchemaInfo
+	topicName  string
+	message    api.Message
+	dataSource api.KafkaDataSource
+	schemaInfo *api.MessageSchemaInfo
 
 	// State
 	dimensions core.Dimensions
@@ -33,7 +33,7 @@ type Model struct {
 	displayFormat MessageDisplayFormat
 	showHeaders   bool
 	showMetadata  bool
-	
+
 	// Focus management
 	focusedViewport string // "key" or "value"
 }
@@ -58,8 +58,8 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, message api.Mess
 			WrapLines:   true,
 			ShowBytes:   false,
 		},
-		showHeaders:  true,
-		showMetadata: true,
+		showHeaders:     true,
+		showMetadata:    true,
 		focusedViewport: "value", // Value viewport focused by default
 	}
 
@@ -78,7 +78,7 @@ func (m *Model) GetMessageInfo() map[string]string {
 		"Value Size": fmt.Sprintf("%d bytes", len(m.message.Value)),
 		"Headers":    fmt.Sprintf("%d", len(m.message.Headers)),
 	}
-	
+
 	// Add schema information if available
 	if m.message.KeySchemaID != "" {
 		info["Key Schema ID"] = m.message.KeySchemaID
@@ -86,7 +86,7 @@ func (m *Model) GetMessageInfo() map[string]string {
 	if m.message.ValueSchemaID != "" {
 		info["Value Schema ID"] = m.message.ValueSchemaID
 	}
-	
+
 	return info
 }
 
@@ -127,7 +127,7 @@ func (m *Model) GetFormattedValue() string {
 // formatAsJSON attempts to parse and pretty print JSON content
 func (m *Model) formatAsJSON(content string) string {
 	var parsed interface{}
-	
+
 	// Try to unmarshal as JSON
 	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
 		// If parsing fails, try to unescape and parse again
@@ -147,19 +147,19 @@ func (m *Model) formatAsJSON(content string) string {
 			return content
 		}
 	}
-	
+
 	// Marshal with indentation for pretty printing
 	pretty, err := json.MarshalIndent(parsed, "", "  ")
 	if err != nil {
 		// If pretty printing fails, return original content
 		return content
 	}
-	
+
 	// Apply syntax highlighting if enabled
 	if m.displayFormat.ValueFormat == "pretty" {
 		return m.highlightJSON(string(pretty))
 	}
-	
+
 	return string(pretty)
 }
 
@@ -263,19 +263,19 @@ func (m *Model) loadSchemaInfo() {
 	if m.dataSource == nil {
 		return
 	}
-	
+
 	// Only load if schema IDs are present
 	if m.message.KeySchemaID == "" && m.message.ValueSchemaID == "" {
 		return
 	}
-	
+
 	// Load schema information from data source
 	schemaInfo, err := m.dataSource.GetMessageSchemaInfo(m.message.KeySchemaID, m.message.ValueSchemaID)
 	if err != nil {
 		// Log error but don't fail - schema info is optional
 		return
 	}
-	
+
 	m.schemaInfo = schemaInfo
 }
 
@@ -285,7 +285,7 @@ func (m *Model) LoadSchemaInfoAsync() tea.Cmd {
 	if m.schemaInfo != nil || (m.message.KeySchemaID == "" && m.message.ValueSchemaID == "") {
 		return nil
 	}
-	
+
 	return func() tea.Msg {
 		m.loadSchemaInfo()
 		// Return a custom message to trigger UI refresh
@@ -328,16 +328,16 @@ func (m *Model) OnBlur() tea.Cmd {
 
 // KeyMap defines the key bindings for the message detail page
 type KeyMap struct {
-	NextTab        key.Binding
-	PrevTab        key.Binding
-	ToggleFormat   key.Binding
-	SwitchFocus    key.Binding
-	Copy           key.Binding
-	ScrollUp       key.Binding
-	ScrollDown     key.Binding
-	Back           key.Binding
-	Quit           key.Binding
-	Help           key.Binding
+	NextTab      key.Binding
+	PrevTab      key.Binding
+	ToggleFormat key.Binding
+	SwitchFocus  key.Binding
+	Copy         key.Binding
+	ScrollUp     key.Binding
+	ScrollDown   key.Binding
+	Back         key.Binding
+	Quit         key.Binding
+	Help         key.Binding
 }
 
 // ShortHelp returns keybindings to be shown in the mini help view
@@ -348,7 +348,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 // FullHelp returns keybindings for the expanded help view
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.NextTab, k.ToggleFormat, k.SwitchFocus}, // first column
+		{k.NextTab, k.ToggleFormat, k.SwitchFocus},                 // first column
 		{k.Copy, k.ScrollUp, k.ScrollDown, k.Back, k.Help, k.Quit}, // second column
 	}
 }
@@ -489,7 +489,7 @@ func (m *MessageDetailPageModel) SetDimensions(width, height int) {
 
 // GetID implements the Page interface
 func (m *MessageDetailPageModel) GetID() string {
-	return "message_detail"
+	return fmt.Sprintf("detail:%s:%d:%d", m.topicName, m.message.Partition, m.message.Offset)
 }
 
 // GetTitle implements the Page interface
