@@ -358,3 +358,78 @@ func TestWindowSizeUpdate(t *testing.T) {
 	assert.Equal(t, 100, updatedTopicModel.dimensions.Width)
 	assert.Equal(t, 30, updatedTopicModel.dimensions.Height)
 }
+
+// TestTopicPageModel_GetID tests the unique page ID generation for topic pages
+func TestTopicPageModel_GetID(t *testing.T) {
+	mockDS := &MockDataSource{}
+
+	// Create test topic details
+	topicDetails := api.Topic{
+		NumPartitions:     3,
+		ReplicationFactor: 2,
+		MessageCount:      100,
+	}
+
+	// Test with normal topic name
+	pageModel := NewTopicPageModel(mockDS, "my-topic", topicDetails)
+	id := pageModel.GetID()
+
+	assert.Contains(t, id, "topic:")
+	assert.Contains(t, id, "my-topic")
+
+	// Test with different topic names
+	testCases := []struct {
+		topicName     string
+		expectedInID  string
+	}{
+		{"topic-with-dashes", "topic-with-dashes"},
+		{"topic_with_underscores", "topic_with_underscores"},
+		{"topic.with.dots", "topic.with.dots"},
+		{"TopicWithCamelCase", "TopicWithCamelCase"},
+		{"topic123", "topic123"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.topicName, func(t *testing.T) {
+			pageModel := NewTopicPageModel(mockDS, tc.topicName, topicDetails)
+			id := pageModel.GetID()
+			assert.Contains(t, id, tc.expectedInID)
+		})
+	}
+}
+
+// TestTopicPageModel_GetID_WithEmptyTopicName tests page ID with empty topic name
+func TestTopicPageModel_GetID_WithEmptyTopicName(t *testing.T) {
+	mockDS := &MockDataSource{}
+
+	topicDetails := api.Topic{
+		NumPartitions:     3,
+		ReplicationFactor: 2,
+	}
+
+	pageModel := NewTopicPageModel(mockDS, "", topicDetails)
+	id := pageModel.GetID()
+
+	// Should return base ID when topic name is empty
+	assert.Equal(t, "topic", id)
+}
+
+// TestTopicPageModel_GetID_DifferentTopics tests that different topics produce different IDs
+func TestTopicPageModel_GetID_DifferentTopics(t *testing.T) {
+	mockDS := &MockDataSource{}
+
+	topicDetails := api.Topic{
+		NumPartitions:     3,
+		ReplicationFactor: 2,
+	}
+
+	pageModel1 := NewTopicPageModel(mockDS, "topic-1", topicDetails)
+	pageModel2 := NewTopicPageModel(mockDS, "topic-2", topicDetails)
+
+	id1 := pageModel1.GetID()
+	id2 := pageModel2.GetID()
+
+	assert.NotEqual(t, id1, id2)
+	assert.Contains(t, id1, "topic-1")
+	assert.Contains(t, id2, "topic-2")
+}

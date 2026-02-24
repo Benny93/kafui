@@ -15,6 +15,10 @@ type (
 
 	BackMsg struct{}
 	QuitMsg struct{}
+
+	BreadcrumbUpdateMsg struct {
+		Items []string
+	}
 )
 
 // Data messages

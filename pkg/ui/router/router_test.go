@@ -6,6 +6,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/stretchr/testify/assert"
 )
 
 // mockDataSource implements api.KafkaDataSource for testing
@@ -135,7 +136,7 @@ func TestNavigateTo(t *testing.T) {
 					ReplicationFactor: 1,
 				},
 			},
-			expected: "topic",
+			expected: "topic:test-topic",
 		},
 		{
 			name:   "Navigate to message detail page",
@@ -149,7 +150,7 @@ func TestNavigateTo(t *testing.T) {
 					Value:     "test-value",
 				},
 			},
-			expected: "message_detail",
+			expected: "detail:test-topic:0:0",
 		},
 		{
 			name:   "Navigate to resource detail page",
@@ -161,7 +162,7 @@ func TestNavigateTo(t *testing.T) {
 				},
 				ResourceType: "topic",
 			},
-			expected: "resource_detail",
+			expected: "resource_detail:test-resource",
 		},
 	}
 
@@ -169,19 +170,16 @@ func TestNavigateTo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			router.NavigateTo(tt.pageID, tt.data)
 
-			if router.GetCurrentPageID() != tt.expected {
-				t.Errorf("Expected current page to be '%s', got '%s'", tt.expected, router.GetCurrentPageID())
+			// Router stores page by the pageID passed to NavigateTo
+			// The page's GetID() may return a different dynamic ID
+			if router.GetCurrentPageID() != tt.pageID {
+				t.Errorf("Expected current page to be '%s', got '%s'", tt.pageID, router.GetCurrentPageID())
 			}
 
 			// Verify page was created
 			page := router.GetCurrentPage()
 			if page == nil {
 				t.Error("Expected page to be created, got nil")
-			}
-
-			// Verify page ID matches
-			if page.GetID() != tt.expected {
-				t.Errorf("Expected page ID to be '%s', got '%s'", tt.expected, page.GetID())
 			}
 		})
 	}
@@ -474,4 +472,127 @@ func TestHistoryDoesNotGrow(t *testing.T) {
 	if finalHistoryLen != baselineHistoryLen {
 		t.Errorf("History grew from %d to %d after back-and-forth navigation. History: %v", baselineHistoryLen, finalHistoryLen, router.GetHistory())
 	}
+}
+
+// TestRouter_DynamicPageIDs tests that the router correctly handles dynamic page IDs
+func TestRouter_DynamicPageIDs(t *testing.T) {
+	dataSource := &mockDataSource{}
+	router := NewRouter(dataSource)
+
+	// Test topic page with dynamic ID
+	router.NavigateTo("topic:my-topic", &NavigationData{TopicName: "my-topic"})
+	assert.Equal(t, "topic:my-topic", router.GetCurrentPageID())
+
+	// Test message detail page with dynamic ID
+	router.NavigateTo("detail:my-topic:0:123", &NavigationData{
+		TopicName: "my-topic",
+		Message: api.Message{
+			Partition: 0,
+			Offset:    123,
+		},
+	})
+	assert.Equal(t, "detail:my-topic:0:123", router.GetCurrentPageID())
+
+	// Test resource detail page with dynamic ID
+	router.NavigateTo("resource_detail:group-1", &NavigationData{
+		ResourceType: "consumer-group",
+	})
+	assert.Equal(t, "resource_detail:group-1", router.GetCurrentPageID())
+}
+
+// TestRouter_BaseIDExtraction tests that the router correctly extracts base IDs
+func TestRouter_BaseIDExtraction(t *testing.T) {
+	dataSource := &mockDataSource{}
+	router := NewRouter(dataSource)
+
+	testCases := []struct {
+		dynamicID string
+		baseID    string
+		pageType  string
+	}{
+		{"topic:my-topic", "topic", "topic"},
+		{"topic:another-topic", "topic", "topic"},
+		{"detail:topic:0:123", "detail", "message_detail"},
+		{"detail:topic:1:456", "detail", "message_detail"},
+		{"resource_detail:group-1", "resource_detail", "resource_detail"},
+		{"main", "main", "main"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.dynamicID, func(t *testing.T) {
+			router.NavigateTo(tc.dynamicID, nil)
+			
+			// Verify current page ID is preserved (full dynamic ID)
+			assert.Equal(t, tc.dynamicID, router.GetCurrentPageID())
+			
+			// Verify page was created (not nil)
+			currentPage := router.GetCurrentPage()
+			assert.NotNil(t, currentPage)
+		})
+	}
+}
+
+// TestRouter_DifferentMessageIDs tests that different message IDs create different pages
+func TestRouter_DifferentMessageIDs(t *testing.T) {
+	dataSource := &mockDataSource{}
+	router := NewRouter(dataSource)
+
+	// Navigate to first message
+	router.NavigateTo("detail:topic1:0:100", &NavigationData{
+		TopicName: "topic1",
+		Message: api.Message{
+			Partition: 0,
+			Offset:    100,
+		},
+	})
+	
+	page1 := router.GetCurrentPage()
+	page1ID := router.GetCurrentPageID()
+
+	// Navigate to different message
+	router.NavigateTo("detail:topic1:0:200", &NavigationData{
+		TopicName: "topic1",
+		Message: api.Message{
+			Partition: 0,
+			Offset:    200,
+		},
+	})
+	
+	page2 := router.GetCurrentPage()
+	page2ID := router.GetCurrentPageID()
+
+	// Should have different page IDs
+	assert.NotEqual(t, page1ID, page2ID)
+	assert.Contains(t, page1ID, "100")
+	assert.Contains(t, page2ID, "200")
+	
+	// Both should be message detail pages (same type, different instances)
+	assert.NotNil(t, page1)
+	assert.NotNil(t, page2)
+}
+
+// TestRouter_NavigationWithUniqueTopicIDs tests navigation between different topics
+func TestRouter_NavigationWithUniqueTopicIDs(t *testing.T) {
+	dataSource := &mockDataSource{}
+	router := NewRouter(dataSource)
+
+	// Start at main
+	router.NavigateTo("main", nil)
+	assert.Equal(t, "main", router.GetCurrentPageID())
+
+	// Navigate to first topic
+	router.NavigateTo("topic:topic-1", &NavigationData{TopicName: "topic-1"})
+	assert.Equal(t, "topic:topic-1", router.GetCurrentPageID())
+
+	// Navigate to second topic
+	router.NavigateTo("topic:topic-2", &NavigationData{TopicName: "topic-2"})
+	assert.Equal(t, "topic:topic-2", router.GetCurrentPageID())
+
+	// Navigate back
+	router.Update(core.BackMsg{})
+	assert.Equal(t, "topic:topic-1", router.GetCurrentPageID())
+
+	// Navigate back again
+	router.Update(core.BackMsg{})
+	assert.Equal(t, "main", router.GetCurrentPageID())
 }

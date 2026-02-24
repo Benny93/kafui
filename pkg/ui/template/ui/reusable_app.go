@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/components"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
@@ -20,10 +21,11 @@ const (
 type ReusableApp struct {
 	width, height int
 
-	header  components.Header
-	content components.Content
-	sidebar components.Sidebar
-	footer  *components.Footer
+	header     components.Header
+	content    components.Content
+	sidebar    components.Sidebar
+	footer     *components.Footer
+	breadcrumb *components.Breadcrumb
 
 	config      *providers.AppConfig
 	sizeMode    styles.SizeMode
@@ -69,6 +71,7 @@ func NewReusableApp(config *providers.AppConfig) *ReusableApp {
 		content:     content,
 		sidebar:     sidebar,
 		footer:      components.NewFooter(),
+		breadcrumb:  components.NewBreadcrumb(),
 		config:      config,
 		showSidebar: config.ShowSidebarByDefault,
 		sizeMode:    styles.SizeModeNormal,
@@ -126,6 +129,10 @@ func (a *ReusableApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, a.updateContentSize())
 		cmds = append(cmds, a.updateSidebarSize())
 		cmds = append(cmds, a.footer.SetSize(a.width, 1)) // Footer height is 1
+
+	case core.BreadcrumbUpdateMsg:
+		a.breadcrumb.SetItems(msg.Items)
+		return a, tea.Batch(a.updateContentSize(), a.updateSidebarSize())
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -196,29 +203,30 @@ func (a *ReusableApp) View() string {
 	}
 
 	// Main content area
-	var mainContent string
+	var middleArea string
 	if a.showSidebar && a.sizeMode >= styles.SizeModeNormal {
-		// CRUSH layout: Content on left, fixed-width sidebar on right
-		contentView := a.content.View()
-		sidebarView := a.sidebar.View()
-
-		// Create the main layout with content on left, sidebar on right
-		mainContent = lipgloss.JoinHorizontal(
+		// Just horizontally join content and sidebar
+		middleArea = lipgloss.JoinHorizontal(
 			lipgloss.Bottom,
-			contentView,
-			sidebarView,
+			a.content.View(),
+			a.sidebar.View(),
 		)
 	} else {
-		// Full width content
-		mainContent = a.content.View()
+		middleArea = a.content.View()
 	}
 
-	components = append(components, mainContent)
+	components = append(components, middleArea)
+
+	// Breadcrumbs (Status Bar at the bottom)
+	breadcrumbView := a.breadcrumb.View()
+	if breadcrumbView != "" {
+		components = append(components, breadcrumbView)
+	}
 
 	// Footer
-	footer := a.footer.View()
-	if footer != "" {
-		components = append(components, footer)
+	footerView := a.footer.View()
+	if footerView != "" {
+		components = append(components, footerView)
 	}
 
 	// Combine all components
@@ -246,12 +254,37 @@ func (a *ReusableApp) renderMinimumSizeView() string {
 		Render(message)
 }
 
+func (a *ReusableApp) getOccupiedHeight() int {
+	occupied := 0
+	if a.showDebug {
+		occupied += 1
+	}
+	if a.breadcrumb.HasItems() {
+		occupied += 1
+	}
+	if a.sizeMode > styles.SizeModeSmall {
+		occupied += DefaultHeaderHeight
+	}
+	if a.footer.View() != "" {
+		occupied += 1
+	}
+	return occupied
+}
+
 func (a *ReusableApp) updateContentSize() tea.Cmd {
 	contentWidth := a.width
 	if a.showSidebar {
 		contentWidth = a.width - DefaultSideBarWidth
 	}
-	contentHeight := a.height - DefaultHeaderHeight - 2
+	a.breadcrumb.SetWidth(contentWidth)
+
+	// Total height available for the middle area is a.height - occupied
+	middleHeight := a.height - a.getOccupiedHeight()
+	// Content height inside the border is middleHeight - 2
+	contentHeight := middleHeight - 2
+	if contentHeight < 0 {
+		contentHeight = 0
+	}
 
 	return a.content.SetSize(contentWidth, contentHeight)
 }
@@ -261,9 +294,13 @@ func (a *ReusableApp) updateSidebarSize() tea.Cmd {
 		return nil
 	}
 
-	sidebarHeight := a.height - DefaultHeaderHeight - 4
+	middleHeight := a.height - a.getOccupiedHeight()
+	sidebarHeight := middleHeight - 2
 	if a.showDebug {
-		sidebarHeight -= 1 // Account for debug info
+		// If sidebar has its own debug info logic, adjust here
+	}
+	if sidebarHeight < 0 {
+		sidebarHeight = 0
 	}
 
 	cmds := []tea.Cmd{

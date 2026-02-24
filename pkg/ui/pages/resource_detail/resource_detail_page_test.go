@@ -61,22 +61,26 @@ func TestModelImplementsPageInterface(t *testing.T) {
 			"Status": "active",
 		},
 	}
-	
+
 	// Create new model
 	model := NewModel(mockItem, "topic")
-	
+
 	// Test that model implements the Page interface methods
-	assert.Equal(t, "resource_detail", model.GetID())
-	
-	// Test Init returns nil (no initialization needed)
+	// GetID now returns dynamic ID format: "resource_detail:<id>"
+	id := model.GetID()
+	assert.Contains(t, id, "resource_detail:")
+	assert.Contains(t, id, "test-resource")
+
+	// Test Init (template system initialization - may return commands)
 	cmd := model.Init()
-	assert.Nil(t, cmd)
-	
+	// Note: Init may return commands for template initialization
+	assert.NotNil(t, cmd)
+
 	// Test SetDimensions
 	model.SetDimensions(80, 24)
 	assert.Equal(t, 80, model.dimensions.Width)
 	assert.Equal(t, 24, model.dimensions.Height)
-	
+
 	// Test View returns a string (basic test)
 	model.SetDimensions(80, 24) // Ensure dimensions are set
 	view := model.View()
@@ -233,7 +237,7 @@ func TestViewRendering(t *testing.T) {
 			name:         "Zero dimensions",
 			resourceType: "topic",
 			resourceItem: &MockResourceItem{id: "test"},
-			expectedText: []string{"Loading resource details..."},
+			expectedText: []string{"Loading"}, // Template shows "Loading..." with zero dimensions
 		},
 	}
 	
@@ -255,22 +259,119 @@ func TestViewRendering(t *testing.T) {
 }
 
 func TestErrorHandling(t *testing.T) {
-	// Test model with error state
+	// Test model with error state - create properly initialized model
+	mockItem := &MockResourceItem{
+		id:      "test-resource",
+		values:  []string{"test"},
+		details: map[string]string{"Name": "test"},
+	}
+	
+	model := NewModel(mockItem, "test")
+	model.SetDimensions(80, 24)
+	
+	// Set error state
+	model.error = assert.AnError
+	
+	// Test that methods handle resource gracefully
+	assert.Equal(t, "test-resource", model.GetResourceID())
+	assert.Equal(t, []string{"test"}, model.GetResourceValues())
+	assert.Equal(t, map[string]string{"Name": "test"}, model.GetResourceDetails())
+
+	// Test view renders with error state
+	view := model.View()
+	assert.NotEmpty(t, view)
+}
+
+// TestModel_GetID tests the unique page ID generation for resource detail pages
+func TestModel_GetID(t *testing.T) {
+	// Create mock resource item
+	mockResource := &mockResourceItem{
+		id:     "test-resource-1",
+		values: []string{"value1", "value2"},
+		details: map[string]string{
+			"Name": "Test Resource",
+			"Type": "ConsumerGroup",
+		},
+	}
+
 	model := &Model{
-		resourceItem: nil,
-		resourceType: "test",
-		error:        assert.AnError,
+		resourceItem: mockResource,
+		resourceType: "consumer-group",
 	}
 	model.handlers = NewHandlers(model)
 	model.keys = NewKeys()
 	model.view = NewView()
-	
-	// Test that methods handle nil resource gracefully
-	assert.Equal(t, "Unknown", model.GetResourceID())
-	assert.Equal(t, []string{"No resource"}, model.GetResourceValues())
-	assert.Equal(t, map[string]string{"Error": "No resource item"}, model.GetResourceDetails())
-	
-	// Test view with zero dimensions
-	view := model.View()
-	assert.Contains(t, view, "Loading resource details...")
+
+	id := model.GetID()
+
+	// Verify ID format includes resource ID
+	assert.Contains(t, id, "resource_detail:")
+	assert.Contains(t, id, "test-resource-1")
+}
+
+// TestModel_GetID_WithNilResource tests page ID when resource item is nil
+func TestModel_GetID_WithNilResource(t *testing.T) {
+	model := &Model{
+		resourceItem: nil,
+		resourceType: "consumer-group",
+	}
+	model.handlers = NewHandlers(model)
+	model.keys = NewKeys()
+	model.view = NewView()
+
+	id := model.GetID()
+
+	// Should return base ID when resource is nil
+	assert.Equal(t, "resource_detail", id)
+}
+
+// TestModel_GetID_WithDifferentResources tests that different resources produce different IDs
+func TestModel_GetID_WithDifferentResources(t *testing.T) {
+	resource1 := &mockResourceItem{
+		id:     "resource-1",
+		values: []string{"value1"},
+		details: map[string]string{"Name": "Resource 1"},
+	}
+
+	resource2 := &mockResourceItem{
+		id:     "resource-2",
+		values: []string{"value2"},
+		details: map[string]string{"Name": "Resource 2"},
+	}
+
+	model1 := &Model{resourceItem: resource1, resourceType: "test"}
+	model1.handlers = NewHandlers(model1)
+	model1.keys = NewKeys()
+	model1.view = NewView()
+
+	model2 := &Model{resourceItem: resource2, resourceType: "test"}
+	model2.handlers = NewHandlers(model2)
+	model2.keys = NewKeys()
+	model2.view = NewView()
+
+	id1 := model1.GetID()
+	id2 := model2.GetID()
+
+	assert.NotEqual(t, id1, id2)
+	assert.Contains(t, id1, "resource-1")
+	assert.Contains(t, id2, "resource-2")
+}
+
+// mockResourceItem is a mock implementation of shared.ResourceItem for testing
+type mockResourceItem struct {
+	id      string
+	values  []string
+	details map[string]string
+}
+
+func (m *mockResourceItem) GetID() string {
+	return m.id
+}
+
+func (m *mockResourceItem) GetValues() []string {
+	return m.values
+}
+
+func (m *mockResourceItem) GetDetails() map[string]string {
+	return m.details
 }

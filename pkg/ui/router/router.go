@@ -50,7 +50,34 @@ func (r *Router) NavigateTo(pageID string, data interface{}) tea.Cmd {
 		r.history = append(r.history, r.currentPage)
 	}
 
-	return r.navigateToWithoutHistory(pageID, data)
+	return tea.Batch(r.navigateToWithoutHistory(pageID, data), r.updateBreadcrumbs())
+}
+
+// updateBreadcrumbs creates a command to update breadcrumbs for the current page
+func (r *Router) updateBreadcrumbs() tea.Cmd {
+	items := r.getBreadcrumbs()
+	return func() tea.Msg {
+		return core.BreadcrumbUpdateMsg{Items: items}
+	}
+}
+
+// getBreadcrumbs returns a list of page titles representing the current navigation path
+func (r *Router) getBreadcrumbs() []string {
+	var breadcrumbs []string
+
+	// Add historical pages
+	for _, pageID := range r.history {
+		if page, exists := r.pages[pageID]; exists {
+			breadcrumbs = append(breadcrumbs, page.GetTitle())
+		}
+	}
+
+	// Add current page
+	if page, exists := r.pages[r.currentPage]; exists {
+		breadcrumbs = append(breadcrumbs, page.GetTitle())
+	}
+
+	return breadcrumbs
 }
 
 // navigateToWithoutHistory switches to a specific page without adding to history
@@ -103,7 +130,7 @@ func (r *Router) Back() tea.Cmd {
 	if len(r.history) > 0 {
 		lastPage := r.history[len(r.history)-1]
 		r.history = r.history[:len(r.history)-1]
-		return r.navigateToWithoutHistory(lastPage, nil)
+		return tea.Batch(r.navigateToWithoutHistory(lastPage, nil), r.updateBreadcrumbs())
 	}
 	return nil
 }

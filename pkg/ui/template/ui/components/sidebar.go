@@ -91,8 +91,8 @@ func (s *sidebar) View() string {
 
 	// CRUSH-style sidebar with rounded border
 	borderStyle := t.S().Base.
-		Width(s.width).
-		Height(s.height).
+		Width(s.width - 2).   // Account for border
+		Height(s.height - 2). // Account for border
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.Border).
 		Padding(1)

@@ -5,6 +5,8 @@ import (
 
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
+	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
+	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -23,6 +25,9 @@ type Model struct {
 	handlers *Handlers
 	keys     *Keys
 	view     *View
+
+	// Template system
+	reusableApp *templateui.ReusableApp
 }
 
 // NewModel creates a new resource detail page model
@@ -37,28 +42,70 @@ func NewModel(resourceItem shared.ResourceItem, resourceType string) *Model {
 	m.keys = NewKeys()
 	m.view = NewView()
 
+	// Create content provider
+	contentProvider := &ResourceDetailContentProvider{model: m}
+
+	// Create app configuration
+	config := &providers.AppConfig{
+		ContentProvider:      contentProvider,
+		ShowSidebarByDefault: false,
+	}
+
+	// Create the reusable app
+	m.reusableApp = templateui.NewReusableApp(config)
+
+	// Set key map for footer
+	m.reusableApp.SetKeyMap(m.keys.bindings)
+
 	return m
+}
+
+// ResourceDetailContentProvider provides content for the resource detail page
+type ResourceDetailContentProvider struct {
+	model *Model
+}
+
+func (p *ResourceDetailContentProvider) RenderContent(width, height int) string {
+	return p.model.view.Render(p.model)
+}
+
+func (p *ResourceDetailContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
+	return nil
+}
+
+func (p *ResourceDetailContentProvider) InitContent() tea.Cmd {
+	return nil
 }
 
 // Init implements the Page interface
 func (m *Model) Init() tea.Cmd {
-	return nil
+	return m.reusableApp.Init()
 }
 
 // Update implements the Page interface
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return m.handlers.Handle(m, msg)
+	// Delegate to the reusable app
+	updatedApp, cmd := m.reusableApp.Update(msg)
+	if updatedReusableApp, ok := updatedApp.(*templateui.ReusableApp); ok {
+		m.reusableApp = updatedReusableApp
+	}
+
+	// Also handle messages specifically if needed via handlers
+	_, handlerCmd := m.handlers.Handle(m, msg)
+
+	return m, tea.Batch(cmd, handlerCmd)
 }
 
 // View implements the Page interface
 func (m *Model) View() string {
-	return m.view.Render(m)
+	return m.reusableApp.View()
 }
 
 // SetDimensions implements the Page interface
 func (m *Model) SetDimensions(width, height int) {
 	m.dimensions = core.Dimensions{Width: width, Height: height}
 	m.view.SetDimensions(width, height)
+	m.reusableApp.Update(tea.WindowSizeMsg{Width: width, Height: height})
 }
 
 // GetID implements the Page interface

@@ -19,6 +19,16 @@ type keyMap struct {
 	Quit key.Binding
 }
 
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Back, k.Quit}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Back, k.Quit},
+	}
+}
+
 // NewKeys creates a new Keys instance
 func NewKeys() *Keys {
 	return &Keys{

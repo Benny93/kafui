@@ -28,9 +28,9 @@ Replaced generic "Topic N" names with **realistic topic patterns**:
 - `clickstream-events` - User analytics
 - `audit-log` - Audit trail
 
-**CDC Topics:**
-- `dbserver1.inventory.products` - Product table CDC
-- `dbserver1.customers.users` - User table CDC
+**CDC Topics (Debezium-style):**
+- `dbserver1.inventory.products` - Product table CDC with key schemas
+- `dbserver1.customers.users` - User table CDC with key schemas
 
 **System Topics:**
 - `dead-letter-queue` - Failed messages
@@ -41,7 +41,18 @@ Each topic has:
 - Custom configuration entries (retention, cleanup policy)
 - Message counts across partitions
 
-### 3. Intelligent Message Generation
+### 3. Realistic Kafka Offsets
+Offsets now simulate **real Kafka behavior**:
+- **Starting offsets** are in the millions/billions (like active production topics)
+- **Per-partition offset tracking** with partition-based variation
+- **Monotonically increasing** offsets within each partition
+- Topic-specific base offsets based on expected volume:
+  - `clickstream`: 15+ million (high-volume analytics)
+  - `order`: 8+ million (active order processing)
+  - `audit`: 23+ million (long retention)
+  - `user`: 1+ million (user events)
+
+### 4. Intelligent Message Generation
 Messages are now **generated based on topic name patterns**:
 
 #### User Events
@@ -117,17 +128,46 @@ Messages include **schema IDs** for Avro schema lookup:
 - Audit logs → Schema ID 8
 - Inventory (key schema) → Schema ID 4
 
-#### Partitioning
-Messages are distributed across **5 partitions** using counter-based partitioning:
-```go
-msg.Partition = int32(counter % 5)
+#### CDC Events (Debezium-style)
+```json
+{
+  "schema": {
+    "type": "struct",
+    "fields": [
+      {"type": "string", "field": "id"},
+      {"type": "string", "field": "name"},
+      {"type": "int32", "field": "quantity"},
+      {"type": "double", "field": "price"},
+      {"type": "long", "field": "created_at"}
+    ]
+  },
+  "payload": {
+    "id": "123",
+    "name": "Product 123",
+    "quantity": 500,
+    "price": 99.99,
+    "created_at": 1708776543210
+  }
+}
 ```
+
+CDC messages include:
+- **Key schema** (ID 9) - ProductsKey with id field
+- **Value schema** (ID 10) - ProductsValue with full record
+- Debezium-style headers: `op` (c/u/d), `ts_ms`, `source`
+- Proper CDC topic format: `dbserver.database.table`
+
+#### Partitioning
+Messages are distributed across **5 partitions** with realistic variation:
+- Random partition assignment (simulates Kafka's partitioning strategy)
+- Partition-based offset calculation (each partition has independent offsets)
+- Offset formula: `baseOffset + counter + (partition * 1,000,000)`
 
 #### Offsets
 Each topic maintains **independent offset counters** for realistic offset progression.
 
 ### 5. Preloaded Schemas
-The mock now **preloads 8 Avro schemas** on initialization:
+The mock now **preloads 10 Avro schemas** on initialization:
 
 1. **UserRegisteredEvent** - User registration schema
 2. **OrderCreatedEvent** (v1) - Basic order schema
@@ -137,6 +177,8 @@ The mock now **preloads 8 Avro schemas** on initialization:
 6. **PageViewEvent** - Clickstream analytics
 7. **NotificationSentEvent** - Notification with enum channel
 8. **AuditLogEntry** - Audit logging
+9. **ProductsKey** - CDC key schema for products table
+10. **ProductsValue** - CDC value schema for products table
 
 Schemas include:
 - Proper Avro type definitions

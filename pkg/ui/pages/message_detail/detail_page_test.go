@@ -63,7 +63,10 @@ func TestModelImplementsPageInterface(t *testing.T) {
 	model := pageModel.GetDetailModel()
 
 	// Test that pageModel implements the Page interface methods
-	assert.Equal(t, "message_detail", pageModel.GetID())
+	// GetID now returns dynamic ID format: "detail:<topic>:<partition>:<offset>"
+	id := pageModel.GetID()
+	assert.Contains(t, id, "detail:")
+	assert.Contains(t, id, "test-topic")
 
 	// Test Init (template system initialization)
 	// Note: Init may return nil if child components don't have init commands
@@ -395,5 +398,92 @@ func TestSchemaInfoLazyLoading(t *testing.T) {
 	// Should remain nil for messages without schema IDs
 	assert.Nil(t, schemaInfoNoSchema)
 	assert.Nil(t, modelNoSchema.schemaInfo)
+}
+
+// TestGetID tests the unique page ID generation
+func TestGetID(t *testing.T) {
+	mockDS := &mock.KafkaDataSourceMock{}
+	mockDS.Init("")
+
+	testMessage := api.Message{
+		Key:       "test-key",
+		Value:     "test-value",
+		Offset:    123,
+		Partition: 2,
+	}
+
+	pageModel := NewMessageDetailPageModel(mockDS, "my-topic", testMessage)
+	id := pageModel.GetID()
+
+	// Verify ID format: "detail:<topic>:<partition>:<offset>"
+	assert.Contains(t, id, "detail:")
+	assert.Contains(t, id, "my-topic")
+	assert.Contains(t, id, "2")  // partition
+	assert.Contains(t, id, "123") // offset
+
+	// Verify different messages produce different IDs
+	testMessage2 := api.Message{
+		Key:       "test-key-2",
+		Value:     "test-value-2",
+		Offset:    456,
+		Partition: 1,
+	}
+	pageModel2 := NewMessageDetailPageModel(mockDS, "my-topic", testMessage2)
+	id2 := pageModel2.GetID()
+
+	assert.NotEqual(t, id, id2)
+	assert.Contains(t, id2, "456") // different offset
+	assert.Contains(t, id2, "1")   // different partition
+}
+
+// TestGetIDWithSpecialCharacters tests page ID generation with special topic names
+func TestGetIDWithSpecialCharacters(t *testing.T) {
+	mockDS := &mock.KafkaDataSourceMock{}
+	mockDS.Init("")
+
+	testMessage := api.Message{
+		Key:       "key",
+		Value:     "value",
+		Offset:    0,
+		Partition: 0,
+	}
+
+	// Test with topic names containing special characters
+	testCases := []struct {
+		topicName    string
+		shouldContain string
+	}{
+		{"topic-with-dashes", "topic-with-dashes"},
+		{"topic_with_underscores", "topic_with_underscores"},
+		{"topic.with.dots", "topic.with.dots"},
+		{"TopicWithCamelCase", "TopicWithCamelCase"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.topicName, func(t *testing.T) {
+			pageModel := NewMessageDetailPageModel(mockDS, tc.topicName, testMessage)
+			id := pageModel.GetID()
+			assert.Contains(t, id, tc.shouldContain)
+		})
+	}
+}
+
+// TestGetTitle tests the page title generation
+func TestGetTitle(t *testing.T) {
+	mockDS := &mock.KafkaDataSourceMock{}
+	mockDS.Init("")
+
+	testMessage := api.Message{
+		Key:       "test-key",
+		Value:     "test-value",
+		Offset:    123,
+		Partition: 0,
+	}
+
+	pageModel := NewMessageDetailPageModel(mockDS, "my-topic", testMessage)
+	title := pageModel.GetTitle()
+
+	assert.NotEmpty(t, title)
+	assert.Contains(t, title, "my-topic")
 }
 

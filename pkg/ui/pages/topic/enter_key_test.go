@@ -54,10 +54,14 @@ func TestEnterKeyNavigation(t *testing.T) {
 	// Should be a PageChangeMsg
 	pageChangeMsg, ok := result.(core.PageChangeMsg)
 	assert.True(t, ok, "Expected PageChangeMsg, got %T", result)
-	
-	// Should navigate to detail page
-	assert.Equal(t, "detail", pageChangeMsg.PageID)
-	
+
+	// Should navigate to detail page with dynamic ID format
+	// Format: "detail:<topic>:<partition>:<offset>"
+	assert.Contains(t, pageChangeMsg.PageID, "detail:")
+	assert.Contains(t, pageChangeMsg.PageID, "test-topic")
+	assert.Contains(t, pageChangeMsg.PageID, "0")   // partition
+	assert.Contains(t, pageChangeMsg.PageID, "123") // offset
+
 	// Should contain the selected message
 	selectedMsg, ok := pageChangeMsg.Data.(api.Message)
 	assert.True(t, ok, "Expected api.Message in Data, got %T", pageChangeMsg.Data)
