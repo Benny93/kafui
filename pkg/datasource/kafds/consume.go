@@ -130,7 +130,7 @@ func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.Con
 	case "oldest":
 		offset = sarama.OffsetOldest
 		cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
-	case "newest":
+	case "newest", "latest":
 		offset = sarama.OffsetNewest
 		cfg.Consumer.Offsets.Initial = sarama.OffsetNewest
 	default:
