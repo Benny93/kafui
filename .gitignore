@@ -42,3 +42,5 @@ dist/
 *.log
 
 .qoder/
+.axon/
+kafui
