@@ -1,6 +1,7 @@
 current-cluster: local
 clusteroverride: ""
 clusters:
+  # Redpanda cluster from example/redpanda-docker
 - name: local
   version: ""
   brokers:
@@ -8,5 +9,38 @@ clusters:
   SASL: null
   TLS: null
   security-protocol: ""
-  schema-registry-url: ""
+  schema-registry-url: http://localhost:8081
+  schema-registry-credentials: null
+
+  # Redpanda cluster from example/dockercompose (Confluent Kafka)
+- name: redpanda-docker
+  version: ""
+  brokers:
+  - localhost:9092
+  SASL: null
+  TLS: null
+  security-protocol: ""
+  schema-registry-url: http://localhost:8081
+  schema-registry-credentials: null
+
+  # Confluent Kafka cluster 0 (from dockercompose)
+- name: confluent-kafka-0
+  version: ""
+  brokers:
+  - localhost:9092
+  SASL: null
+  TLS: null
+  security-protocol: ""
+  schema-registry-url: http://localhost:8085
+  schema-registry-credentials: null
+
+  # Confluent Kafka cluster 1 (from dockercompose)
+- name: confluent-kafka-1
+  version: ""
+  brokers:
+  - localhost:9093
+  SASL: null
+  TLS: null
+  security-protocol: ""
+  schema-registry-url: http://localhost:18085
   schema-registry-credentials: null
