@@ -5,13 +5,17 @@ import tea "github.com/charmbracelet/bubbletea"
 // ContentProvider defines the interface for providing main content
 type ContentProvider interface {
 	// RenderContent returns the content to display in the main content area
+	// width is already capped for readability, height accounts for borders
 	RenderContent(width, height int) string
-	
+
 	// HandleContentUpdate allows the provider to handle messages and return commands
 	HandleContentUpdate(msg tea.Msg) tea.Cmd
-	
+
 	// InitContent initializes the content provider
 	InitContent() tea.Cmd
+
+	// GetContentSize returns the actual content size (number of lines) for scrollbar calculation
+	GetContentSize(width int) int
 }
 
 // SidebarSection defines the interface for sidebar sections

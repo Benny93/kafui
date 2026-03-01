@@ -98,9 +98,7 @@ func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (
 	// Continue listening for more messages if we're still consuming
 	// Use a reasonable interval to prevent UI freezing
 	if model.consuming && model.msgChan != nil {
-		return model, tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
-			return ContinuousListenMsg{}
-		})
+		return model, model.consumption.ListenForMessages(model.msgChan)
 	}
 
 	return model, nil
@@ -143,11 +141,7 @@ func (h *Handlers) handleStopConsuming(model *Model, msg StopConsumingMsg) (tea.
 func (h *Handlers) handleContinuousListen(model *Model, msg ContinuousListenMsg) (tea.Model, tea.Cmd) {
 	// Continue listening for messages if we're still consuming
 	if model.consuming && model.msgChan != nil {
-		// Instead of immediately calling ListenForMessages again, we use a longer interval
-		// to prevent tight loops that can freeze the UI
-		return model, tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
-			return ContinuousListenMsg{}
-		})
+		return model, model.consumption.ListenForMessages(model.msgChan)
 	}
 	return model, nil
 }
@@ -156,9 +150,7 @@ func (h *Handlers) handleContinuousErrorListen(model *Model, msg ContinuousError
 	// Continue listening for errors if we're still consuming
 	// Use a reasonable interval to prevent UI freezing
 	if model.consuming && model.errChan != nil {
-		return model, tea.Tick(time.Second*1, func(t time.Time) tea.Msg {
-			return ContinuousErrorListenMsg{}
-		})
+		return model, model.consumption.ListenForErrors(model.errChan)
 	}
 	return model, nil
 }

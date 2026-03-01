@@ -1,10 +1,19 @@
 package components
 
 import (
+	"strings"
+
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+)
+
+const (
+	// ContentLeftPadding is the total horizontal padding (border + inner padding)
+	ContentLeftPadding = 4
+	// MaxContentWidth is the maximum width for content readability (matches CRUSH standard)
+	MaxContentWidth = 120
 )
 
 type Content interface {
@@ -17,6 +26,7 @@ type content struct {
 	width, height int
 	focused       bool
 	provider      providers.ContentProvider
+	scrollOffset  int // Scroll offset for overflow content
 }
 
 func NewContent() Content {
@@ -29,6 +39,11 @@ func NewContentWithProvider(provider providers.ContentProvider) Content {
 	return &content{
 		provider: provider,
 	}
+}
+
+// cappedContentWidth calculates the maximum content width for readability and layout stability
+func cappedContentWidth(availableWidth int) int {
+	return min(availableWidth-ContentLeftPadding, MaxContentWidth)
 }
 
 func (c *content) Init() tea.Cmd {
@@ -56,18 +71,29 @@ func (c *content) View() string {
 
 	t := styles.CurrentTheme()
 
-	// Get content from provider
+	// Calculate capped width for content readability
+	contentWidth := cappedContentWidth(c.width)
+
+	// Get content from provider with capped width
 	var content string
 	if c.provider != nil {
-		content = c.provider.RenderContent(c.width, c.height)
+		content = c.provider.RenderContent(contentWidth, c.height)
 	}
 
-	// Add debug info at the bottom
-	debugInfo := styles.DebugInfo("Content", c.width, c.height)
-	if content != "" && debugInfo != "" {
-		content = content + "\n\n" + debugInfo
-	} else if debugInfo != "" {
-		content = debugInfo
+	// Check if content needs scrollbar
+	// Account for border (2) and padding (1 top + 1 bottom = 2) when calculating available viewport height
+	viewportHeight := c.height - 4 // Border (2) + Padding (2)
+	contentLines := strings.Split(content, "\n")
+	contentHeight := len(contentLines)
+	needsScrollbar := contentHeight > viewportHeight
+
+	// Add scrollbar if needed
+	if needsScrollbar {
+		scrollbar := Scrollbar(viewportHeight, contentHeight, viewportHeight, c.scrollOffset)
+		if scrollbar != "" {
+			// Join content and scrollbar horizontally
+			content = lipgloss.JoinHorizontal(lipgloss.Top, content, scrollbar)
+		}
 	}
 
 	// Apply styling based on focus state

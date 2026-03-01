@@ -5,9 +5,23 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/rivo/uniseg"
 )
+
+// TruncateText truncates text to fit within the given width with a custom ellipsis
+func TruncateText(text string, availableWidth int, ellipsis string) string {
+	if ellipsis == "" {
+		ellipsis = "…"
+	}
+	return ansi.Truncate(text, availableWidth, ellipsis)
+}
+
+// TruncateWithEllipsis truncates text to fit within the given width with standard ellipsis
+func TruncateWithEllipsis(text string, availableWidth int) string {
+	return TruncateText(text, availableWidth, "…")
+}
 
 // Section creates a section header with a line
 func Section(text string, width int) string {

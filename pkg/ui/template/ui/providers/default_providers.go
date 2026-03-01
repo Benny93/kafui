@@ -59,7 +59,7 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 			"The sidebar shows live data that updates every 5 seconds.",
 			"Resize the window to see different size modes in action!",
 		}
-	} else {
+	} else if sizeMode == styles.SizeModeSmall {
 		// Compact description for small screens
 		description = []string{
 			"CRUSH UI Framework",
@@ -70,15 +70,25 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 			"",
 			"Resize window to see modes!",
 		}
+	} else {
+		// Minimal description for minimum size
+		description = []string{
+			"CRUSH UI",
+			"Responsive & Adaptive",
+		}
 	}
 
+	// Truncate lines to fit width and apply styling
 	for _, line := range description {
-		if strings.HasPrefix(line, "✓") {
-			sections = append(sections, t.S().Success.Render(line))
-		} else if line == "" {
+		// Truncate line to fit available width (account for padding)
+		truncatedLine := styles.TruncateWithEllipsis(line, availableWidth-4)
+		
+		if strings.HasPrefix(truncatedLine, "✓") {
+			sections = append(sections, t.S().Success.Render(truncatedLine))
+		} else if truncatedLine == "" {
 			sections = append(sections, "")
 		} else {
-			sections = append(sections, t.S().Text.Render(line))
+			sections = append(sections, t.S().Text.Render(truncatedLine))
 		}
 	}
 
@@ -102,10 +112,13 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 			if len(parts) == 2 {
 				keyStyle := t.S().Base.Foreground(t.Accent).Bold(true)
 				descStyle := t.S().Muted
-				line := keyStyle.Render(parts[0]) + "  " + descStyle.Render(parts[1])
+				// Truncate both parts to fit width
+				keyPart := styles.TruncateWithEllipsis(parts[0], availableWidth/3)
+				descPart := styles.TruncateWithEllipsis(parts[1], availableWidth*2/3-2)
+				line := keyStyle.Render(keyPart) + "  " + descStyle.Render(descPart)
 				sections = append(sections, line)
 			} else {
-				sections = append(sections, t.S().Text.Render(control))
+				sections = append(sections, t.S().Text.Render(styles.TruncateWithEllipsis(control, availableWidth)))
 			}
 		}
 	} else {
@@ -137,6 +150,24 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 	}
 
 	return strings.Join(centeredLines, "\n")
+}
+
+func (d *DefaultContentProvider) GetContentSize(width int) int {
+	// Return estimated total lines of content for scrollbar calculation
+	// This is a simplified estimation - in production you might want to
+	// actually render and count lines
+	sizeMode := styles.GetSizeMode(width, 100) // Height doesn't matter for line count
+	
+	switch sizeMode {
+	case styles.SizeModeMinimum:
+		return 5 // Minimal content
+	case styles.SizeModeSmall:
+		return 10 // Small content
+	case styles.SizeModeCompact:
+		return 20 // Compact content
+	default:
+		return 25 // Full content
+	}
 }
 
 func (d *DefaultContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {

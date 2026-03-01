@@ -446,6 +446,19 @@ func (m *MessageDetailContentProvider) InitContent() tea.Cmd {
 	return nil
 }
 
+// GetContentSize returns the estimated content size for scrollbar calculation
+func (m *MessageDetailContentProvider) GetContentSize(width int) int {
+	// Estimate based on message content lines
+	if m.model == nil {
+		return 10
+	}
+	// Count lines in key and value content
+	keyLines := len(strings.Split(m.model.GetFormattedKey(), "\n"))
+	valueLines := len(strings.Split(m.model.GetFormattedValue(), "\n"))
+	// Add metadata and header lines
+	return keyLines + valueLines + 15
+}
+
 // MessageDetailHeaderDataProvider implements the HeaderDataProvider interface for message detail
 type MessageDetailHeaderDataProvider struct {
 	model *Model

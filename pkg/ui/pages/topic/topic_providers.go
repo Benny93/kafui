@@ -22,18 +22,14 @@ func NewTopicContentProvider(model *Model) *TopicContentProvider {
 }
 
 func (t *TopicContentProvider) RenderContent(width, height int) string {
-	// Calculate proper table height - leave space for search bar and padding
-	tableHeight := height - 6
-	if t.model.searchMode {
-		tableHeight -= 3 // Additional space for search bar
+	// Update table dimensions based on actual content area size
+	// width/height here are the inner content dimensions (after border and padding)
+	// We need to add back the border (2) and padding (2) to get the full cell width
+	if width > 0 && height > 0 {
+		cellWidth := width + 4 // Account for border and padding
+		cellHeight := height + 4
+		t.model.updateTableDimensions(cellWidth, cellHeight)
 	}
-	if tableHeight < 5 {
-		tableHeight = 5 // Minimum table height
-	}
-
-	// Update table dimensions
-	t.model.messageTable.SetHeight(tableHeight)
-	t.model.messageTable.SetWidth(width - 4) // Account for content padding
 
 	if t.model.error != nil {
 		return t.renderError()
@@ -56,8 +52,11 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 		content.WriteString("\n\n")
 	}
 
-	// Render the main table
-	content.WriteString(t.model.messageTable.View())
+	// Render the main table with max width constraint to prevent overflow
+	tableView := t.model.messageTable.View()
+	// Use MaxWidth to ensure table doesn't exceed available width
+	tableView = lipgloss.NewStyle().MaxWidth(width).Render(tableView)
+	content.WriteString(tableView)
 
 	return content.String()
 }
@@ -128,6 +127,17 @@ func (t *TopicContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
 func (t *TopicContentProvider) InitContent() tea.Cmd {
 	// Start consuming messages
 	return t.model.consumption.StartConsuming()
+}
+
+// GetContentSize returns the estimated content size for scrollbar calculation
+func (t *TopicContentProvider) GetContentSize(width int) int {
+	// Estimate based on table rows plus header
+	rowCount := len(t.model.messages)
+	if rowCount == 0 {
+		return 5 // Default for empty/loading states
+	}
+	// Add header lines and account for search bar
+	return rowCount + 5
 }
 
 // TopicHeaderDataProvider provides header data for the topic page

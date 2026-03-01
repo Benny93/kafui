@@ -100,14 +100,6 @@ func (s *sidebar) View() string {
 	// Build sidebar content
 	content := s.renderSidebarContent()
 
-	// Add debug info at the bottom
-	debugInfo := styles.DebugInfo("Sidebar", s.width, s.height)
-	if content != "" && debugInfo != "" {
-		content = content + "\n\n" + debugInfo
-	} else if debugInfo != "" {
-		content = debugInfo
-	}
-
 	return borderStyle.Render(content)
 }
 
@@ -137,11 +129,12 @@ func (s *sidebar) renderSidebarContent() string {
 		return strings.Join(sections, "\n")
 	}
 
+	// Get item limits for each section with priority-based distribution
 	maxItemsPerSection := s.calculateMaxItems(remainingHeight, numSections)
 
-	// Render all sections
+	// Render all sections with their specific limits
 	for i, section := range s.sections {
-		sectionContent := s.renderSection(section, maxItemsPerSection, availableWidth)
+		sectionContent := s.renderSection(section, maxItemsPerSection[i], availableWidth)
 		sections = append(sections, sectionContent)
 
 		// Add spacing between sections (except after the last one)
@@ -168,49 +161,86 @@ func (s *sidebar) renderLogo(width int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, logo, version)
 }
 
-func (s *sidebar) calculateMaxItems(availableHeight, numSections int) int {
-	// Reserve space for section headers and spacing
-	headerSpace := numSections * 2 // Each section has a header + spacing
-	itemSpace := availableHeight - headerSpace
+func (s *sidebar) calculateMaxItems(availableHeight, numSections int) []int {
+	const (
+		minItemsPerSection    = 2
+		defaultMaxItems       = 10
+		headerSpacePerSection = 2 // Header + spacing
+	)
+
+	// If we have very little space, use minimum values
+	if availableHeight < 10 {
+		limits := make([]int, numSections)
+		for i := range limits {
+			limits[i] = minItemsPerSection
+		}
+		return limits
+	}
+
+	// Calculate total header space
+	totalHeaderSpace := numSections * headerSpacePerSection
+	itemSpace := availableHeight - totalHeaderSpace
 
 	if itemSpace <= 0 {
-		return 1
+		limits := make([]int, numSections)
+		for i := range limits {
+			limits[i] = minItemsPerSection
+		}
+		return limits
 	}
 
-	maxPerSection := itemSpace / numSections
-	if maxPerSection < 2 {
-		return 2
+	// Distribute space with priority (earlier sections get more space)
+	limits := make([]int, numSections)
+	remainingSpace := itemSpace
+
+	for i := 0; i < numSections; i++ {
+		sectionsRemaining := numSections - i
+		spacePerSection := remainingSpace / sectionsRemaining
+
+		limits[i] = max(minItemsPerSection, min(defaultMaxItems, spacePerSection))
+		remainingSpace -= limits[i]
 	}
 
-	return maxPerSection
+	return limits
 }
 
 func (s *sidebar) renderSection(section providers.SidebarSection, maxItems, width int) string {
 	t := styles.CurrentTheme()
 	var lines []string
 
-	// Section header
-	title := section.GetTitle()
+	// Section header with truncation
+	title := styles.TruncateWithEllipsis(section.GetTitle(), width-2)
 	header := styles.Section(title, width)
 	lines = append(lines, header)
 
 	// Get items from the section
 	items := section.RenderItems(maxItems, width)
 
-	// Render each item
+	// Render each item with truncation
 	for _, item := range items {
 		statusStyle := s.getItemStatusStyle(item.Status)
 
-		// Format: [icon] text (value)
-		line := fmt.Sprintf("%s %s", statusStyle.Render(item.Icon), item.Text)
+		// Calculate available width for text
+		iconWidth := lipgloss.Width(statusStyle.Render(item.Icon))
+		valueWidth := 0
+		if item.Value != "" {
+			valueWidth = lipgloss.Width(fmt.Sprintf(" (%s)", item.Value))
+		}
+
+		// Account for icon spacing and margins
+		textAvailableWidth := width - iconWidth - valueWidth - 2
+
+		// Truncate text if needed
+		itemText := styles.TruncateWithEllipsis(item.Text, max(1, textAvailableWidth))
+
+		line := fmt.Sprintf("%s %s", statusStyle.Render(item.Icon), itemText)
 
 		// Add value if there's space and it's not empty
 		if item.Value != "" {
 			valueText := t.S().Muted.Render(fmt.Sprintf("(%s)", item.Value))
-			totalWidth := lipgloss.Width(line) + lipgloss.Width(valueText)
-			if totalWidth <= width {
-				spacing := width - totalWidth
-				line = line + strings.Repeat(" ", spacing) + valueText
+			if lipgloss.Width(line)+lipgloss.Width(valueText) <= width {
+				spacing := width - lipgloss.Width(line) - lipgloss.Width(valueText)
+				line = line + strings.Repeat(" ", max(0, spacing)) + valueText
 			}
 		}
 

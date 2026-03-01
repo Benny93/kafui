@@ -77,6 +77,13 @@ func (p *ResourceDetailContentProvider) InitContent() tea.Cmd {
 	return nil
 }
 
+// GetContentSize returns the estimated content size for scrollbar calculation
+func (p *ResourceDetailContentProvider) GetContentSize(width int) int {
+	// Estimate based on content lines
+	// This is a simplified estimation - adjust based on actual content
+	return 20
+}
+
 // Init implements the Page interface
 func (m *Model) Init() tea.Cmd {
 	return m.reusableApp.Init()

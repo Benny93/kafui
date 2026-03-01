@@ -399,6 +399,17 @@ func (k *KafuiContentProvider) InitContent() tea.Cmd {
 	return k.loadCurrentResource()
 }
 
+// GetContentSize returns the estimated content size for scrollbar calculation
+func (k *KafuiContentProvider) GetContentSize(width int) int {
+	// Estimate based on table rows plus header
+	rowCount := len(k.allRows)
+	if rowCount == 0 {
+		return 5 // Default for empty/loading states
+	}
+	// Add header lines and account for search bar
+	return rowCount + 5
+}
+
 // Helper methods
 
 func (k *KafuiContentProvider) handleSearch(query string) {

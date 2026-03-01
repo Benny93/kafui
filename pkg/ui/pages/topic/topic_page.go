@@ -10,6 +10,7 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/core"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
+	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
@@ -17,6 +18,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// Maximum number of messages to display in the table
+const MaxDisplayedMessages = 20
 
 // Model represents the topic page state (original business logic model)
 type Model struct {
@@ -68,6 +72,10 @@ type Model struct {
 	lastError        error
 	errorHistory     []error
 	connectionStatus string
+
+	// Table dimension tracking
+	lastTableWidth  int
+	lastTableHeight int
 }
 
 // NewModel creates a new topic page model (original business logic)
@@ -84,7 +92,7 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 	messageTable := table.New(
 		table.WithColumns(columns),
 		table.WithFocused(true),
-		table.WithHeight(10),
+		table.WithHeight(MaxDisplayedMessages),
 	)
 
 	// Set table styles
@@ -167,13 +175,90 @@ func (m *Model) View() string {
 func (m *Model) SetDimensions(width, height int) {
 	m.dimensions = core.Dimensions{Width: width, Height: height}
 
-	// Calculate available space for content
-	contentHeight := height - 8 // Account for header and footer
-
-	// Update table dimensions
-	m.messageTable.SetHeight(contentHeight - 6) // Account for controls and search
+	// Update table dimensions and column widths
+	m.updateTableDimensions(width, height)
 
 	m.view.SetDimensions(width, height)
+}
+
+// updateTableDimensions updates the table dimensions and column widths based on available space
+func (m *Model) updateTableDimensions(width, height int) {
+	// Only update if dimensions have changed
+	if m.lastTableWidth == width && m.lastTableHeight == height {
+		return
+	}
+	m.lastTableWidth = width
+	m.lastTableHeight = height
+
+	// Calculate available space for content
+	// Height passed is already inner content height, account for:
+	// - Search bar (when active): ~3 lines
+	// - Table header: 1 line
+	// - Table borders: 2 lines
+	// - Bottom padding/controls: 2 lines
+	reservedLines := 6
+	if m.searchMode {
+		reservedLines += 3
+	}
+
+	// Update table height (number of visible rows)
+	tableHeight := height - reservedLines
+	if tableHeight < 5 {
+		tableHeight = 5 // Minimum visible rows
+	}
+	if tableHeight > MaxDisplayedMessages {
+		tableHeight = MaxDisplayedMessages // Maximum visible rows
+	}
+	m.messageTable.SetHeight(tableHeight)
+
+	// Calculate column widths based on available width
+	// Account for content padding (4 chars) and borders
+	availableWidth := width - 8
+	if availableWidth < 60 {
+		availableWidth = 60 // Minimum width for all columns
+	}
+
+	// Define minimum column widths
+	const (
+		minOffsetWidth    = 8
+		minPartitionWidth = 8
+		minTimestampWidth = 15
+		minKeyWidth       = 10
+		minValueWidth     = 15
+	)
+
+	// Calculate total minimum width required
+	minTotalWidth := minOffsetWidth + minPartitionWidth + minTimestampWidth + minKeyWidth + minValueWidth
+
+	// Ensure available width is at least the minimum total
+	if availableWidth < minTotalWidth {
+		availableWidth = minTotalWidth
+	}
+
+	// Calculate remaining width after allocating minimums
+	remainingWidth := availableWidth - minTotalWidth
+
+	// Distribute remaining width proportionally (10:10:20:20:40 = 1:1:2:2:4)
+	// Total ratio = 10
+	offsetWidth := minOffsetWidth + remainingWidth*10/100
+	partitionWidth := minPartitionWidth + remainingWidth*10/100
+	timestampWidth := minTimestampWidth + remainingWidth*20/100
+	keyWidth := minKeyWidth + remainingWidth*20/100
+	// Value gets the remainder to ensure exact fit
+	valueWidth := availableWidth - offsetWidth - partitionWidth - timestampWidth - keyWidth
+
+	// Update column widths
+	columns := []table.Column{
+		{Title: "Offset", Width: offsetWidth},
+		{Title: "Partition", Width: partitionWidth},
+		{Title: "Timestamp", Width: timestampWidth},
+		{Title: "Key", Width: keyWidth},
+		{Title: "Value", Width: valueWidth},
+	}
+	m.messageTable.SetColumns(columns)
+
+	// Update table width
+	m.messageTable.SetWidth(availableWidth)
 }
 
 // GetID implements the Page interface for the original model
@@ -297,6 +382,18 @@ func (m *Model) updateMessageTable() {
 		searchQuery = m.searchInput.Value()
 	}
 
+	// Get current column widths for proper truncation
+	columns := m.messageTable.Columns()
+	keyMaxLen := 18
+	valueMaxLen := 38
+	for _, col := range columns {
+		if col.Title == "Key" {
+			keyMaxLen = col.Width - 2 // Account for padding
+		} else if col.Title == "Value" {
+			valueMaxLen = col.Width - 2 // Account for padding
+		}
+	}
+
 	for i, msg := range m.filteredMessages {
 		offset := "N/A"
 		if msg.Offset >= 0 {
@@ -308,18 +405,22 @@ func (m *Model) updateMessageTable() {
 
 		key := "<null>"
 		if msg.Key != "" {
-			key = truncateString(msg.Key, 18)
+			key = msg.Key
 			if searchQuery != "" {
 				key = highlightMatchingText(key, searchQuery)
 			}
+			// Truncate AFTER highlighting to ensure it fits
+			key = truncateString(key, keyMaxLen)
 		}
 
 		value := "<null>"
 		if msg.Value != "" {
-			value = truncateString(msg.Value, 38)
+			value = msg.Value
 			if searchQuery != "" {
 				value = highlightMatchingText(value, searchQuery)
 			}
+			// Truncate AFTER highlighting to ensure it fits
+			value = truncateString(value, valueMaxLen)
 		}
 
 		rows[i] = table.Row{offset, partition, timestamp, key, value}
@@ -376,6 +477,12 @@ func (m *Model) AddMessage(msg api.Message) {
 		m.messages = append(m.messages, msg)
 		m.consumedMessages[key] = msg
 
+		// Keep only the last MaxDisplayedMessages to prevent table from growing indefinitely
+		if len(m.messages) > MaxDisplayedMessages {
+			// Remove the oldest message from the display slice
+			m.messages = m.messages[1:]
+		}
+
 		// Update filtered messages if needed
 		m.FilterMessages()
 
@@ -431,14 +538,14 @@ func contains(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
+// truncateString truncates a string to fit within maxLen visual characters
+// It properly handles ANSI escape codes and multi-byte characters
 func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
+	if maxLen <= 0 {
+		return ""
 	}
-	if maxLen <= 3 {
-		return "..."
-	}
-	return s[:maxLen-3] + "..."
+	// Use the styles utility which properly handles ANSI codes
+	return styles.TruncateWithEllipsis(s, maxLen)
 }
 
 // View handles rendering for the topic page (minimal implementation for compatibility)

@@ -2,6 +2,7 @@ package topic
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -432,4 +433,86 @@ func TestTopicPageModel_GetID_DifferentTopics(t *testing.T) {
 	assert.NotEqual(t, id1, id2)
 	assert.Contains(t, id1, "topic-1")
 	assert.Contains(t, id2, "topic-2")
+}
+
+// TestAddMessage_MaxDisplayedMessages tests that only the last MaxDisplayedMessages are kept
+func TestAddMessage_MaxDisplayedMessages(t *testing.T) {
+	mockDS := &MockDataSource{}
+
+	topicDetails := api.Topic{
+		NumPartitions:     3,
+		ReplicationFactor: 2,
+		MessageCount:      100,
+	}
+
+	model := NewModel(mockDS, "test-topic", topicDetails)
+
+	// Add more messages than the maximum displayed limit
+	numMessages := MaxDisplayedMessages + 10
+	for i := 0; i < numMessages; i++ {
+		msg := api.Message{
+			Key:       fmt.Sprintf("key-%d", i),
+			Value:     fmt.Sprintf("value-%d", i),
+			Offset:    int64(i),
+			Partition: 0,
+		}
+		model.AddMessage(msg)
+	}
+
+	// Should only keep the last MaxDisplayedMessages
+	assert.Len(t, model.messages, MaxDisplayedMessages)
+	assert.Len(t, model.filteredMessages, MaxDisplayedMessages)
+
+	// The first message should be the one at offset 10 (not 0)
+	assert.Equal(t, int64(10), model.messages[0].Offset)
+	assert.Equal(t, "key-10", model.messages[0].Key)
+
+	// The last message should be the one at offset numMessages-1
+	assert.Equal(t, int64(numMessages-1), model.messages[MaxDisplayedMessages-1].Offset)
+	assert.Equal(t, fmt.Sprintf("key-%d", numMessages-1), model.messages[MaxDisplayedMessages-1].Key)
+}
+
+// TestAddMessage_ExactMaxDisplayedMessages tests behavior when exactly at the limit
+func TestAddMessage_ExactMaxDisplayedMessages(t *testing.T) {
+	mockDS := &MockDataSource{}
+
+	topicDetails := api.Topic{
+		NumPartitions:     3,
+		ReplicationFactor: 2,
+		MessageCount:      100,
+	}
+
+	model := NewModel(mockDS, "test-topic", topicDetails)
+
+	// Add exactly MaxDisplayedMessages messages
+	for i := 0; i < MaxDisplayedMessages; i++ {
+		msg := api.Message{
+			Key:       fmt.Sprintf("key-%d", i),
+			Value:     fmt.Sprintf("value-%d", i),
+			Offset:    int64(i),
+			Partition: 0,
+		}
+		model.AddMessage(msg)
+	}
+
+	// Should have exactly MaxDisplayedMessages
+	assert.Len(t, model.messages, MaxDisplayedMessages)
+
+	// Add one more message
+	extraMsg := api.Message{
+		Key:       "key-extra",
+		Value:     "value-extra",
+		Offset:    int64(MaxDisplayedMessages),
+		Partition: 0,
+	}
+	model.AddMessage(extraMsg)
+
+	// Should still have exactly MaxDisplayedMessages
+	assert.Len(t, model.messages, MaxDisplayedMessages)
+
+	// The first message should now be the one at offset 1
+	assert.Equal(t, int64(1), model.messages[0].Offset)
+
+	// The last message should be the extra message
+	assert.Equal(t, int64(MaxDisplayedMessages), model.messages[MaxDisplayedMessages-1].Offset)
 }
