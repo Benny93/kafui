@@ -100,11 +100,17 @@ func (cc *ConsumptionController) ListenForMessages(msgChan <-chan api.Message) t
 		select {
 		case msg, ok := <-msgChan:
 			if !ok {
-				return ErrorMsg(shared.NewUIError(
-					shared.ErrorTypeDataLoad,
-					"Message stream closed unexpectedly",
-					nil,
-				))
+				// Channel closed - this is normal for fetch operations
+				// Only report error if we're in continuous consumption mode
+				if cc.model.consuming {
+					return ErrorMsg(shared.NewUIError(
+						shared.ErrorTypeDataLoad,
+						"Message stream closed unexpectedly",
+						nil,
+					))
+				}
+				// For fetch operations, just return nil to stop listening
+				return nil
 			}
 
 			// Return the message via the command
@@ -334,4 +340,56 @@ func (cc *ConsumptionController) GetHealthStatus() string {
 	}
 
 	return "idle"
+}
+
+// FetchLatestMessages fetches the latest N messages from the topic (non-streaming)
+func (cc *ConsumptionController) FetchLatestMessages(count int) tea.Cmd {
+	return func() tea.Msg {
+		cc.model.loading = true
+		cc.model.SetConnectionStatus(StatusConnecting)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Collect messages
+		messages := make([]api.Message, 0, count)
+		done := make(chan struct{})
+
+		// Message handler
+		handleMessage := func(msg api.Message) {
+			select {
+			case <-done:
+				return
+			default:
+				messages = append(messages, msg)
+				if len(messages) >= count {
+					close(done)
+				}
+			}
+		}
+
+		// Error handler
+		onError := func(err any) {
+			select {
+			case <-done:
+				return
+			default:
+				close(done)
+			}
+		}
+
+		// Start consumption
+		go func() {
+			_ = cc.model.dataSource.ConsumeTopic(ctx, cc.model.topicName, cc.model.consumeFlags, handleMessage, onError)
+			close(done)
+		}()
+
+		// Wait for completion or timeout
+		<-done
+
+		cc.model.loading = false
+		cc.model.SetConnectionStatus(StatusConnected)
+
+		return MessagesFetchedMsg{Messages: messages}
+	}
 }

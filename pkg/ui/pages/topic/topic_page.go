@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -13,14 +14,26 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/evertras/bubble-table/table"
 )
 
 // Maximum number of messages to display in the table
 const MaxDisplayedMessages = 20
+
+// Performance optimization constants
+const (
+	// MaxVisibleRows limits rendered rows (virtual scrolling)
+	MaxVisibleRows = 30
+	// UpdateThrottle prevents excessive re-renders
+	UpdateThrottle = 100 * time.Millisecond
+	// BatchSize for message processing
+	BatchSize = 20
+	// UseCustomRenderer threshold - use custom renderer for large datasets
+	UseCustomRenderer = 100
+)
 
 // Model represents the topic page state (original business logic model)
 type Model struct {
@@ -54,6 +67,9 @@ type Model struct {
 	spinner      spinner.Model
 	searchInput  textinput.Model
 
+	// Bubble-table configuration
+	tableColumns []table.Column
+
 	// Components
 	handlers    *Handlers
 	keys        *Keys
@@ -76,36 +92,105 @@ type Model struct {
 	// Table dimension tracking
 	lastTableWidth  int
 	lastTableHeight int
+
+	// === PERFORMANCE OPTIMIZATIONS ===
+
+	// Message buffer limit (prevents unbounded growth)
+	maxMessages int
+
+	// Pagination (replaces virtual scrolling)
+	pagination *PaginationModel
+
+	// Width caching (avoids recalculation)
+	widthCache     map[string]map[int]int // column -> width -> cached value
+	widthCacheTime time.Time
+	widthCacheMu   sync.RWMutex // Protects widthCache
+
+	// Update throttling
+	lastUpdateTime time.Time
+	updateThrottle time.Duration
+
+	// Batching
+	batchSize     int
+	batchInterval time.Duration
+	batchCount    int
+
+	// Mutex for thread-safe message operations
+	mu sync.RWMutex
+
+	// Render caching (avoid re-rendering same content)
+	lastRenderHash uint64
+	lastRenderTime time.Time
+	renderCache    string
+	renderCacheMu  sync.RWMutex
+	
+	// Dirty flag for render invalidation
+	dirtyRender bool
+}
+
+// markRenderDirty marks the render cache as invalid
+func (m *Model) markRenderDirty() {
+	m.dirtyRender = true
+}
+
+// getRenderCache returns cached render if valid
+func (m *Model) getRenderCache() (string, bool) {
+	m.renderCacheMu.RLock()
+	defer m.renderCacheMu.RUnlock()
+	if !m.dirtyRender && m.renderCache != "" {
+		return m.renderCache, true
+	}
+	return "", false
+}
+
+// setRenderCache updates the render cache
+func (m *Model) setRenderCache(render string) {
+	m.renderCacheMu.Lock()
+	defer m.renderCacheMu.Unlock()
+	m.renderCache = render
+	m.dirtyRender = false
 }
 
 // NewModel creates a new topic page model (original business logic)
 func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api.Topic) *Model {
-	// Initialize message table
-	columns := []table.Column{
-		{Title: "Offset", Width: 10},
-		{Title: "Partition", Width: 10},
-		{Title: "Timestamp", Width: 20},
-		{Title: "Key", Width: 20},
-		{Title: "Value", Width: 40},
-	}
-
-	messageTable := table.New(
-		table.WithColumns(columns),
-		table.WithFocused(true),
-		table.WithHeight(MaxDisplayedMessages),
+	// Define table columns using bubble-table
+	const (
+		colOffset   = "offset"
+		colPartition = "partition"
+		colTimestamp = "timestamp"
+		colKey      = "key"
+		colValue    = "value"
 	)
 
-	// Set table styles
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = lipgloss.NewStyle().
-		Background(lipgloss.Color("205")).
-		Foreground(lipgloss.Color("0"))
-	messageTable.SetStyles(s)
+	columns := []table.Column{
+		table.NewColumn(colOffset, "Offset", 10),
+		table.NewColumn(colPartition, "Partition", 10),
+		table.NewColumn(colTimestamp, "Timestamp", 20),
+		table.NewColumn(colKey, "Key", 20),
+		table.NewColumn(colValue, "Value", 40),
+	}
+
+	// Initialize message table with bubble-table
+	messageTable := table.New(columns).
+		WithPageSize(MaxDisplayedMessages).
+		WithHighlightedRow(0).
+		WithBaseStyle(
+			lipgloss.NewStyle().
+				BorderForeground(lipgloss.Color("240")),
+		).
+		HeaderStyle(
+			lipgloss.NewStyle().
+				Foreground(lipgloss.Color("240")).
+				Bold(true),
+		).
+		HighlightStyle(
+			lipgloss.NewStyle().
+				Background(lipgloss.Color("205")).
+				Foreground(lipgloss.Color("0")).
+				Bold(true),
+		).
+		Focused(true).
+		SortByDesc(colOffset) // Sort by newest first
 
 	// Initialize search input
 	searchInput := textinput.New()
@@ -126,6 +211,7 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 		messages:         []api.Message{},
 		consumedMessages: make(map[string]api.Message),
 		messageTable:     messageTable,
+		tableColumns:     columns,
 		spinner:          sp,
 		lastUpdate:       time.Now(),
 		statusMessage:    "Topic page initialized",
@@ -137,6 +223,14 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 		retryDelay:       time.Second * 2,
 		errorHistory:     make([]error, 0),
 		connectionStatus: "disconnected",
+
+		// === PERFORMANCE OPTIMIZATIONS ===
+		maxMessages:    MaxMessageBuffer,
+		pagination:     NewPaginationModel(),
+		widthCache:     make(map[string]map[int]int),
+		updateThrottle: UpdateThrottle,
+		batchSize:      BatchSize,
+		batchInterval:  50 * time.Millisecond,
 	}
 
 	// Initialize components with dependencies
@@ -154,8 +248,11 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 func (m *Model) Init() tea.Cmd {
 	// Set initial loading state
 	m.loading = true
+	
+	// Fetch latest 300 messages (15 pages of 20)
+	const fetchCount = 300
 	cmds := []tea.Cmd{
-		m.consumption.StartConsuming(),
+		m.consumption.FetchLatestMessages(fetchCount),
 		m.spinner.Tick,
 	}
 	return tea.Batch(cmds...)
@@ -209,7 +306,7 @@ func (m *Model) updateTableDimensions(width, height int) {
 	if tableHeight > MaxDisplayedMessages {
 		tableHeight = MaxDisplayedMessages // Maximum visible rows
 	}
-	m.messageTable.SetHeight(tableHeight)
+	m.messageTable = m.messageTable.WithPageSize(tableHeight)
 
 	// Calculate column widths based on available width
 	// Account for content padding (4 chars) and borders
@@ -249,16 +346,14 @@ func (m *Model) updateTableDimensions(width, height int) {
 
 	// Update column widths
 	columns := []table.Column{
-		{Title: "Offset", Width: offsetWidth},
-		{Title: "Partition", Width: partitionWidth},
-		{Title: "Timestamp", Width: timestampWidth},
-		{Title: "Key", Width: keyWidth},
-		{Title: "Value", Width: valueWidth},
+		table.NewColumn("offset", "Offset", offsetWidth),
+		table.NewColumn("partition", "Partition", partitionWidth),
+		table.NewColumn("timestamp", "Timestamp", timestampWidth),
+		table.NewColumn("key", "Key", keyWidth),
+		table.NewColumn("value", "Value", valueWidth),
 	}
-	m.messageTable.SetColumns(columns)
-
-	// Update table width
-	m.messageTable.SetWidth(availableWidth)
+	m.messageTable = m.messageTable.WithColumns(columns)
+	m.tableColumns = columns
 }
 
 // GetID implements the Page interface for the original model
@@ -313,13 +408,15 @@ func (m *Model) GetTopicName() string {
 
 // GetSelectedMessage returns the currently selected message
 func (m *Model) GetSelectedMessage() *api.Message {
-	if len(m.filteredMessages) == 0 {
+	// Get messages for current page
+	paginatedMessages := m.pagination.GetVisibleMessages(m.filteredMessages)
+	if len(paginatedMessages) == 0 {
 		return nil
 	}
 
-	cursor := m.messageTable.Cursor()
-	if cursor >= 0 && cursor < len(m.filteredMessages) {
-		selectedMsg := &m.filteredMessages[cursor]
+	highlightedIndex := m.messageTable.GetHighlightedRowIndex()
+	if highlightedIndex >= 0 && highlightedIndex < len(paginatedMessages) {
+		selectedMsg := &paginatedMessages[highlightedIndex]
 		// Load schema information when message is selected
 		m.loadSchemaInfoForMessage(selectedMsg)
 		return selectedMsg
@@ -350,7 +447,9 @@ func (m *Model) loadSchemaInfoForMessage(msg *api.Message) {
 func (m *Model) FilterMessages() {
 	if !m.searchMode || m.searchInput.Value() == "" {
 		m.filteredMessages = m.messages
+		m.pagination.SetTotalMessages(len(m.messages))
 		m.updateMessageTable()
+		m.markRenderDirty()
 		return
 	}
 
@@ -370,12 +469,24 @@ func (m *Model) FilterMessages() {
 	}
 
 	m.filteredMessages = filtered
+	m.pagination.SetTotalMessages(len(filtered))
 	m.updateMessageTable()
+	m.markRenderDirty()
 }
 
-// UpdateMessageTable updates the table with current filtered messages
+// updateMessageTable updates the table with paginated messages
 func (m *Model) updateMessageTable() {
-	rows := make([]table.Row, len(m.filteredMessages))
+	// Get paginated messages
+	paginatedMessages := m.pagination.GetVisibleMessages(m.filteredMessages)
+
+	// For large datasets, use fast rendering (bypass table component overhead)
+	if len(m.filteredMessages) > UseCustomRenderer {
+		m.renderTableFast(paginatedMessages)
+		return
+	}
+
+	// For small datasets, use standard table rendering
+	rows := make([]table.Row, len(paginatedMessages))
 
 	searchQuery := ""
 	if m.searchMode {
@@ -383,18 +494,10 @@ func (m *Model) updateMessageTable() {
 	}
 
 	// Get current column widths for proper truncation
-	columns := m.messageTable.Columns()
-	keyMaxLen := 18
-	valueMaxLen := 38
-	for _, col := range columns {
-		if col.Title == "Key" {
-			keyMaxLen = col.Width - 2 // Account for padding
-		} else if col.Title == "Value" {
-			valueMaxLen = col.Width - 2 // Account for padding
-		}
-	}
+	keyMaxLen := 20
+	valueMaxLen := 40
 
-	for i, msg := range m.filteredMessages {
+	for i, msg := range paginatedMessages {
 		offset := "N/A"
 		if msg.Offset >= 0 {
 			offset = fmt.Sprintf("%d", msg.Offset)
@@ -423,10 +526,142 @@ func (m *Model) updateMessageTable() {
 			value = truncateString(value, valueMaxLen)
 		}
 
-		rows[i] = table.Row{offset, partition, timestamp, key, value}
+		rows[i] = table.NewRow(table.RowData{
+			"offset":    offset,
+			"partition": partition,
+			"timestamp": timestamp,
+			"key":       key,
+			"value":     value,
+		})
 	}
 
-	m.messageTable.SetRows(rows)
+	m.messageTable = m.messageTable.WithRows(rows)
+}
+
+// renderTableFast renders table rows with minimal overhead for large datasets
+func (m *Model) renderTableFast(messages []api.Message) {
+	rows := make([]table.Row, len(messages))
+	for i, msg := range messages {
+		rows[i] = table.NewRow(table.RowData{
+			"offset":    fmt.Sprintf("%d", msg.Offset),
+			"partition": fmt.Sprintf("%d", msg.Partition),
+			"timestamp": "N/A",
+			"key":       truncateString(msg.Key, 18),
+			"value":     truncateString(msg.Value, 38),
+		})
+	}
+	m.messageTable = m.messageTable.WithRows(rows)
+}
+
+// renderTableCustom renders a custom table view for large datasets with pagination
+// This bypasses the bubbles table component overhead entirely
+func (m *Model) renderTableCustom(width, height int) string {
+	messages := m.pagination.GetVisibleMessages(m.filteredMessages)
+	if len(messages) == 0 {
+		return "No messages"
+	}
+
+	// Column widths
+	const (
+		offsetWidth = 10
+		partWidth   = 10
+		keyWidth    = 20
+		valueWidth  = 40
+	)
+
+	var sb strings.Builder
+
+	// Header with pagination info
+	header := fmt.Sprintf(" %s | Page %d/%d | %d msgs", 
+		m.topicName, m.pagination.Page+1, m.pagination.TotalPages, m.pagination.TotalMessages)
+	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")).Render(header))
+	sb.WriteString("\n")
+	sb.WriteString(strings.Repeat("─", width-4))
+	sb.WriteString("\n")
+
+	// Column headers
+	sb.WriteString(lipgloss.NewStyle().Bold(true).Render(
+		fmt.Sprintf(" %-10s %-10s %-20s %-40s", "Offset", "Partition", "Key", "Value"),
+	))
+	sb.WriteString("\n")
+	sb.WriteString(strings.Repeat("─", width-4))
+	sb.WriteString("\n")
+
+	// Get current cursor position for highlighting
+	cursorRow := m.messageTable.GetHighlightedRowIndex()
+
+	// Rows
+	for i, msg := range messages {
+		offset := fmt.Sprintf("%d", msg.Offset)
+		partition := fmt.Sprintf("%d", msg.Partition)
+		key := truncateString(msg.Key, keyWidth)
+		value := truncateString(msg.Value, valueWidth)
+
+		line := fmt.Sprintf(" %-10s %-10s %-20s %-40s", offset, partition, key, value)
+
+		// Highlight selected row
+		if i == cursorRow {
+			line = lipgloss.NewStyle().Background(lipgloss.Color("205")).Foreground(lipgloss.Color("0")).Render(line)
+		}
+
+		sb.WriteString(line)
+		sb.WriteString("\n")
+	}
+
+	// Footer with pagination controls
+	var footer string
+	if m.pagination.TotalPages > 1 {
+		footer = fmt.Sprintf(" [←/→] Page %d/%d | [R] refresh | [/] search | [space] pause", 
+			m.pagination.Page+1, m.pagination.TotalPages)
+	} else {
+		footer = fmt.Sprintf(" %d message(s) | [R] refresh | [/] search | [space] pause", m.pagination.TotalMessages)
+	}
+	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(footer))
+
+	return sb.String()
+}
+
+// getCachedWidth returns cached column width or calculates and caches it
+func (m *Model) getCachedWidth(columnTitle string, columns []table.Column) int {
+	// Find the width for this column
+	var width int
+	for _, col := range columns {
+		if col.Title() == columnTitle {
+			width = col.Width()
+			break
+		}
+	}
+
+	// Try read lock first for better performance
+	m.widthCacheMu.RLock()
+	if m.widthCache[columnTitle] != nil {
+		if cached, ok := m.widthCache[columnTitle][width]; ok {
+			m.widthCacheMu.RUnlock()
+			return cached
+		}
+	}
+	m.widthCacheMu.RUnlock()
+
+	// Need to write - acquire write lock
+	m.widthCacheMu.Lock()
+	defer m.widthCacheMu.Unlock()
+
+	// Initialize cache for this column if needed
+	if m.widthCache[columnTitle] == nil {
+		m.widthCache[columnTitle] = make(map[int]int)
+	}
+
+	// Calculate and cache
+	maxLen := width - 2 // Account for padding
+	m.widthCache[columnTitle][width] = maxLen
+	return maxLen
+}
+
+// initWidthCache initializes the width cache
+func (m *Model) initWidthCache() {
+	if m.widthCache == nil {
+		m.widthCache = make(map[string]map[int]int)
+	}
 }
 
 // highlightMatchingText highlights matching parts of text with color
@@ -467,29 +702,47 @@ func highlightMatchingText(text, query string) string {
 	return result.String()
 }
 
-// AddMessage adds a new message to the collection
-func (m *Model) AddMessage(msg api.Message) {
-	// Create unique key for deduplication using partition and offset
+// addMessageInternal adds a message without triggering view update (for background consumption)
+func (m *Model) addMessageInternal(msg api.Message) {
 	key := fmt.Sprintf("%d-%d", msg.Partition, msg.Offset)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// Only add if not already consumed
 	if _, exists := m.consumedMessages[key]; !exists {
-		m.messages = append(m.messages, msg)
 		m.consumedMessages[key] = msg
 
-		// Keep only the last MaxDisplayedMessages to prevent table from growing indefinitely
-		if len(m.messages) > MaxDisplayedMessages {
-			// Remove the oldest message from the display slice
+		// Enforce message buffer limit (FIFO)
+		if len(m.messages) >= m.maxMessages {
+			oldMsg := m.messages[0]
+			oldKey := fmt.Sprintf("%d-%d", oldMsg.Partition, oldMsg.Offset)
+			delete(m.consumedMessages, oldKey)
 			m.messages = m.messages[1:]
 		}
 
-		// Update filtered messages if needed
-		m.FilterMessages()
-
-		// Update status
-		m.statusMessage = fmt.Sprintf("Consumed %d messages", len(m.messages))
-		m.lastUpdate = time.Now()
+		// Add new message
+		m.messages = append(m.messages, msg)
+		
+		// Update filtered messages but don't trigger render
+		m.filteredMessages = m.messages
+		m.pagination.SetTotalMessages(len(m.filteredMessages))
 	}
+}
+
+// AddMessage adds a new message and triggers view update (for manual refresh)
+func (m *Model) AddMessage(msg api.Message) {
+	m.addMessageInternal(msg)
+	m.statusMessage = fmt.Sprintf("Consumed %d messages", len(m.messages))
+	m.markRenderDirty()
+}
+
+// shouldUpdate checks if enough time has passed since last update (throttling)
+func (m *Model) shouldUpdate() bool {
+	if m.updateThrottle <= 0 {
+		return true
+	}
+	return time.Since(m.lastUpdateTime) >= m.updateThrottle
 }
 
 // TogglePause toggles consumption pause state

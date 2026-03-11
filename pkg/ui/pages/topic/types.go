@@ -50,6 +50,11 @@ type (
 		Message api.Message
 	}
 
+	// Fetch messages (non-streaming)
+	MessagesFetchedMsg struct {
+		Messages []api.Message
+	}
+
 	// Timer messages
 	TimerTickMsg time.Time
 

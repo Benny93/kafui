@@ -19,16 +19,19 @@ type keyMap struct {
 	Quit           key.Binding
 	Enter          key.Binding
 	PauseResume    key.Binding
+	Refresh        key.Binding
 	Retry          key.Binding
 	Navigation     NavigationKeys
 	MessageControl MessageControlKeys
 }
 
 type NavigationKeys struct {
-	Up   key.Binding
-	Down key.Binding
-	Home key.Binding
-	End  key.Binding
+	Up       key.Binding
+	Down     key.Binding
+	Left     key.Binding
+	Right    key.Binding
+	Home     key.Binding
+	End      key.Binding
 }
 
 type MessageControlKeys struct {
@@ -60,7 +63,11 @@ func NewKeys() *Keys {
 			),
 			PauseResume: key.NewBinding(
 				key.WithKeys(" "),
-				key.WithHelp("space", "pause/resume consumption"),
+				key.WithHelp("space", "pause/resume"),
+			),
+			Refresh: key.NewBinding(
+				key.WithKeys("R"),
+				key.WithHelp("R", "refresh messages"),
 			),
 			Retry: key.NewBinding(
 				key.WithKeys("r"),
@@ -68,20 +75,28 @@ func NewKeys() *Keys {
 			),
 			Navigation: NavigationKeys{
 				Up: key.NewBinding(
-					key.WithKeys("k", "up"),
-					key.WithHelp("k/↑", "up"),
+					key.WithKeys("up", "k"),
+					key.WithHelp("↑/k", "select prev row"),
 				),
 				Down: key.NewBinding(
-					key.WithKeys("j", "down"),
-					key.WithHelp("j/↓", "down"),
+					key.WithKeys("down", "j"),
+					key.WithHelp("↓/j", "select next row"),
+				),
+				Left: key.NewBinding(
+					key.WithKeys("left", "h"),
+					key.WithHelp("←/h", "prev page"),
+				),
+				Right: key.NewBinding(
+					key.WithKeys("right", "l"),
+					key.WithHelp("→/l", "next page"),
 				),
 				Home: key.NewBinding(
 					key.WithKeys("g", "home"),
-					key.WithHelp("g/home", "top"),
+					key.WithHelp("g", "first page"),
 				),
 				End: key.NewBinding(
 					key.WithKeys("G", "end"),
-					key.WithHelp("G/end", "bottom"),
+					key.WithHelp("G", "last page"),
 				),
 			},
 			MessageControl: MessageControlKeys{
@@ -151,6 +166,8 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return k.handleSearch(model)
 	case key.Matches(msg, k.bindings.PauseResume):
 		return k.handlePauseResume(model)
+	case key.Matches(msg, k.bindings.Refresh):
+		return k.handleRefresh(model)
 	case key.Matches(msg, k.bindings.Retry):
 		return k.handleRetry(model)
 	case key.Matches(msg, k.bindings.Enter):
@@ -169,6 +186,10 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 
 	// Handle navigation keys
 	switch {
+	case key.Matches(msg, k.bindings.Navigation.Left):
+		return k.handleScroll(model, "up")
+	case key.Matches(msg, k.bindings.Navigation.Right):
+		return k.handleScroll(model, "down")
 	case key.Matches(msg, k.bindings.Navigation.Up):
 		return k.handleNavigation(model, "up")
 	case key.Matches(msg, k.bindings.Navigation.Down):
@@ -179,10 +200,14 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return k.handleNavigation(model, "end")
 	}
 
-	// Default table navigation handling
-	var cmd tea.Cmd
-	model.messageTable, cmd = model.messageTable.Update(msg)
-	cmds = append(cmds, cmd)
+	// Skip default table navigation for large datasets (use pagination instead)
+	// For small datasets, use table cursor navigation
+	if model.pagination.TotalPages <= 1 {
+		// Let bubble-table handle navigation for single page
+		var cmd tea.Cmd
+		model.messageTable, cmd = model.messageTable.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 
 	return tea.Batch(cmds...)
 }
@@ -226,6 +251,13 @@ func (k *Keys) handlePauseResume(model *Model) tea.Cmd {
 	// Toggle pause/resume consumption
 	model.TogglePause()
 	return nil
+}
+
+func (k *Keys) handleRefresh(model *Model) tea.Cmd {
+	// Fetch latest messages from the topic
+	const fetchCount = 300
+	model.statusMessage = "Refreshing messages..."
+	return model.consumption.FetchLatestMessages(fetchCount)
 }
 
 func (k *Keys) handleRetry(model *Model) tea.Cmd {
@@ -284,16 +316,30 @@ func (k *Keys) handleShowDetails(model *Model) tea.Cmd {
 }
 
 func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
+	// Up/Down navigate rows within current page (table cursor)
 	switch direction {
 	case "up":
-		model.messageTable.MoveUp(1)
+		model.messageTable = model.messageTable.PageUp()
+		model.markRenderDirty()
+		return nil
 	case "down":
-		model.messageTable.MoveDown(1)
+		model.messageTable = model.messageTable.PageDown()
+		model.markRenderDirty()
+		return nil
 	case "home":
-		model.messageTable.GotoTop()
+		// Go to first page
+		model.pagination.FirstPage()
+		model.messageTable = model.messageTable.PageFirst()
+		model.markRenderDirty()
+		return nil
 	case "end":
-		model.messageTable.GotoBottom()
+		// Go to last page
+		model.pagination.LastPage()
+		model.messageTable = model.messageTable.PageLast()
+		model.markRenderDirty()
+		return nil
 	}
+
 	return nil
 }
 
@@ -319,9 +365,11 @@ func (k *Keys) GetKeyBindings() []key.Binding {
 // GetShortcuts returns formatted shortcut descriptions
 func (k *Keys) GetShortcuts() []string {
 	return []string{
-		"↑/↓   Navigate messages",
+		"↑/↓   Select row",
 		"Enter View details",
 		"Space Pause/resume",
+		"R     Refresh messages",
+		"←/→   Prev/Next page",
 		"/     Search messages",
 		"r     Retry connection",
 		"c     Copy key",
@@ -330,4 +378,24 @@ func (k *Keys) GetShortcuts() []string {
 		"Esc   Exit search",
 		"q/Esc Back to topics",
 	}
+}
+
+// handleScroll handles page navigation key bindings
+func (k *Keys) handleScroll(model *Model, direction string) tea.Cmd {
+	switch direction {
+	case "up":
+		// Previous page (older messages)
+		if model.pagination.PrevPage() {
+			model.messageTable = model.messageTable.WithCurrentPage(model.pagination.Page + 1)
+			model.markRenderDirty()
+		}
+	case "down":
+		// Next page (newer messages)
+		if model.pagination.NextPage() {
+			model.messageTable = model.messageTable.WithCurrentPage(model.pagination.Page + 1)
+			model.markRenderDirty()
+		}
+	}
+
+	return nil
 }

@@ -8,6 +8,7 @@ BUILD_TAG ?= latest
 GOBIN ?= $$(go env GOPATH)/bin
 
 .PHONY: build install run run-mock release release-snapshot test test-short test-integration test-benchmarks run-kafka stop-kafka docker-build
+.PHONY: vhs vhs-install vhs-clean
 
 
 install-go-test-coverage:
@@ -51,3 +52,19 @@ stop-kafka:
 	cd example/dockercompose/ && docker compose down
 docker-build:
 	${DOCKER_CMD} build -t ${DOCKER_REGISTRY}/${DOCKER_ORG}/${DOCKER_NAME}:${DOCKER_TAG} .
+
+# VHS Integration Tests
+
+vhs-install:
+	@echo "Installing VHS..."
+	go install github.com/charmbracelet/vhs@latest
+	@echo "VHS installed. Make sure $$GOPATH/bin is in your PATH"
+
+vhs: vhs-install
+	@echo "Running VHS topic navigation test..."
+	go test ./test/vhs/... -run TestVHS_TopicNavigation -v
+
+vhs-clean:
+	@echo "Cleaning VHS output..."
+	rm -rf test/vhs/output/*.gif
+	@echo "VHS output cleaned"

@@ -22,6 +22,11 @@ func NewTopicContentProvider(model *Model) *TopicContentProvider {
 }
 
 func (t *TopicContentProvider) RenderContent(width, height int) string {
+	// PERFORMANCE: Check render cache first
+	if cached, ok := t.model.getRenderCache(); ok {
+		return cached
+	}
+	
 	// Update table dimensions based on actual content area size
 	// width/height here are the inner content dimensions (after border and padding)
 	// We need to add back the border (2) and padding (2) to get the full cell width
@@ -43,22 +48,42 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 		return t.renderEmpty()
 	}
 
-	var content strings.Builder
+	var content string
 
-	// Add search bar if in search mode
-	if t.model.searchMode {
-		searchBar := t.renderSearchBar(width)
-		content.WriteString(searchBar)
-		content.WriteString("\n\n")
+	// PERFORMANCE: For large datasets, use custom renderer (bypasses bubbles table overhead)
+	if len(t.model.filteredMessages) > UseCustomRenderer {
+		content = t.renderCustomTable(width, height)
+	} else {
+		// For small datasets, use standard table rendering
+		t.model.updateMessageTable()
+
+		var contentBuilder strings.Builder
+
+		// Add search bar if in search mode
+		if t.model.searchMode {
+			searchBar := t.renderSearchBar(width)
+			contentBuilder.WriteString(searchBar)
+			contentBuilder.WriteString("\n\n")
+		}
+
+		// Render the main table with max width constraint to prevent overflow
+		tableView := t.model.messageTable.View()
+		// Use MaxWidth to ensure table doesn't exceed available width
+		tableView = lipgloss.NewStyle().MaxWidth(width).Render(tableView)
+		contentBuilder.WriteString(tableView)
+		
+		content = contentBuilder.String()
 	}
+	
+	// Cache the render result
+	t.model.setRenderCache(content)
+	
+	return content
+}
 
-	// Render the main table with max width constraint to prevent overflow
-	tableView := t.model.messageTable.View()
-	// Use MaxWidth to ensure table doesn't exceed available width
-	tableView = lipgloss.NewStyle().MaxWidth(width).Render(tableView)
-	content.WriteString(tableView)
-
-	return content.String()
+// renderCustomTable renders a custom table for large datasets (bypasses bubbles table)
+func (t *TopicContentProvider) renderCustomTable(width, height int) string {
+	return t.model.renderTableCustom(width, height)
 }
 
 func (t *TopicContentProvider) renderSearchBar(width int) string {

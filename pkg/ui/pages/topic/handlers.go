@@ -35,6 +35,9 @@ func (h *Handlers) Handle(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MessageConsumedMsg:
 		return h.handleMessageConsumed(model, msg)
 
+	case MessagesFetchedMsg:
+		return h.handleMessagesFetched(model, msg)
+
 	case StartConsumingMsg:
 		return h.handleStartConsuming(model, msg)
 
@@ -92,14 +95,30 @@ func (h *Handlers) handleKeyMsg(model *Model, msg tea.KeyMsg) (tea.Model, tea.Cm
 }
 
 func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (tea.Model, tea.Cmd) {
-	// Add the consumed message
-	model.AddMessage(msg.Message)
+	// Add the consumed message to internal storage (doesn't trigger view update)
+	model.addMessageInternal(msg.Message)
 
 	// Continue listening for more messages if we're still consuming
-	// Use a reasonable interval to prevent UI freezing
 	if model.consuming && model.msgChan != nil {
 		return model, model.consumption.ListenForMessages(model.msgChan)
 	}
+
+	return model, nil
+}
+
+func (h *Handlers) handleMessagesFetched(model *Model, msg MessagesFetchedMsg) (tea.Model, tea.Cmd) {
+	// Add all fetched messages
+	for _, m := range msg.Messages {
+		model.addMessageInternal(m)
+	}
+
+	// Update pagination
+	model.pagination.SetTotalMessages(len(model.filteredMessages))
+	
+	// Mark render as dirty to show the messages
+	model.markRenderDirty()
+	
+	model.statusMessage = fmt.Sprintf("Loaded %d messages", len(model.messages))
 
 	return model, nil
 }

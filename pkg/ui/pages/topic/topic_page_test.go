@@ -446,6 +446,8 @@ func TestAddMessage_MaxDisplayedMessages(t *testing.T) {
 	}
 
 	model := NewModel(mockDS, "test-topic", topicDetails)
+	// Set maxMessages for testing
+	model.maxMessages = MaxDisplayedMessages
 
 	// Add more messages than the maximum displayed limit
 	numMessages := MaxDisplayedMessages + 10
@@ -483,6 +485,8 @@ func TestAddMessage_ExactMaxDisplayedMessages(t *testing.T) {
 	}
 
 	model := NewModel(mockDS, "test-topic", topicDetails)
+	// Set maxMessages for testing
+	model.maxMessages = MaxDisplayedMessages
 
 	// Add exactly MaxDisplayedMessages messages
 	for i := 0; i < MaxDisplayedMessages; i++ {
