@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/layout"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 )
 
@@ -13,6 +14,12 @@ type Common struct {
 
 	// Styles contains all application styles
 	Styles *stylesPkg.Styles
+
+	// Layout contains the current layout configuration
+	Layout *layout.Layout
+
+	// LayoutConfig contains layout configuration options
+	LayoutConfig *layout.LayoutConfig
 
 	// Config contains UI configuration
 	Config *UIConfig
@@ -42,18 +49,37 @@ func DefaultUIConfig() *UIConfig {
 // NewCommon creates a new Common context with the given data source.
 // It initializes default styles and configuration.
 func NewCommon(dataSource api.KafkaDataSource) *Common {
+	layoutConfig := layout.DefaultLayoutConfig()
 	return &Common{
-		DataSource: dataSource,
-		Styles:     stylesPkg.DefaultStyles(),
-		Config:     DefaultUIConfig(),
+		DataSource:   dataSource,
+		Styles:       stylesPkg.DefaultStyles(),
+		Layout:       layout.CalculateLayout(80, 24, layoutConfig), // Default size
+		LayoutConfig: layoutConfig,
+		Config:       DefaultUIConfig(),
 	}
 }
 
 // NewCommonWithConfig creates a new Common context with custom configuration
 func NewCommonWithConfig(dataSource api.KafkaDataSource, config *UIConfig) *Common {
+	layoutConfig := layout.DefaultLayoutConfig()
 	return &Common{
-		DataSource: dataSource,
-		Styles:     stylesPkg.DefaultStyles(),
-		Config:     config,
+		DataSource:   dataSource,
+		Styles:       stylesPkg.DefaultStyles(),
+		Layout:       layout.CalculateLayout(80, 24, layoutConfig), // Default size
+		LayoutConfig: layoutConfig,
+		Config:       config,
 	}
+}
+
+// UpdateLayout recalculates the layout based on new dimensions
+func (c *Common) UpdateLayout(width, height int) {
+	c.Layout = layout.CalculateLayout(width, height, c.LayoutConfig)
+}
+
+// GetLayout returns the current layout, calculating it if necessary
+func (c *Common) GetLayout(width, height int) *layout.Layout {
+	if c.Layout == nil || c.Layout.Width != width || c.Layout.Height != height {
+		c.UpdateLayout(width, height)
+	}
+	return c.Layout
 }
