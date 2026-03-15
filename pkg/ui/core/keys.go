@@ -4,12 +4,14 @@ import "github.com/charmbracelet/bubbles/key"
 
 // GlobalKeyMap defines global key bindings that work across all pages
 type GlobalKeyMap struct {
-	Help        key.Binding
-	Quit        key.Binding
-	Back        key.Binding
-	NextPage    key.Binding
-	PrevPage    key.Binding
-	ToggleTheme key.Binding
+	Help                    key.Binding
+	Quit                    key.Binding
+	Back                    key.Binding
+	NextPage                key.Binding
+	PrevPage                key.Binding
+	ToggleTheme             key.Binding
+	DebugScreenshot         key.Binding
+	DebugScreenshotRedacted key.Binding
 }
 
 // DefaultGlobalKeys provides default global key bindings
@@ -38,6 +40,14 @@ var DefaultGlobalKeys = GlobalKeyMap{
 		key.WithKeys("T"),
 		key.WithHelp("T", "toggle theme"),
 	),
+	DebugScreenshot: key.NewBinding(
+		key.WithKeys("ctrl+d"),
+		key.WithHelp("ctrl+d", "save screenshot"),
+	),
+	DebugScreenshotRedacted: key.NewBinding(
+		key.WithKeys("ctrl+alt+d"),
+		key.WithHelp("ctrl+alt+d", "save redacted screenshot"),
+	),
 }
 
 // GetAllBindings returns all global key bindings as a slice
@@ -49,5 +59,7 @@ func (g GlobalKeyMap) GetAllBindings() []key.Binding {
 		g.NextPage,
 		g.PrevPage,
 		g.ToggleTheme,
+		g.DebugScreenshot,
+		g.DebugScreenshotRedacted,
 	}
 }

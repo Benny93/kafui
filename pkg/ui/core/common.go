@@ -35,6 +35,9 @@ type UIConfig struct {
 
 	// Theme name (e.g., "dark", "light")
 	Theme string
+
+	// ScreenshotDir is the directory for debug screenshots (defaults to temp dir)
+	ScreenshotDir string
 }
 
 // DefaultUIConfig returns the default UI configuration

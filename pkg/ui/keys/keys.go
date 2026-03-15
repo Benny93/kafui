@@ -27,11 +27,13 @@ type KeyMap struct {
 
 // GlobalKeyMap contains global key bindings available on all pages
 type GlobalKeyMap struct {
-	Quit       key.Binding
-	Help       key.Binding
-	Back       key.Binding
-	Search     key.Binding
-	ToggleTheme key.Binding
+	Quit              key.Binding
+	Help              key.Binding
+	Back              key.Binding
+	Search            key.Binding
+	ToggleTheme       key.Binding
+	DebugScreenshot   key.Binding
+	DebugScreenshotRedacted key.Binding
 }
 
 // MainKeyMap contains key bindings for the main page
@@ -213,6 +215,14 @@ func DefaultGlobalKeyMap() GlobalKeyMap {
 		ToggleTheme: key.NewBinding(
 			key.WithKeys("T"),
 			key.WithHelp("T", "toggle theme"),
+		),
+		DebugScreenshot: key.NewBinding(
+			key.WithKeys("ctrl+d"),
+			key.WithHelp("ctrl+d", "save screenshot"),
+		),
+		DebugScreenshotRedacted: key.NewBinding(
+			key.WithKeys("ctrl+alt+d"),
+			key.WithHelp("ctrl+alt+d", "save redacted screenshot"),
 		),
 	}
 }
@@ -481,7 +491,8 @@ func (km KeyMap) GetShortHelp() []key.Binding {
 func (km KeyMap) GetFullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{km.Global.Help, km.Global.Back, km.Global.Quit},
-		{km.Global.Search},
+		{km.Global.Search, km.Global.ToggleTheme},
+		{km.Global.DebugScreenshot, km.Global.DebugScreenshotRedacted},
 	}
 }
 

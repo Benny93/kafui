@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/debug"
 	"github.com/Benny93/kafui/pkg/ui/router"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -86,6 +89,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle global key bindings
 		switch {
+		case key.Matches(msg, core.DefaultGlobalKeys.DebugScreenshot):
+			// Take screenshot (full)
+			return m, m.takeScreenshot(false)
+		case key.Matches(msg, core.DefaultGlobalKeys.DebugScreenshotRedacted):
+			// Take screenshot (redacted)
+			return m, m.takeScreenshot(true)
 		case key.Matches(msg, core.DefaultGlobalKeys.ToggleTheme):
 			// Toggle theme between dark and light
 			if m.common.Styles != nil {
@@ -136,6 +145,54 @@ func (m *Model) View() string {
 	}
 
 	return m.Router.View()
+}
+
+// takeScreenshot captures the current TUI screen to a file
+func (m *Model) takeScreenshot(redact bool) tea.Cmd {
+	return func() tea.Msg {
+		// Get current view
+		view := m.View()
+
+		// Get current page info
+		currentPage := m.Router.GetCurrentPage()
+		pageID := "unknown"
+		pageContext := ""
+		if currentPage != nil {
+			pageID = currentPage.GetID()
+			pageContext = fmt.Sprintf("state=%s, focus=%s", m.state, m.focusState)
+		}
+
+		// Capture screenshot
+		options := debug.CaptureOptions{
+			Format:          debug.FormatPlainText,
+			Redact:          redact,
+			OutputDir:       m.common.Config.ScreenshotDir,
+			Version:         "dev",
+			CurrentPage:     pageID,
+			PageContext:     pageContext,
+			TerminalWidth:   m.width,
+			TerminalHeight:  m.height,
+		}
+
+		filepath, err := debug.Capture(view, options)
+		if err != nil {
+			return core.StatusMsg{
+				Message: fmt.Sprintf("Screenshot failed: %v", err),
+				Type:    core.StatusError,
+			}
+		}
+
+		// Return success message
+		msg := fmt.Sprintf("Screenshot saved: %s", filepath)
+		if redact {
+			msg = fmt.Sprintf("Redacted screenshot saved: %s", filepath)
+		}
+
+		return core.StatusMsg{
+			Message: msg,
+			Type:    core.StatusSuccess,
+		}
+	}
 }
 
 // NewUIModel creates a new UI model using router-based navigation
