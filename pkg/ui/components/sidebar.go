@@ -3,6 +3,7 @@ package components
 import (
 	"strings"
 
+	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -48,12 +49,16 @@ type SidebarSection struct {
 
 // Sidebar represents a reusable sidebar component
 type Sidebar struct {
+	core.BaseComponent // Embed base component for common functionality
 	config SidebarConfig
 }
 
 // NewSidebar creates a new sidebar component
 func NewSidebar(config SidebarConfig) *Sidebar {
-	return &Sidebar{config: config}
+	return &Sidebar{
+		config:        config,
+		BaseComponent: core.NewBaseComponent(35, 20), // Default sidebar dimensions
+	}
 }
 
 // RenderContext renders the context section

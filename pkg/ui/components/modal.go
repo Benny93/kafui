@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/Benny93/kafui/pkg/ui/core"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -62,6 +63,8 @@ const (
 
 // Modal represents a modal dialog
 type Modal struct {
+	core.BaseComponent // Embed base component for common functionality
+
 	Type        ModalType
 	Title       string
 	Message     string
@@ -74,8 +77,6 @@ type Modal struct {
 	OnConfirm   func() tea.Msg
 	OnCancel    func() tea.Msg
 	OnInput     func(string) tea.Msg
-	Width       int
-	Height      int
 }
 
 // ModalOption is a function that configures a Modal
@@ -155,8 +156,6 @@ func NewModal(options ...ModalOption) *Modal {
 		ShowInput: false,
 		visible:   false,
 		Size:      Medium,
-		Width:     50,
-		Height:    10,
 	}
 
 	// Apply options
@@ -168,24 +167,20 @@ func NewModal(options ...ModalOption) *Modal {
 	switch m.Type {
 	case AlertModal:
 		if m.Size == Medium {
-			m.Width = 40
-			m.Height = 8
+			m.SetDimensions(40, 8)
 		}
 	case ConfirmModal:
 		if m.Size == Medium {
-			m.Width = 50
-			m.Height = 10
+			m.SetDimensions(50, 10)
 		}
 	case InputModal:
 		m.ShowInput = true
 		if m.Size == Medium {
-			m.Width = 50
-			m.Height = 12
+			m.SetDimensions(50, 12)
 		}
 	case ErrorModal:
 		if m.Size == Medium {
-			m.Width = 50
-			m.Height = 10
+			m.SetDimensions(50, 10)
 		}
 	}
 
@@ -231,8 +226,7 @@ func (m *Modal) IsVisible() bool {
 
 // SetSize sets the modal size
 func (m *Modal) SetSize(width, height int) {
-	m.Width = width
-	m.Height = height
+	m.BaseComponent.SetDimensions(width, height)
 	modalStyle = modalStyle.Width(width).Height(height)
 }
 

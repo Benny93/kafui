@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -16,6 +17,7 @@ type LayoutConfig struct {
 
 // Layout represents a reusable layout component
 type Layout struct {
+	core.BaseComponent // Embed base component for common functionality
 	config LayoutConfig
 }
 
@@ -24,7 +26,10 @@ func NewLayout(config LayoutConfig) *Layout {
 	if config.SidebarWidth == 0 {
 		config.SidebarWidth = 35
 	}
-	return &Layout{config: config}
+	return &Layout{
+		config:        config,
+		BaseComponent: core.NewBaseComponent(config.Width, config.Height),
+	}
 }
 
 // CalculateDimensions returns the calculated dimensions for layout components
