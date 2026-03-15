@@ -93,6 +93,22 @@ type DetailKeyMap struct {
 	Copy        key.Binding
 }
 
+// ShortHelp returns keybindings to be shown in the mini help view. It's part
+// of the help.KeyMap interface.
+func (k DetailKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Help, k.Format, k.Copy, k.Back, k.Quit}
+}
+
+// FullHelp returns keybindings for the expanded help view. It's part of the
+// help.KeyMap interface.
+func (k DetailKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Format, k.Headers, k.Metadata},     // first column
+		{k.Copy, k.ScrollUp, k.ScrollDown},    // second column
+		{k.Back, k.Help, k.Quit},              // third column
+	}
+}
+
 // ResourceDetailKeyMap contains key bindings for the resource detail page
 type ResourceDetailKeyMap struct {
 	Back       key.Binding

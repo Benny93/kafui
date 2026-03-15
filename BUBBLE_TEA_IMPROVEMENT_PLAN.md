@@ -3,7 +3,7 @@
 This plan outlines the steps to improve Kafui's Bubble Tea implementation to match Crush's code quality standards. Tasks are organized by priority and dependency order.
 
 **Last Updated**: March 15, 2026
-**Status**: Phase 1 Complete ✅ | Phase 2 Complete ✅ | Phase 3 In Progress 🔄
+**Status**: Phase 1 Complete ✅ | Phase 2 Mostly Complete 🔄 | Phase 3 In Progress 🔄
 
 ---
 
@@ -256,36 +256,23 @@ This plan outlines the steps to improve Kafui's Bubble Tea implementation to mat
 - [ ] **2.1.5** Update all pages to use centralized keys
   - Files: `pkg/ui/pages/*/keys.go`
   - Import and use `keys.DefaultKeyMap`
-  - **Note**: Pending - pages still use local key maps
+  - **Status**: ⚠️ **Partially done** - Main page uses centralized keys (`keys.DefaultKeyMap()`), but Topic, Message Detail, Resource Detail still use local key maps
 
 - [ ] **2.1.6** Remove duplicate key binding definitions
   - Delete old `KeyMap` structs from individual pages
-  - **Note**: Pending - keeping for backward compatibility
+  - **Status**: ❌ **Pending** - Local KeyMap structs still exist in:
+    - `pkg/ui/pages/topic/keys.go`
+    - `pkg/ui/pages/message_detail/message_detail_page.go`
+    - `pkg/ui/pages/resource_detail/components.go`
 
 - [ ] **2.1.7** Update footer component to use centralized keys
   - File: `pkg/ui/components/footer.go`
-  - **Note**: Pending
+  - **Status**: ❌ **Pending**
 
 - [ ] **2.1.8** Audit for key conflicts
   - Review all bindings for duplicates
   - Document conflicts and resolve
-  - **Note**: Pending
-  func GetFullHelp(km KeyMap) [][]key.Binding
-  ```
-
-- [ ] **2.1.5** Update all pages to use centralized keys
-  - Files: `pkg/ui/pages/*/keys.go`
-  - Import and use `keys.DefaultKeyMap`
-
-- [ ] **2.1.6** Remove duplicate key binding definitions
-  - Delete old `KeyMap` structs from individual pages
-
-- [ ] **2.1.7** Update footer component to use centralized keys
-  - File: `pkg/ui/components/footer.go`
-
-- [ ] **2.1.8** Audit for key conflicts
-  - Review all bindings for duplicates
-  - Document conflicts and resolve
+  - **Status**: ❌ **Pending**
 
 ---
 
@@ -820,17 +807,21 @@ This plan outlines the steps to improve Kafui's Bubble Tea implementation to mat
 | Phase | Total Tasks | Completed | In Progress | Pending | Percentage |
 |-------|-------------|-----------|-------------|---------|------------|
 | Phase 1: Foundation | 27 | 27 | 0 | 0 | 100% |
-| Phase 2: Organization | 28 | 21 | 0 | 7 | 75% |
+| Phase 2: Organization | 28 | 17 | 1 | 10 | 61% |
 | Phase 3: Styling | 16 | 6 | 0 | 10 | 38% |
 | Phase 4: Error Handling | 12 | 0 | 0 | 12 | 0% |
 | Phase 5: Testing & Docs | 11 | 1 | 0 | 10 | 9% |
 | Phase 6: Cleanup | 9 | 0 | 0 | 9 | 0% |
-| **Total** | **103** | **55** | **0** | **48** | **53%** |
+| **Total** | **103** | **51** | **1** | **51** | **50%** |
 
 ### Completion Checklist
 
 - [x] Phase 1 complete (27/27 tasks - ✅ All foundation tasks done)
-- [x] Phase 2 complete (21/28 tasks - ✅ Core organization done, 7 tasks pending)
+- [ ] Phase 2 complete (17/28 tasks - 🔄 Core organization mostly done, 10 tasks pending)
+  - [x] Phase 2.2: Common Context Pattern ✅
+  - [x] Phase 2.3: Layout Management ✅
+  - [ ] Phase 2.1: Centralized Keys (60% - 4/8 tasks pending)
+  - [ ] Phase 2.4: Component Pattern (0/4 tasks pending)
 - [ ] Phase 3 complete (6/16 tasks - style system created, migration pending)
 - [ ] Phase 4 complete (0/12 tasks)
 - [ ] Phase 5 complete (1/11 tasks - layout tests added)

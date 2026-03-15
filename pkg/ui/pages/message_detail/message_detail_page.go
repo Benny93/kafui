@@ -8,6 +8,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/atotto/clipboard"
@@ -326,81 +327,25 @@ func (m *Model) OnBlur() tea.Cmd {
 	return nil
 }
 
-// KeyMap defines the key bindings for the message detail page
-type KeyMap struct {
-	NextTab      key.Binding
-	PrevTab      key.Binding
-	ToggleFormat key.Binding
-	SwitchFocus  key.Binding
-	Copy         key.Binding
-	ScrollUp     key.Binding
-	ScrollDown   key.Binding
-	Back         key.Binding
-	Quit         key.Binding
-	Help         key.Binding
+// GetKeyMap returns the centralized key bindings for the message detail page
+func GetKeyMap() keys.DetailKeyMap {
+	return keys.DefaultKeyMap().Detail
 }
 
-// ShortHelp returns keybindings to be shown in the mini help view
-func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.NextTab, k.ToggleFormat, k.Copy, k.Back, k.Quit}
-}
-
-// FullHelp returns keybindings for the expanded help view
-func (k KeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.NextTab, k.ToggleFormat, k.SwitchFocus},                 // first column
-		{k.Copy, k.ScrollUp, k.ScrollDown, k.Back, k.Help, k.Quit}, // second column
+// GetHelpKeyBindings returns key bindings for the help view using centralized keys
+func GetHelpKeyBindings() []key.Binding {
+	km := keys.DefaultKeyMap()
+	return []key.Binding{
+		km.Detail.Format,
+		km.Detail.Headers,
+		km.Detail.Metadata,
+		km.Detail.Copy,
+		km.Detail.ScrollUp,
+		km.Detail.ScrollDown,
+		km.Detail.Back,
+		km.Detail.Help,
+		km.Detail.Quit,
 	}
-}
-
-// DefaultKeyMap contains the default key bindings for the message detail page
-var DefaultKeyMap = KeyMap{
-	NextTab: key.NewBinding(
-		key.WithKeys("shift+tab"),
-		key.WithHelp("shift+tab", "next tab"),
-	),
-	ToggleFormat: key.NewBinding(
-		key.WithKeys("f"),
-		key.WithHelp("f", "toggle format (Content tab)"),
-	),
-	SwitchFocus: key.NewBinding(
-		key.WithKeys("tab"),
-		key.WithHelp("tab", "switch focus (Content tab)"),
-	),
-	Copy: key.NewBinding(
-		key.WithKeys("c"),
-		key.WithHelp("c", "copy content (Content tab)"),
-	),
-	ScrollUp: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "scroll up"),
-	),
-	ScrollDown: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "scroll down"),
-	),
-	Back: key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "back"),
-	),
-	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
-		key.WithHelp("q", "quit"),
-	),
-	Help: key.NewBinding(
-		key.WithKeys("?"),
-		key.WithHelp("?", "toggle help"),
-	),
-}
-
-// Additional key bindings not in the main KeyMap but handled by the content provider
-var AdditionalKeys = struct {
-	Refresh key.Binding
-}{
-	Refresh: key.NewBinding(
-		key.WithKeys("r"),
-		key.WithHelp("r", "refresh schema info"),
-	),
 }
 
 // MessageDetailPageModel wraps the ReusableApp with message detail-specific providers
@@ -448,8 +393,8 @@ func NewMessageDetailPageModelWithCommon(common *core.Common, topicName string, 
 	// Create the reusable app with our message detail providers
 	reusableApp := templateui.NewReusableApp(config)
 
-	// Set the key map for the footer
-	reusableApp.SetKeyMap(DefaultKeyMap)
+	// Set the key map for the footer using centralized keys
+	reusableApp.SetKeyMap(GetKeyMap())
 
 	return &MessageDetailPageModel{
 		common:          common,
@@ -511,20 +456,8 @@ func (m *MessageDetailPageModel) GetTitle() string {
 
 // GetHelp implements the Page interface
 func (m *MessageDetailPageModel) GetHelp() []key.Binding {
-	// Return key bindings for help using the DefaultKeyMap
-	return []key.Binding{
-		DefaultKeyMap.NextTab,
-		DefaultKeyMap.PrevTab,
-		DefaultKeyMap.ToggleFormat,
-		DefaultKeyMap.SwitchFocus,
-		DefaultKeyMap.Copy,
-		AdditionalKeys.Refresh,
-		DefaultKeyMap.ScrollUp,
-		DefaultKeyMap.ScrollDown,
-		DefaultKeyMap.Back,
-		DefaultKeyMap.Quit,
-		DefaultKeyMap.Help,
-	}
+	// Return key bindings for help using centralized keys
+	return GetHelpKeyBindings()
 }
 
 // HandleNavigation implements the Page interface
