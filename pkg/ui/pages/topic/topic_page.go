@@ -968,6 +968,9 @@ func (v *View) SetDimensions(width, height int) {
 
 // TopicPageModel wraps the ReusableApp with topic-specific providers
 type TopicPageModel struct {
+	// Shared context
+	common *core.Common
+
 	// Original topic model for business logic
 	topicModel *Model
 
@@ -976,10 +979,23 @@ type TopicPageModel struct {
 	contentProvider *TopicContentProvider
 }
 
+// GetCommon returns the shared context
+func (t *TopicPageModel) GetCommon() *core.Common {
+	return t.common
+}
+
 // NewTopicPageModel creates a new topic page model using the template system
+// Deprecated: Use NewTopicPageModelWithCommon for new code
 func NewTopicPageModel(dataSource api.KafkaDataSource, topicName string, topicDetails api.Topic) *TopicPageModel {
+	// Create Common context with data source
+	common := core.NewCommon(dataSource)
+	return NewTopicPageModelWithCommon(common, topicName, topicDetails)
+}
+
+// NewTopicPageModelWithCommon creates a new topic page model using the Common context pattern
+func NewTopicPageModelWithCommon(common *core.Common, topicName string, topicDetails api.Topic) *TopicPageModel {
 	// Create the original topic model for business logic
-	topicModel := NewModel(dataSource, topicName, topicDetails)
+	topicModel := NewModel(common.DataSource, topicName, topicDetails)
 
 	// Create topic-specific providers
 	contentProvider := NewTopicContentProvider(topicModel)
@@ -1007,6 +1023,7 @@ func NewTopicPageModel(dataSource api.KafkaDataSource, topicName string, topicDe
 	reusableApp := templateui.NewReusableApp(config)
 
 	return &TopicPageModel{
+		common:          common,
 		topicModel:      topicModel,
 		reusableApp:     reusableApp,
 		contentProvider: contentProvider,

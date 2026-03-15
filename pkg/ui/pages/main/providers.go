@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/core"
+	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
@@ -164,6 +166,9 @@ type KafuiContentProvider struct {
 	resourceManager *ResourceManager
 	currentResource Resource
 
+	// Styles
+	styles *stylesPkg.Styles
+
 	// Table and search state
 	resourcesTable table.Model
 	searchMode     bool
@@ -200,11 +205,39 @@ func NewKafuiContentProvider(dataSource api.KafkaDataSource) *KafuiContentProvid
 		resourceManager: resourceManager,
 		currentResource: currentResource,
 		resourcesTable:  resourcesTable,
+		styles:          stylesPkg.DefaultStyles(),
 		allRows:         []table.Row{},
 		allItems:        []interface{}{},
 		filteredRows:    []table.Row{},
 		filteredItems:   []interface{}{},
 	}
+}
+
+// NewKafuiContentProviderWithCommon creates a content provider using Common context
+func NewKafuiContentProviderWithCommon(common *core.Common) *KafuiContentProvider {
+	return &KafuiContentProvider{
+		dataSource:      common.DataSource,
+		resourceManager: NewResourceManager(common.DataSource),
+		currentResource: NewResourceManager(common.DataSource).GetResource(TopicResourceType),
+		resourcesTable:  createResourcesTable(),
+		styles:          common.Styles,
+		allRows:         []table.Row{},
+		allItems:        []interface{}{},
+		filteredRows:    []table.Row{},
+		filteredItems:   []interface{}{},
+	}
+}
+
+// createResourcesTable creates and configures the resources table
+func createResourcesTable() table.Model {
+	columns := createResourceTableColumns()
+	resourcesTable := table.New(
+		table.WithColumns(columns),
+		table.WithFocused(true),
+		table.WithHeight(2),
+	)
+	resourcesTable.SetStyles(createResourceTableStyles())
+	return resourcesTable
 }
 
 func (k *KafuiContentProvider) RenderContent(width, height int) string {
@@ -250,56 +283,41 @@ func (k *KafuiContentProvider) RenderContent(width, height int) string {
 
 // renderSearchBar renders the search input bar
 func (k *KafuiContentProvider) renderSearchBar(width int) string {
-	searchStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("205")).
-		Bold(true)
-	
-	promptStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
-	
+	// Use semantic colors from style system
+	searchStyle := k.styles.SearchStyle.Prompt
+	promptStyle := k.styles.Muted
+
 	// Create search prompt
 	prompt := searchStyle.Render("🔍 Search: ")
 	filter := k.currentFilter
 	if filter == "" {
 		filter = promptStyle.Render("(type to filter resources...)")
 	}
-	
+
 	// Add cursor if in search mode
 	cursor := ""
 	if k.searchMode {
-		cursor = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
-			Render("█")
+		cursor = searchStyle.Render("█")
 	}
-	
+
 	searchLine := prompt + filter + cursor
-	
+
 	// Add help text
-	helpText := promptStyle.Render("ESC to cancel • Enter to search")
-	
+	helpText := k.styles.SearchStyle.Help.Render("ESC to cancel • Enter to search")
+
 	return searchLine + "\n" + helpText
 }
 
 func (k *KafuiContentProvider) renderError() string {
-	style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196")).
-		Bold(true).
-		Padding(1)
-	return style.Render(fmt.Sprintf("Error: %v", k.error))
+	return k.styles.Error.Render(fmt.Sprintf("Error: %v", k.error))
 }
 
 func (k *KafuiContentProvider) renderLoading() string {
-	style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("205")).
-		Padding(1)
-	return style.Render("Loading resources...")
+	return k.styles.Muted.Render("Loading resources...")
 }
 
 func (k *KafuiContentProvider) renderEmpty() string {
-	style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("243")).
-		Padding(1)
-	return style.Render("No resources found. Try refreshing or checking your connection.")
+	return k.styles.Muted.Render("No resources found. Try refreshing or checking your connection.")
 }
 
 func (k *KafuiContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
@@ -722,4 +740,9 @@ func (k *KafuiHeaderDataProvider) InitHeader() tea.Cmd {
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 		return TimerTickMsg(t)
 	})
+}
+
+// NewKafuiHeaderDataProviderWithCommon creates a header provider using Common context
+func NewKafuiHeaderDataProviderWithCommon(common *core.Common) *KafuiHeaderDataProvider {
+	return NewKafuiHeaderDataProvider(common.DataSource)
 }

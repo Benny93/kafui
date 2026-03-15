@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -39,6 +40,11 @@ func NewResourcesSection(dataSource api.KafkaDataSource) *ResourcesSection {
 		dataSource:      dataSource,
 		currentResource: TopicResourceType,
 	}
+}
+
+// NewResourcesSectionWithCommon creates a ResourcesSection using Common context
+func NewResourcesSectionWithCommon(common *core.Common) *ResourcesSection {
+	return NewResourcesSection(common.DataSource)
 }
 
 func (r *ResourcesSection) GetTitle() string {
@@ -113,6 +119,11 @@ func NewClusterInfoSection(dataSource api.KafkaDataSource) *ClusterInfoSection {
 		lastUpdate:  time.Now(),
 		clusterInfo: make(map[string]interface{}),
 	}
+}
+
+// NewClusterInfoSectionWithCommon creates a ClusterInfoSection using Common context
+func NewClusterInfoSectionWithCommon(common *core.Common) *ClusterInfoSection {
+	return NewClusterInfoSection(common.DataSource)
 }
 
 func (c *ClusterInfoSection) GetTitle() string {

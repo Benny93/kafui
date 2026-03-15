@@ -3,80 +3,37 @@ package mainpage
 import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// KeyMap defines the key bindings for the main page
-type KeyMap struct {
-	Search         key.Binding
-	SwitchResource key.Binding
-	Select         key.Binding
-	Back           key.Binding
-	Quit           key.Binding
-	Help           key.Binding
-}
-
-// ShortHelp returns keybindings to be shown in the mini help view. It's part
-// of the key.Map interface.
-func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Search, k.SwitchResource, k.Quit}
-}
-
-// FullHelp returns keybindings for the expanded help view. It's part of the
-// key.Map interface.
-func (k KeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Search, k.SwitchResource, k.Select}, // first column
-		{k.Back, k.Help, k.Quit},               // second column
-	}
-}
-
-// DefaultKeyMap contains the default key bindings for the main page
-var DefaultKeyMap = KeyMap{
-	Search: key.NewBinding(
-		key.WithKeys("/"),
-		key.WithHelp("/", "search"),
-	),
-	SwitchResource: key.NewBinding(
-		key.WithKeys(":"),
-		key.WithHelp(":", "switch resource"),
-	),
-	Select: key.NewBinding(
-		key.WithKeys("enter"),
-		key.WithHelp("enter", "select"),
-	),
-	Back: key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "back/cancel"),
-	),
-	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
-		key.WithHelp("q", "quit"),
-	),
-	Help: key.NewBinding(
-		key.WithKeys("?"),
-		key.WithHelp("?", "toggle help"),
-	),
-}
-
 // NewModel creates a new main page model (alias for NewMainPageModel for compatibility)
+// Deprecated: Use NewModelWithCommon for new code
 func NewModel(dataSource api.KafkaDataSource) *MainPageModel {
 	return NewMainPageModel(dataSource)
 }
 
 // NewMainPageModel creates a new main page model using the template system
+// Deprecated: Use NewModelWithCommon for new code
 func NewMainPageModel(dataSource api.KafkaDataSource) *MainPageModel {
-	// Create Kafui-specific providers
-	contentProvider := NewKafuiContentProvider(dataSource)
-	headerProvider := NewKafuiHeaderDataProvider(dataSource)
+	// Create Common context with data source
+	common := core.NewCommon(dataSource)
+	return NewModelWithCommon(common)
+}
+
+// NewModelWithCommon creates a new main page model using the Common context pattern
+func NewModelWithCommon(common *core.Common) *MainPageModel {
+	// Create Kafui-specific providers using Common context
+	contentProvider := NewKafuiContentProviderWithCommon(common)
+	headerProvider := NewKafuiHeaderDataProviderWithCommon(common)
 
 	// Create sidebar sections - convert to template provider interface
 	sidebarSections := []providers.SidebarSection{
-		NewResourcesSection(dataSource),
-		NewClusterInfoSection(dataSource),
+		NewResourcesSectionWithCommon(common),
+		NewClusterInfoSectionWithCommon(common),
 		// Note: Removing ShortcutsSection as it will be shown in footer instead
 	}
 
@@ -93,11 +50,12 @@ func NewMainPageModel(dataSource api.KafkaDataSource) *MainPageModel {
 	// Create the reusable app with our Kafui providers
 	reusableApp := templateui.NewReusableApp(config)
 
-	// Set the key map for the footer
-	reusableApp.SetKeyMap(DefaultKeyMap)
+	// Use centralized key bindings
+	centralizedKeys := keys.DefaultKeyMap()
+	reusableApp.SetKeyMap(centralizedKeys.Main)
 
 	return &MainPageModel{
-		dataSource:      dataSource,
+		common:          common,
 		reusableApp:     reusableApp,
 		contentProvider: contentProvider,
 	}
@@ -105,9 +63,15 @@ func NewMainPageModel(dataSource api.KafkaDataSource) *MainPageModel {
 
 // MainPageModel wraps the ReusableApp with Kafui-specific providers
 type MainPageModel struct {
-	dataSource      api.KafkaDataSource
+	common          *core.Common           // Shared context (replaces direct dataSource)
+	dataSource      api.KafkaDataSource    // Kept for backward compatibility
 	reusableApp     *templateui.ReusableApp
 	contentProvider *KafuiContentProvider
+}
+
+// GetCommon returns the shared context
+func (m *MainPageModel) GetCommon() *core.Common {
+	return m.common
 }
 
 // Init implements the Page interface
@@ -148,14 +112,15 @@ func (m *MainPageModel) GetTitle() string {
 
 // GetHelp implements the Page interface
 func (m *MainPageModel) GetHelp() []key.Binding {
-	// Return key bindings for help using the DefaultKeyMap
+	// Return key bindings for help using centralized keys
+	km := keys.DefaultKeyMap()
 	return []key.Binding{
-		DefaultKeyMap.Search,
-		DefaultKeyMap.SwitchResource,
-		DefaultKeyMap.Select,
-		DefaultKeyMap.Back,
-		DefaultKeyMap.Quit,
-		DefaultKeyMap.Help,
+		km.Main.Search,
+		km.Main.SwitchResource,
+		km.Main.Select,
+		km.Main.Back,
+		km.Main.Quit,
+		km.Main.Help,
 	}
 }
 
@@ -175,9 +140,10 @@ func (m *MainPageModel) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
 func (m *MainPageModel) createPageChangeCommand(msg NavigateToResourceDetailMsg) tea.Cmd {
 	switch msg.ResourceType {
 	case TopicResourceType:
-		// Get topic details for navigation
+		// Get topic details for navigation using Common context
 		topicName := msg.ResourceID
-		topics, err := m.dataSource.GetTopics()
+		dataSource := m.common.DataSource
+		topics, err := dataSource.GetTopics()
 		var topicDetails api.Topic
 		if err != nil || topics == nil {
 			// If we can't get topics, create a basic topic structure

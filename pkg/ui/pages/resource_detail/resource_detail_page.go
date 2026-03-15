@@ -31,7 +31,14 @@ type Model struct {
 }
 
 // NewModel creates a new resource detail page model
+// Deprecated: Use NewModelWithCommon for new code
 func NewModel(resourceItem shared.ResourceItem, resourceType string) *Model {
+	common := core.NewCommon(nil) // Note: dataSource not used in resource detail
+	return NewModelWithCommon(resourceItem, resourceType, common)
+}
+
+// NewModelWithCommon creates a new resource detail page model using the Common context pattern
+func NewModelWithCommon(resourceItem shared.ResourceItem, resourceType string, common *core.Common) *Model {
 	m := &Model{
 		resourceItem: resourceItem,
 		resourceType: resourceType,
@@ -154,6 +161,11 @@ func (m *Model) OnFocus() tea.Cmd {
 // OnBlur implements the Page interface
 func (m *Model) OnBlur() tea.Cmd {
 	// Handle focus loss
+	return nil
+}
+
+// GetCommon returns the shared context (returns nil for resource detail as it doesn't use Common)
+func (m *Model) GetCommon() *core.Common {
 	return nil
 }
 

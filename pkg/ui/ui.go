@@ -10,7 +10,7 @@ import (
 
 // Model represents the main application state
 type Model struct {
-	dataSource   api.KafkaDataSource
+	common       *core.Common     // Shared context (replaces direct dataSource)
 	Router       *router.Router   // Exported for testing
 	state        core.UIState     // Application state (replaces ShowHelp bool)
 	focusState   core.FocusState  // Focus state
@@ -30,18 +30,26 @@ type keyMap struct {
 
 // initialModelWithRouter creates a new Model using the router-based navigation
 func initialModelWithRouter(dataSource api.KafkaDataSource) *Model {
-	r := router.NewRouter(dataSource)
+	// Create Common context with data source, styles, and config
+	common := core.NewCommon(dataSource)
+	
+	r := router.NewRouter(common)
 	helpSystem := core.NewHelpSystem()
 	focusManager := core.NewFocusManager()
 
 	return &Model{
-		dataSource:   dataSource,
+		common:       common,
 		Router:       r,
 		state:        core.StateNormal,
 		focusState:   core.FocusMain,
 		HelpSystem:   helpSystem,
 		FocusManager: focusManager,
 	}
+}
+
+// GetCommon returns the shared context
+func (m *Model) GetCommon() *core.Common {
+	return m.common
 }
 
 // GetState returns the current UI state
@@ -140,4 +148,20 @@ func NewUIModel(dataSource api.KafkaDataSource) *Model {
 // NewUIModelWithRouter creates a new UI model using router-based navigation
 func NewUIModelWithRouter(dataSource api.KafkaDataSource) *Model {
 	return initialModelWithRouter(dataSource)
+}
+
+// NewUIModelWithCommon creates a new UI model with a pre-configured Common context
+func NewUIModelWithCommon(common *core.Common) *Model {
+	r := router.NewRouter(common)
+	helpSystem := core.NewHelpSystem()
+	focusManager := core.NewFocusManager()
+
+	return &Model{
+		common:       common,
+		Router:       r,
+		state:        core.StateNormal,
+		focusState:   core.FocusMain,
+		HelpSystem:   helpSystem,
+		FocusManager: focusManager,
+	}
 }

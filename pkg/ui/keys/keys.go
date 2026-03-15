@@ -43,6 +43,19 @@ type MainKeyMap struct {
 	Back           key.Binding
 }
 
+// ShortHelp returns keybindings to be shown in the mini help view
+func (k MainKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Help, k.Search, k.SwitchResource, k.Quit}
+}
+
+// FullHelp returns keybindings for the expanded help view
+func (k MainKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Search, k.SwitchResource, k.Select},
+		{k.Back, k.Help, k.Quit},
+	}
+}
+
 // TopicKeyMap contains key bindings for the topic page
 type TopicKeyMap struct {
 	Select       key.Binding

@@ -405,7 +405,7 @@ var AdditionalKeys = struct {
 
 // MessageDetailPageModel wraps the ReusableApp with message detail-specific providers
 type MessageDetailPageModel struct {
-	dataSource      api.KafkaDataSource
+	common          *core.Common
 	topicName       string
 	message         api.Message
 	reusableApp     *templateui.ReusableApp
@@ -414,9 +414,16 @@ type MessageDetailPageModel struct {
 }
 
 // NewMessageDetailPageModel creates a new message detail page model using the template system
+// Deprecated: Use NewMessageDetailPageModelWithCommon for new code
 func NewMessageDetailPageModel(dataSource api.KafkaDataSource, topicName string, message api.Message) *MessageDetailPageModel {
+	common := core.NewCommon(dataSource)
+	return NewMessageDetailPageModelWithCommon(common, topicName, message)
+}
+
+// NewMessageDetailPageModelWithCommon creates a new message detail page model using the Common context pattern
+func NewMessageDetailPageModelWithCommon(common *core.Common, topicName string, message api.Message) *MessageDetailPageModel {
 	// Create the core model (reuse existing logic)
-	detailModel := NewModel(dataSource, topicName, message)
+	detailModel := NewModel(common.DataSource, topicName, message)
 
 	// Create message detail-specific providers
 	contentProvider := NewMessageDetailContentProvider(detailModel)
@@ -445,13 +452,18 @@ func NewMessageDetailPageModel(dataSource api.KafkaDataSource, topicName string,
 	reusableApp.SetKeyMap(DefaultKeyMap)
 
 	return &MessageDetailPageModel{
-		dataSource:      dataSource,
+		common:          common,
 		topicName:       topicName,
 		message:         message,
 		reusableApp:     reusableApp,
 		contentProvider: contentProvider,
 		detailModel:     detailModel,
 	}
+}
+
+// GetCommon returns the shared context
+func (m *MessageDetailPageModel) GetCommon() *core.Common {
+	return m.common
 }
 
 // NewModel creates a new message detail page model (alias for compatibility)

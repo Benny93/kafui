@@ -89,7 +89,7 @@ func (m *mockResourceItem) GetDetails() map[string]string {
 
 func TestNewRouter(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	if router == nil {
 		t.Fatal("NewRouter returned nil")
@@ -112,7 +112,7 @@ func TestNewRouter(t *testing.T) {
 
 func TestNavigateTo(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	tests := []struct {
 		name     string
@@ -187,7 +187,7 @@ func TestNavigateTo(t *testing.T) {
 
 func TestNavigationHistory(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Navigate through several pages
 	router.NavigateTo("main", nil)
@@ -238,7 +238,7 @@ func TestNavigationHistory(t *testing.T) {
 
 func TestSetDimensions(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Create a page first
 	router.NavigateTo("main", nil)
@@ -262,7 +262,7 @@ func TestSetDimensions(t *testing.T) {
 
 func TestClearHistory(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Build up some history
 	router.NavigateTo("main", nil)
@@ -285,7 +285,7 @@ func TestClearHistory(t *testing.T) {
 
 func TestRouterUpdate(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Initialize router
 	router.NavigateTo("main", nil)
@@ -320,7 +320,7 @@ func TestRouterUpdate(t *testing.T) {
 
 func TestRouterView(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Test view with no current page
 	view := router.View()
@@ -338,7 +338,7 @@ func TestRouterView(t *testing.T) {
 
 func TestCreatePageFallbacks(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	tests := []struct {
 		name   string
@@ -383,7 +383,7 @@ func TestCreatePageFallbacks(t *testing.T) {
 // TestBackMsgHandling verifies that BackMsg doesn't add to history
 func TestBackMsgHandling(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Navigate: main -> topic -> message_detail
 	router.NavigateTo("main", nil)
@@ -442,7 +442,7 @@ func TestBackMsgHandling(t *testing.T) {
 // TestHistoryDoesNotGrow verifies that back-and-forth navigation doesn't create history loops
 func TestHistoryDoesNotGrow(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Navigate: main -> topic -> message_detail
 	router.NavigateTo("main", nil)
@@ -477,7 +477,7 @@ func TestHistoryDoesNotGrow(t *testing.T) {
 // TestRouter_DynamicPageIDs tests that the router correctly handles dynamic page IDs
 func TestRouter_DynamicPageIDs(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Test topic page with dynamic ID
 	router.NavigateTo("topic:my-topic", &NavigationData{TopicName: "my-topic"})
@@ -503,7 +503,7 @@ func TestRouter_DynamicPageIDs(t *testing.T) {
 // TestRouter_BaseIDExtraction tests that the router correctly extracts base IDs
 func TestRouter_BaseIDExtraction(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	testCases := []struct {
 		dynamicID string
@@ -535,7 +535,7 @@ func TestRouter_BaseIDExtraction(t *testing.T) {
 // TestRouter_DifferentMessageIDs tests that different message IDs create different pages
 func TestRouter_DifferentMessageIDs(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Navigate to first message
 	router.NavigateTo("detail:topic1:0:100", &NavigationData{
@@ -574,7 +574,7 @@ func TestRouter_DifferentMessageIDs(t *testing.T) {
 // TestRouter_NavigationWithUniqueTopicIDs tests navigation between different topics
 func TestRouter_NavigationWithUniqueTopicIDs(t *testing.T) {
 	dataSource := &mockDataSource{}
-	router := NewRouter(dataSource)
+	router := NewRouter(core.NewCommon(dataSource))
 
 	// Start at main
 	router.NavigateTo("main", nil)

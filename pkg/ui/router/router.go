@@ -16,7 +16,7 @@ import (
 
 // Router manages page navigation and state
 type Router struct {
-	dataSource  api.KafkaDataSource
+	com         *core.Common
 	pages       map[string]core.Page
 	history     []string
 	currentPage string
@@ -34,9 +34,9 @@ type NavigationData struct {
 }
 
 // NewRouter creates a new Router instance
-func NewRouter(dataSource api.KafkaDataSource) *Router {
+func NewRouter(com *core.Common) *Router {
 	return &Router{
-		dataSource:  dataSource,
+		com:         com,
 		pages:       make(map[string]core.Page),
 		history:     make([]string, 0),
 		currentPage: "main",
@@ -181,36 +181,36 @@ func (r *Router) createPage(pageID string, data interface{}) core.Page {
 
 	switch baseID {
 	case "main":
-		return mainpage.NewModel(r.dataSource)
+		return mainpage.NewModelWithCommon(r.com)
 
 	case "topic":
 		// Extract topic data
 		if navData, ok := data.(*NavigationData); ok {
-			return topicpage.NewTopicPageModel(r.dataSource, navData.TopicName, navData.Topic)
+			return topicpage.NewTopicPageModelWithCommon(r.com, navData.TopicName, navData.Topic)
 		}
 		// Fallback with empty data
-		return topicpage.NewTopicPageModel(r.dataSource, "unknown", api.Topic{})
+		return topicpage.NewTopicPageModelWithCommon(r.com, "unknown", api.Topic{})
 
 	case "message_detail", "detail":
 		// Extract message data - handle both "message_detail" and legacy "detail" page IDs
 		if navData, ok := data.(*NavigationData); ok {
-			return messagedetailpage.NewMessageDetailPageModel(r.dataSource, navData.TopicName, navData.Message)
+			return messagedetailpage.NewMessageDetailPageModelWithCommon(r.com, navData.TopicName, navData.Message)
 		}
 		// Fallback with empty data
-		return messagedetailpage.NewMessageDetailPageModel(r.dataSource, "unknown", api.Message{})
+		return messagedetailpage.NewMessageDetailPageModelWithCommon(r.com, "unknown", api.Message{})
 
 	case "resource_detail":
 		// Extract resource data
 		if navData, ok := data.(*NavigationData); ok && navData.ResourceItem != nil {
-			return resourcedetailpage.NewModel(navData.ResourceItem, navData.ResourceType)
+			return resourcedetailpage.NewModelWithCommon(navData.ResourceItem, navData.ResourceType, r.com)
 		}
 		// Fallback with minimal resource
 		minimalResource := &shared.MinimalResourceItem{ID: "unknown"}
-		return resourcedetailpage.NewModel(minimalResource, "unknown")
+		return resourcedetailpage.NewModelWithCommon(minimalResource, "unknown", r.com)
 
 	default:
 		// Default to main page for unknown page IDs
-		return mainpage.NewModel(r.dataSource)
+		return mainpage.NewModelWithCommon(r.com)
 	}
 }
 
