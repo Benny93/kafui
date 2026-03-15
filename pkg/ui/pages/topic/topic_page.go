@@ -328,23 +328,21 @@ func (m *Model) updateTableDimensions(width, height int) {
 	}
 
 	// Update table height (number of visible rows) based on available height
+	// This is the STRICT limit - table must never exceed this
 	tableHeight := innerHeight - reservedLines
-	
-	// CRITICAL: Clamp table height to innerHeight to prevent layout overflow
-	// Minimum of 2 rows if space allows
-	if tableHeight < 2 && innerHeight > reservedLines {
+
+	// Enforce minimum and maximum bounds
+	if tableHeight < 2 {
 		tableHeight = 2
 	}
-	
-	// Final absolute clamp
-	if tableHeight > innerHeight - reservedLines {
+	// Absolute clamp to prevent overflow
+	if tableHeight > innerHeight-reservedLines {
 		tableHeight = innerHeight - reservedLines
 	}
-	if tableHeight < 0 {
-		tableHeight = 0
-	}
-	
+
 	m.pagination.SetPerPage(tableHeight)
+	// Note: We don't set WithCurrentPage because we pass only current page's data
+	// The table is stateless - it displays exactly what we give it
 	m.messageTable = m.messageTable.WithPageSize(tableHeight)
 
 	// Calculate column widths based on available width
@@ -519,11 +517,12 @@ func (m *Model) FilterMessages() {
 }
 
 // updateMessageTable updates the table with paginated messages
+// STATELESS: Only passes current page's messages to the table
 func (m *Model) updateMessageTable() {
-	// Ensure messages are sorted for pagination
+	// Ensure messages are sorted for pagination (ascending offset order)
 	m.sortMessages()
 
-	// Get paginated messages
+	// Get ONLY the current page's messages from pagination
 	paginatedMessages := m.pagination.GetVisibleMessages(m.filteredMessages)
 
 	// Sort messages for display based on current sort order
@@ -605,10 +604,13 @@ func (m *Model) updateMessageTable() {
 		})
 	}
 
-	m.messageTable = m.messageTable.WithRows(rows)
+	// STATELESS: Only pass current page's rows to the table
+	// Reset highlighted row to 0 to maintain consistent selection
+	m.messageTable = m.messageTable.WithRows(rows).WithHighlightedRow(0)
 }
 
 // renderTableFast renders table rows with minimal overhead for large datasets
+// STATELESS: Only renders current page's messages
 func (m *Model) renderTableFast(messages []api.Message) {
 	rows := make([]table.Row, len(messages))
 	for i, msg := range messages {
@@ -620,7 +622,8 @@ func (m *Model) renderTableFast(messages []api.Message) {
 			"value":     truncateString(msg.Value, 38),
 		})
 	}
-	m.messageTable = m.messageTable.WithRows(rows)
+	// STATELESS: Only pass current page's rows, reset highlight to 0
+	m.messageTable = m.messageTable.WithRows(rows).WithHighlightedRow(0)
 }
 
 // renderTableCustom renders a custom table view for large datasets with pagination
