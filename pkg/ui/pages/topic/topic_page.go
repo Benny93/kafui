@@ -35,6 +35,9 @@ const (
 
 // Model represents the topic page state (original business logic model)
 type Model struct {
+	// Common context
+	common *core.Common
+
 	// Data
 	dataSource   api.KafkaDataSource
 	topicName    string
@@ -202,6 +205,7 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	m := &Model{
+		common:           nil, // Will be set by NewTopicPageModelWithCommon
 		dataSource:       dataSource,
 		topicName:        topicName,
 		topicDetails:     topicDetails,
@@ -996,6 +1000,8 @@ func NewTopicPageModel(dataSource api.KafkaDataSource, topicName string, topicDe
 func NewTopicPageModelWithCommon(common *core.Common, topicName string, topicDetails api.Topic) *TopicPageModel {
 	// Create the original topic model for business logic
 	topicModel := NewModel(common.DataSource, topicName, topicDetails)
+	// Set common context for layout system access
+	topicModel.common = common
 
 	// Create topic-specific providers
 	contentProvider := NewTopicContentProvider(topicModel)

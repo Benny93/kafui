@@ -27,11 +27,33 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 		return cached
 	}
 
+	// Use layout system for dimension calculations if available
+	var tableHeight int
+	var tableWidth int
+	
+	if t.model.common != nil && t.model.common.Layout != nil {
+		// Use layout system
+		layout := t.model.common.Layout
+		tableHeight = layout.GetAvailableHeight() - 4 // Reserve space for padding
+		tableWidth = layout.GetAvailableWidth() - 2
+	} else {
+		// Fallback to ad-hoc calculation
+		innerHeight := height - 4
+		tableHeight = innerHeight - 3 // reservedLines
+		tableWidth = width - 6
+	}
+	
+	// Ensure minimum dimensions
+	if tableHeight < 5 {
+		tableHeight = 5
+	}
+	if tableWidth < 20 {
+		tableWidth = 20
+	}
+
 	// Update table dimensions based on actual content area size
-	// width/height here are the inner content dimensions (after border and padding)
-	// They are already the correct dimensions for the table
-	if width > 0 && height > 0 {
-		t.model.updateTableDimensions(width, height)
+	if tableWidth > 0 && tableHeight > 0 {
+		t.model.updateTableDimensions(tableWidth, tableHeight)
 	}
 
 	if t.model.error != nil {
