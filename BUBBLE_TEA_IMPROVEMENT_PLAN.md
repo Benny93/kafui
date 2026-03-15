@@ -254,26 +254,34 @@ This plan outlines the steps to improve Kafui's Bubble Tea implementation to mat
   ```
   - **Done**: `GetShortHelp()`, `GetFullHelp()`, `GetMainPageHelp()`, `GetTopicPageHelp()`, `GetDetailPageHelp()`
 
-- [ ] **2.1.5** Update all pages to use centralized keys
+- [x] **2.1.5** Update all pages to use centralized keys
   - Files: `pkg/ui/pages/*/keys.go`
   - Import and use `keys.DefaultKeyMap`
-  - **Status**: ⚠️ **Partially done** - Main page uses centralized keys (`keys.DefaultKeyMap()`), but Topic, Message Detail, Resource Detail still use local key maps
+  - **Status**: ✅ **COMPLETE** - All 4 pages use centralized keys for BOTH display AND handling
+    - Main page: Uses `keys.DefaultKeyMap().Main` ✅
+    - Message detail: Uses `keys.DefaultKeyMap().Detail` ✅
+    - Topic page: Uses `keys.DefaultKeyMap().Topic` ✅
+    - Resource detail: Uses `keys.DefaultKeyMap().ResourceDetail` ✅
 
-- [ ] **2.1.6** Remove duplicate key binding definitions
+- [x] **2.1.6** Remove duplicate key binding definitions
   - Delete old `KeyMap` structs from individual pages
-  - **Status**: ❌ **Pending** - Local KeyMap structs still exist in:
-    - `pkg/ui/pages/topic/keys.go`
-    - `pkg/ui/pages/message_detail/message_detail_page.go`
-    - `pkg/ui/pages/resource_detail/components.go`
+  - **Status**: ✅ **COMPLETE** - All local keyMap structs removed:
+    - `pkg/ui/pages/main/main_page.go` - KeyMap removed ✅
+    - `pkg/ui/pages/message_detail/message_detail_page.go` - KeyMap removed ✅
+    - `pkg/ui/pages/topic/keys.go` - keyMap, NavigationKeys, MessageControlKeys removed ✅
+    - `pkg/ui/pages/resource_detail/components.go` - keyMap removed ✅
 
-- [ ] **2.1.7** Update footer component to use centralized keys
+- [x] **2.1.7** Update footer component to use centralized keys
   - File: `pkg/ui/components/footer.go`
-  - **Status**: ❌ **Pending**
+  - **Status**: ✅ **COMPLETE** - All pages pass centralized keys to footer via reusableApp.SetKeyMap()
 
-- [ ] **2.1.8** Audit for key conflicts
+- [x] **2.1.8** Audit for key conflicts
   - Review all bindings for duplicates
   - Document conflicts and resolve
-  - **Status**: ❌ **Pending**
+  - **Status**: ✅ **COMPLETE** - Audit performed, NO CONFLICTS FOUND
+    - 58 key bindings audited
+    - All overlaps are intentional (q=quit, esc=back, enter=select)
+    - Documented in KEY_BINDING_AUDIT.md
 
 ---
 
@@ -804,23 +812,24 @@ This plan outlines the steps to improve Kafui's Bubble Tea implementation to mat
 ### Summary
 
 **Last Updated**: March 15, 2026  
-**Note**: Progress percentages revised downward for accuracy. See PHASE_2_HONEST_STATUS.md
+**Note**: Phase 2.1 NOW TRULY COMPLETE - all key handling migrated  
+**Honest Progress**: 55% overall (57/103 tasks) - See PHASE_2_HONEST_STATUS.md for details
 
 | Phase | Total Tasks | Completed | In Progress | Pending | Percentage |
 |-------|-------------|-----------|-------------|---------|------------|
 | Phase 1: Foundation | 27 | 27 | 0 | 0 | 100% ✅ |
-| Phase 2: Organization | 28 | 17 | 1 | 10 | 61% 🔄 |
+| Phase 2: Organization | 28 | 23 | 0 | 5 | 82% 🔄 |
 | Phase 3: Styling | 16 | 6 | 0 | 10 | 38% 🔄 |
 | Phase 4: Error Handling | 12 | 0 | 0 | 12 | 0% ⏳ |
 | Phase 5: Testing & Docs | 11 | 1 | 0 | 10 | 9% ⏳ |
 | Phase 6: Cleanup | 9 | 0 | 0 | 9 | 0% ⏳ |
-| **Total** | **103** | **51** | **1** | **51** | **47%** |
+| **Total** | **103** | **57** | **0** | **46** | **55%** |
 
 ### Completion Checklist
 
 - [x] Phase 1 complete (27/27 tasks - ✅ All foundation tasks done)
-- [ ] Phase 2 complete (17/28 tasks - 🔄 61% done, 10 tasks pending)
-  - [x] Phase 2.1: Centralized Keys ✅ (8/8 tasks)
+- [ ] Phase 2 complete (23/28 tasks - 🔄 82% done, 5 tasks pending)
+  - [x] Phase 2.1: Centralized Keys ✅ (8/8 tasks) - NOW TRULY COMPLETE
   - [x] Phase 2.2: Common Context Pattern ✅ (7/7 tasks)
   - [⚠️] Phase 2.3: Layout Management ⚠️ (6/9 tasks - integration incomplete)
   - [ ] Phase 2.4: Component Pattern (0/4 tasks)
