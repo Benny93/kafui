@@ -3,9 +3,20 @@ package components
 import (
 	"fmt"
 
+	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+)
+
+// SearchMode represents different search modes
+type SearchMode int
+
+const (
+	SimpleSearch SearchMode = iota
+	AdvancedSearch
+	RegexSearch
+	ResourceSearch
 )
 
 var (
@@ -28,18 +39,10 @@ var (
 			Foreground(lipgloss.Color("196"))
 )
 
-// SearchMode represents different search modes
-type SearchMode int
-
-const (
-	SimpleSearch SearchMode = iota
-	AdvancedSearch
-	RegexSearch
-	ResourceSearch // New mode for resource switching
-)
-
 // SearchBarModel represents the search bar component
 type SearchBarModel struct {
+	core.BaseComponent // Embed base component for common functionality
+
 	textInput         textinput.Model
 	searchHistory     []string
 	resourceHistory   []string
@@ -48,14 +51,13 @@ type SearchBarModel struct {
 	placeholder       string
 	resultCount       int
 	errorMessage      string
-	width             int
 	focused           bool
-	isResourceMode    bool // New field to track if we're in resource switching mode
+	isResourceMode    bool
 	onSearch          func(query string) tea.Msg
 	onClear           func() tea.Msg
-	onResourceSwitch  func(resource string) tea.Msg // New callback for resource switching
-	searchSuggestions []string                      // Suggestions for search mode
-	fuzzyMatcher      *FuzzyMatcher                 // Fuzzy matching engine
+	onResourceSwitch  func(resource string) tea.Msg
+	searchSuggestions []string
+	fuzzyMatcher      *FuzzyMatcher
 }
 
 // SearchBarOption is a function that configures a SearchBarModel
@@ -119,7 +121,6 @@ func NewSearchBar(options ...SearchBarOption) SearchBarModel {
 		searchMode:      SimpleSearch,
 		placeholder:     "Search...",
 		resultCount:     0,
-		width:           0,
 		focused:         false,
 		isResourceMode:  false,
 		fuzzyMatcher:    NewFuzzyMatcher(false), // Case-insensitive fuzzy matching
@@ -189,7 +190,7 @@ func (sb *SearchBarModel) ClearError() {
 
 // SetWidth sets the width of the search bar
 func (sb *SearchBarModel) SetWidth(width int) {
-	sb.width = width
+	sb.BaseComponent.SetDimensions(width, sb.BaseComponent.GetHeight())
 	sb.textInput.Width = width - 10 // Account for padding and icon
 }
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/charmbracelet/bubbles/spinner"
 )
 
@@ -21,12 +22,22 @@ type FooterConfig struct {
 
 // Footer represents a reusable footer component
 type Footer struct {
+	core.BaseComponent // Embed base component for common functionality
 	config FooterConfig
 }
 
 // NewFooter creates a new footer component
 func NewFooter(config FooterConfig) *Footer {
-	return &Footer{config: config}
+	return &Footer{
+		config:        config,
+		BaseComponent: core.NewBaseComponent(config.Width, 3), // Default footer height
+	}
+}
+
+// SetDimensions sets the footer dimensions
+func (f *Footer) SetDimensions(width, height int) {
+	f.BaseComponent.SetDimensions(width, height)
+	f.config.Width = width
 }
 
 // RenderSearchModeFooter renders footer for search mode
