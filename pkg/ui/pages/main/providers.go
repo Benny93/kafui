@@ -163,6 +163,7 @@ func convertItemsToRows(items []interface{}, searchQuery string) []table.Row {
 // Implements providers.ContentProvider interface
 type KafuiContentProvider struct {
 	dataSource      api.KafkaDataSource
+	common          *core.Common
 	resourceManager *ResourceManager
 	currentResource Resource
 
@@ -217,6 +218,7 @@ func NewKafuiContentProvider(dataSource api.KafkaDataSource) *KafuiContentProvid
 func NewKafuiContentProviderWithCommon(common *core.Common) *KafuiContentProvider {
 	return &KafuiContentProvider{
 		dataSource:      common.DataSource,
+		common:          common,
 		resourceManager: NewResourceManager(common.DataSource),
 		currentResource: NewResourceManager(common.DataSource).GetResource(TopicResourceType),
 		resourcesTable:  createResourcesTable(),
@@ -241,18 +243,37 @@ func createResourcesTable() table.Model {
 }
 
 func (k *KafuiContentProvider) RenderContent(width, height int) string {
-	// Calculate proper table height - leave space for search bar and padding
-	tableHeight := height - 6 // More conservative height calculation
-	if k.searchMode {
-		tableHeight -= 3 // Additional space for search bar
-	}
-	if tableHeight < 5 {
-		tableHeight = 5 // Minimum table height
+	// Use layout system for dimension calculations
+	var tableHeight int
+	var tableWidth int
+	
+	if k.common != nil && k.common.Layout != nil {
+		// Use layout system
+		layout := k.common.Layout
+		tableHeight = layout.GetAvailableHeight() - 3 // Reserve space for padding
+		tableWidth = layout.GetAvailableWidth() - 2
+	} else {
+		// Fallback to ad-hoc calculation
+		tableHeight = height - 6
+		tableWidth = width - 4
 	}
 	
+	// Adjust for search bar
+	if k.searchMode {
+		tableHeight -= 3
+	}
+	
+	// Ensure minimum dimensions
+	if tableHeight < 5 {
+		tableHeight = 5
+	}
+	if tableWidth < 20 {
+		tableWidth = 20
+	}
+
 	// Update table dimensions
 	k.resourcesTable.SetHeight(tableHeight)
-	k.resourcesTable.SetWidth(width - 4) // Account for content padding
+	k.resourcesTable.SetWidth(tableWidth)
 
 	if k.error != nil {
 		return k.renderError()
