@@ -104,9 +104,8 @@ type Model struct {
 	pagination *PaginationModel
 
 	// Width caching (avoids recalculation)
-	widthCache     map[string]map[int]int // column -> width -> cached value
-	widthCacheTime time.Time
-	widthCacheMu   sync.RWMutex // Protects widthCache
+	widthCache   map[string]map[int]int // column -> width -> cached value
+	widthCacheMu sync.RWMutex           // Protects widthCache
 
 	// Update throttling
 	lastUpdateTime time.Time
@@ -115,16 +114,13 @@ type Model struct {
 	// Batching
 	batchSize     int
 	batchInterval time.Duration
-	batchCount    int
 
 	// Mutex for thread-safe message operations
 	mu sync.RWMutex
 
 	// Render caching (avoid re-rendering same content)
-	lastRenderHash uint64
-	lastRenderTime time.Time
-	renderCache    string
-	renderCacheMu  sync.RWMutex
+	renderCache   string
+	renderCacheMu sync.RWMutex
 
 	// Dirty flag for render invalidation
 	dirtyRender bool

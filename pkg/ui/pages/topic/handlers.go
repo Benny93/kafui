@@ -279,34 +279,3 @@ func (h *Handlers) handleSpinnerTick(model *Model, msg spinner.TickMsg) (tea.Mod
 	model.spinner, cmd = model.spinner.Update(msg)
 	return model, cmd
 }
-
-// Helper methods
-
-// scheduleMessagePolling creates a command to poll for new messages periodically
-// Use a longer interval to prevent UI freezing
-func (h *Handlers) scheduleMessagePolling() tea.Cmd {
-	return tea.Tick(time.Second*1, func(t time.Time) tea.Msg {
-		return ContinuousListenMsg{}
-	})
-}
-
-// scheduleErrorPolling creates a command to poll for errors periodically
-// Use a longer interval to prevent UI freezing
-func (h *Handlers) scheduleErrorPolling() tea.Cmd {
-	return tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
-		return ContinuousErrorListenMsg{}
-	})
-}
-
-// validateModel performs basic validation on the model state
-func (h *Handlers) validateModel(model *Model) error {
-	if model.topicName == "" {
-		return ErrorMsg(fmt.Errorf("topic name cannot be empty"))
-	}
-
-	if model.dataSource == nil {
-		return ErrorMsg(fmt.Errorf("data source cannot be nil"))
-	}
-
-	return nil
-}

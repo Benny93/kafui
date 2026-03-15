@@ -293,100 +293,6 @@ func (m *MessageDetailContentProvider) sizeEditors() {
 	}
 }
 
-// renderContentTab renders the key and value content
-func (m *MessageDetailContentProvider) renderContentTab(width int) string {
-	var content strings.Builder
-
-	// Key section
-	content.WriteString(m.renderKeySection(width))
-	content.WriteString("\n\n")
-
-	// Value section
-	content.WriteString(m.renderValueSection(width))
-
-	return content.String()
-}
-
-// renderHeadersTab renders the headers content
-func (m *MessageDetailContentProvider) renderHeadersTab() string {
-	if len(m.model.message.Headers) == 0 {
-		return "No headers available"
-	}
-	return m.renderHeaders()
-}
-
-// renderMetadataTab renders the metadata content
-func (m *MessageDetailContentProvider) renderMetadataTab() string {
-	return m.renderMetadata()
-}
-
-// renderMetadata renders the message metadata
-func (m *MessageDetailContentProvider) renderMetadata() string {
-	info := m.model.GetMessageInfo()
-	var metadata strings.Builder
-
-	metadata.WriteString("Message Metadata:\n")
-	metadata.WriteString("─────────────────\n")
-
-	for key, value := range info {
-		metadata.WriteString(fmt.Sprintf("%-15s: %s\n", key, value))
-	}
-
-	return metadata.String()
-}
-
-// renderHeaders renders the message headers
-func (m *MessageDetailContentProvider) renderHeaders() string {
-	var headers strings.Builder
-
-	headers.WriteString("Headers:\n")
-	headers.WriteString("────────\n")
-
-	for _, header := range m.model.message.Headers {
-		headers.WriteString(fmt.Sprintf("%-20s: %s\n", header.Key, header.Value))
-	}
-
-	return headers.String()
-}
-
-// renderKeySection renders the message key section
-func (m *MessageDetailContentProvider) renderKeySection(width int) string {
-	var keySection strings.Builder
-
-	title := "Key"
-	if m.model.focusedViewport == "key" {
-		title += " [FOCUSED]"
-	}
-	title += fmt.Sprintf(" (%s)", m.model.displayFormat.KeyFormat)
-
-	keySection.WriteString(title + ":\n")
-	keySection.WriteString(strings.Repeat("─", min(len(title)+1, width-4)) + "\n")
-
-	formattedKey := m.model.GetFormattedKey()
-	keySection.WriteString(formattedKey)
-
-	return keySection.String()
-}
-
-// renderValueSection renders the message value section
-func (m *MessageDetailContentProvider) renderValueSection(width int) string {
-	var valueSection strings.Builder
-
-	title := "Value"
-	if m.model.focusedViewport == "value" {
-		title += " [FOCUSED]"
-	}
-	title += fmt.Sprintf(" (%s)", m.model.displayFormat.ValueFormat)
-
-	valueSection.WriteString(title + ":\n")
-	valueSection.WriteString(strings.Repeat("─", min(len(title)+1, width-4)) + "\n")
-
-	formattedValue := m.model.GetFormattedValue()
-	valueSection.WriteString(formattedValue)
-
-	return valueSection.String()
-}
-
 // HandleContentUpdate handles content updates
 func (m *MessageDetailContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
 	if m.model == nil {
@@ -713,22 +619,6 @@ func (s *SchemaInfoSection) InitSection() tea.Cmd {
 // RefreshSection refreshes the section data
 func (s *SchemaInfoSection) RefreshSection() tea.Cmd {
 	return nil
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// max returns the maximum of two integers
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // Tab styling functions and variables
