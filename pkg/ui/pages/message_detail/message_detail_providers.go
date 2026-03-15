@@ -121,6 +121,20 @@ func (m *MessageDetailContentProvider) RenderContent(width, height int) string {
 		return "No message data available"
 	}
 
+	// Use layout system for dimension calculations if available
+	var contentWidth, contentHeight int
+	
+	if m.model.common != nil && m.model.common.Layout != nil {
+		// Use layout system
+		layout := m.model.common.Layout
+		contentWidth = layout.GetAvailableWidth() - 4
+		contentHeight = layout.GetAvailableHeight() - 8
+	} else {
+		// Fallback to ad-hoc calculation
+		contentWidth = width - 10
+		contentHeight = height - 15
+	}
+
 	// Update dimensions and editor content
 	m.width = width
 	m.height = height
@@ -136,7 +150,7 @@ func (m *MessageDetailContentProvider) RenderContent(width, height int) string {
 	tabsContent := m.renderTabs(width)
 
 	// Render active tab content
-	activeContent := m.renderActiveTabContent(width-10, height-15) // Reserve space for tabs
+	activeContent := m.renderActiveTabContent(contentWidth, contentHeight)
 
 	// Combine tabs and content
 	result := tabsContent + "\n" + activeContent

@@ -18,6 +18,9 @@ import (
 
 // Model represents the detail page state for viewing individual messages (kept for compatibility)
 type Model struct {
+	// Common context
+	common *core.Common
+
 	// Data
 	topicName  string
 	message    api.Message
@@ -369,6 +372,8 @@ func NewMessageDetailPageModel(dataSource api.KafkaDataSource, topicName string,
 func NewMessageDetailPageModelWithCommon(common *core.Common, topicName string, message api.Message) *MessageDetailPageModel {
 	// Create the core model (reuse existing logic)
 	detailModel := NewModel(common.DataSource, topicName, message)
+	// Set common context for layout system access
+	detailModel.common = common
 
 	// Create message detail-specific providers
 	contentProvider := NewMessageDetailContentProvider(detailModel)
