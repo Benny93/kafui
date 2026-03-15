@@ -10,20 +10,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// NewModel creates a new main page model (alias for NewMainPageModel for compatibility)
-// Deprecated: Use NewModelWithCommon for new code
-func NewModel(dataSource api.KafkaDataSource) *MainPageModel {
-	return NewMainPageModel(dataSource)
-}
-
-// NewMainPageModel creates a new main page model using the template system
-// Deprecated: Use NewModelWithCommon for new code
-func NewMainPageModel(dataSource api.KafkaDataSource) *MainPageModel {
-	// Create Common context with data source
-	common := core.NewCommon(dataSource)
-	return NewModelWithCommon(common)
-}
-
 // NewModelWithCommon creates a new main page model using the Common context pattern
 func NewModelWithCommon(common *core.Common) *MainPageModel {
 	// Create Kafui-specific providers using Common context
@@ -63,8 +49,7 @@ func NewModelWithCommon(common *core.Common) *MainPageModel {
 
 // MainPageModel wraps the ReusableApp with Kafui-specific providers
 type MainPageModel struct {
-	common          *core.Common           // Shared context (replaces direct dataSource)
-	dataSource      api.KafkaDataSource    // Kept for backward compatibility
+	common          *core.Common
 	reusableApp     *templateui.ReusableApp
 	contentProvider *KafuiContentProvider
 }

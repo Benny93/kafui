@@ -20,14 +20,6 @@ type Model struct {
 	height       int
 }
 
-// Key mappings for legacy compatibility (unused, kept for API compatibility)
-type keyMap struct {
-	Search    key.Binding
-	TopicMode key.Binding
-	Back      key.Binding
-	Quit      key.Binding
-}
-
 // initialModelWithRouter creates a new Model using the router-based navigation
 func initialModelWithRouter(dataSource api.KafkaDataSource) *Model {
 	// Create Common context with data source, styles, and config
@@ -65,11 +57,6 @@ func (m *Model) GetFocusState() core.FocusState {
 // setState updates the UI state and handles side effects
 func (m *Model) setState(state core.UIState) {
 	m.state = state
-}
-
-// setFocusState updates the focus state
-func (m *Model) setFocusState(focus core.FocusState) {
-	m.focusState = focus
 }
 
 func (m *Model) Init() tea.Cmd {
