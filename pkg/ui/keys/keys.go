@@ -1,0 +1,421 @@
+package keys
+
+import (
+	"github.com/charmbracelet/bubbles/key"
+)
+
+// KeyMap contains all key bindings for the application organized by context
+type KeyMap struct {
+	// Global key bindings available everywhere
+	Global GlobalKeyMap
+
+	// Main page key bindings
+	Main MainKeyMap
+
+	// Topic page key bindings
+	Topic TopicKeyMap
+
+	// Detail page key bindings
+	Detail DetailKeyMap
+
+	// Resource detail page key bindings
+	ResourceDetail ResourceDetailKeyMap
+
+	// Search mode key bindings
+	Search SearchKeyMap
+}
+
+// GlobalKeyMap contains global key bindings available on all pages
+type GlobalKeyMap struct {
+	Quit  key.Binding
+	Help  key.Binding
+	Back  key.Binding
+	Search key.Binding
+}
+
+// MainKeyMap contains key bindings for the main page
+type MainKeyMap struct {
+	Select         key.Binding
+	SwitchResource key.Binding
+	Search         key.Binding
+	Help           key.Binding
+	Quit           key.Binding
+	Back           key.Binding
+}
+
+// TopicKeyMap contains key bindings for the topic page
+type TopicKeyMap struct {
+	Select       key.Binding
+	Back         key.Binding
+	Search       key.Binding
+	Help         key.Binding
+	Quit         key.Binding
+	Pause        key.Binding
+	Format       key.Binding
+	Headers      key.Binding
+	Metadata     key.Binding
+	ScrollUp     key.Binding
+	ScrollDown   key.Binding
+	PageUp       key.Binding
+	PageDown     key.Binding
+	GotoStart    key.Binding
+	GotoEnd      key.Binding
+}
+
+// DetailKeyMap contains key bindings for the message detail page
+type DetailKeyMap struct {
+	Back        key.Binding
+	Help        key.Binding
+	Quit        key.Binding
+	Format      key.Binding
+	Headers     key.Binding
+	Metadata    key.Binding
+	Wrap        key.Binding
+	ScrollUp    key.Binding
+	ScrollDown  key.Binding
+	PageUp      key.Binding
+	PageDown    key.Binding
+	GotoStart   key.Binding
+	GotoEnd     key.Binding
+	Copy        key.Binding
+}
+
+// ResourceDetailKeyMap contains key bindings for the resource detail page
+type ResourceDetailKeyMap struct {
+	Back       key.Binding
+	Help       key.Binding
+	Quit       key.Binding
+	ScrollUp   key.Binding
+	ScrollDown key.Binding
+	PageUp     key.Binding
+	PageDown   key.Binding
+	GotoStart  key.Binding
+	GotoEnd    key.Binding
+	Copy       key.Binding
+}
+
+// SearchKeyMap contains key bindings for search mode
+type SearchKeyMap struct {
+	Confirm   key.Binding
+	Cancel    key.Binding
+	Clear     key.Binding
+	Navigate  key.Binding
+	TabComplete key.Binding
+}
+
+// DefaultKeyMap returns the default key bindings for the application
+func DefaultKeyMap() KeyMap {
+	return KeyMap{
+		Global: DefaultGlobalKeyMap(),
+		Main:   DefaultMainKeyMap(),
+		Topic:  DefaultTopicKeyMap(),
+		Detail: DefaultDetailKeyMap(),
+		ResourceDetail: DefaultResourceDetailKeyMap(),
+		Search: DefaultSearchKeyMap(),
+	}
+}
+
+// DefaultGlobalKeyMap returns the default global key bindings
+func DefaultGlobalKeyMap() GlobalKeyMap {
+	return GlobalKeyMap{
+		Quit: key.NewBinding(
+			key.WithKeys("q", "ctrl+c"),
+			key.WithHelp("q", "quit"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys("?", "ctrl+g"),
+			key.WithHelp("?", "help"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("esc", "q"),
+			key.WithHelp("esc", "back"),
+		),
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "search"),
+		),
+	}
+}
+
+// DefaultMainKeyMap returns the default main page key bindings
+func DefaultMainKeyMap() MainKeyMap {
+	return MainKeyMap{
+		Select: key.NewBinding(
+			key.WithKeys("enter", "l", "right"),
+			key.WithHelp("enter", "select"),
+		),
+		SwitchResource: key.NewBinding(
+			key.WithKeys(":", "t"),
+			key.WithHelp(":", "switch resource"),
+		),
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "search"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "help"),
+		),
+		Quit: key.NewBinding(
+			key.WithKeys("q", "ctrl+c"),
+			key.WithHelp("q", "quit"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "back"),
+		),
+	}
+}
+
+// DefaultTopicKeyMap returns the default topic page key bindings
+func DefaultTopicKeyMap() TopicKeyMap {
+	return TopicKeyMap{
+		Select: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "view message"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "back"),
+		),
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "search"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "help"),
+		),
+		Quit: key.NewBinding(
+			key.WithKeys("q", "ctrl+c"),
+			key.WithHelp("q", "quit"),
+		),
+		Pause: key.NewBinding(
+			key.WithKeys("p", " "),
+			key.WithHelp("p", "pause/resume"),
+		),
+		Format: key.NewBinding(
+			key.WithKeys("f"),
+			key.WithHelp("f", "format"),
+		),
+		Headers: key.NewBinding(
+			key.WithKeys("h"),
+			key.WithHelp("h", "toggle headers"),
+		),
+		Metadata: key.NewBinding(
+			key.WithKeys("m"),
+			key.WithHelp("m", "toggle metadata"),
+		),
+		ScrollUp: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑", "scroll up"),
+		),
+		ScrollDown: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓", "scroll down"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup", "b"),
+			key.WithHelp("pgup", "page up"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown", " "),
+			key.WithHelp("pgdn", "page down"),
+		),
+		GotoStart: key.NewBinding(
+			key.WithKeys("g", "home"),
+			key.WithHelp("g", "go to start"),
+		),
+		GotoEnd: key.NewBinding(
+			key.WithKeys("G", "end"),
+			key.WithHelp("G", "go to end"),
+		),
+	}
+}
+
+// DefaultDetailKeyMap returns the default detail page key bindings
+func DefaultDetailKeyMap() DetailKeyMap {
+	return DetailKeyMap{
+		Back: key.NewBinding(
+			key.WithKeys("esc", "q"),
+			key.WithHelp("esc", "back"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "help"),
+		),
+		Quit: key.NewBinding(
+			key.WithKeys("ctrl+c"),
+			key.WithHelp("ctrl+c", "quit"),
+		),
+		Format: key.NewBinding(
+			key.WithKeys("f"),
+			key.WithHelp("f", "format"),
+		),
+		Headers: key.NewBinding(
+			key.WithKeys("h"),
+			key.WithHelp("h", "toggle headers"),
+		),
+		Metadata: key.NewBinding(
+			key.WithKeys("m"),
+			key.WithHelp("m", "toggle metadata"),
+		),
+		Wrap: key.NewBinding(
+			key.WithKeys("w"),
+			key.WithHelp("w", "toggle wrap"),
+		),
+		ScrollUp: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑", "scroll up"),
+		),
+		ScrollDown: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓", "scroll down"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup", "b"),
+			key.WithHelp("pgup", "page up"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown", " "),
+			key.WithHelp("pgdn", "page down"),
+		),
+		GotoStart: key.NewBinding(
+			key.WithKeys("g", "home"),
+			key.WithHelp("g", "go to start"),
+		),
+		GotoEnd: key.NewBinding(
+			key.WithKeys("G", "end"),
+			key.WithHelp("G", "go to end"),
+		),
+		Copy: key.NewBinding(
+			key.WithKeys("c", "y"),
+			key.WithHelp("c", "copy"),
+		),
+	}
+}
+
+// DefaultResourceDetailKeyMap returns the default resource detail page key bindings
+func DefaultResourceDetailKeyMap() ResourceDetailKeyMap {
+	return ResourceDetailKeyMap{
+		Back: key.NewBinding(
+			key.WithKeys("esc", "q"),
+			key.WithHelp("esc", "back"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "help"),
+		),
+		Quit: key.NewBinding(
+			key.WithKeys("ctrl+c"),
+			key.WithHelp("ctrl+c", "quit"),
+		),
+		ScrollUp: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑", "scroll up"),
+		),
+		ScrollDown: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓", "scroll down"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup", "b"),
+			key.WithHelp("pgup", "page up"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown", " "),
+			key.WithHelp("pgdn", "page down"),
+		),
+		GotoStart: key.NewBinding(
+			key.WithKeys("g", "home"),
+			key.WithHelp("g", "go to start"),
+		),
+		GotoEnd: key.NewBinding(
+			key.WithKeys("G", "end"),
+			key.WithHelp("G", "go to end"),
+		),
+		Copy: key.NewBinding(
+			key.WithKeys("c", "y"),
+			key.WithHelp("c", "copy"),
+		),
+	}
+}
+
+// DefaultSearchKeyMap returns the default search mode key bindings
+func DefaultSearchKeyMap() SearchKeyMap {
+	return SearchKeyMap{
+		Confirm: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "confirm"),
+		),
+		Cancel: key.NewBinding(
+			key.WithKeys("esc", "ctrl+c"),
+			key.WithHelp("esc", "cancel"),
+		),
+		Clear: key.NewBinding(
+			key.WithKeys("ctrl+u", "ctrl+k"),
+			key.WithHelp("ctrl+u", "clear"),
+		),
+		Navigate: key.NewBinding(
+			key.WithKeys("up", "down", "ctrl+n", "ctrl+p"),
+			key.WithHelp("↑/↓", "navigate"),
+		),
+		TabComplete: key.NewBinding(
+			key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "complete"),
+		),
+	}
+}
+
+// GetShortHelp returns key bindings for the mini help view
+func (km KeyMap) GetShortHelp() []key.Binding {
+	return []key.Binding{
+		km.Global.Help,
+		km.Global.Back,
+		km.Global.Quit,
+	}
+}
+
+// GetFullHelp returns key bindings for the expanded help view
+func (km KeyMap) GetFullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{km.Global.Help, km.Global.Back, km.Global.Quit},
+		{km.Global.Search},
+	}
+}
+
+// GetMainPageHelp returns help key bindings for the main page
+func (km KeyMap) GetMainPageHelp() []key.Binding {
+	return []key.Binding{
+		km.Main.Search,
+		km.Main.SwitchResource,
+		km.Main.Select,
+		km.Main.Back,
+		km.Main.Help,
+		km.Main.Quit,
+	}
+}
+
+// GetTopicPageHelp returns help key bindings for the topic page
+func (km KeyMap) GetTopicPageHelp() []key.Binding {
+	return []key.Binding{
+		km.Topic.Select,
+		km.Topic.Search,
+		km.Topic.Pause,
+		km.Topic.Back,
+		km.Topic.Help,
+		km.Topic.Quit,
+	}
+}
+
+// GetDetailPageHelp returns help key bindings for the detail page
+func (km KeyMap) GetDetailPageHelp() []key.Binding {
+	return []key.Binding{
+		km.Detail.Format,
+		km.Detail.Headers,
+		km.Detail.Copy,
+		km.Detail.Back,
+		km.Detail.Help,
+		km.Detail.Quit,
+	}
+}

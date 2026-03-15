@@ -3,6 +3,7 @@ package core
 import (
 	"time"
 
+	"github.com/Benny93/kafui/pkg/api"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -21,8 +22,54 @@ type (
 	}
 )
 
-// Data messages
+// Typed data messages - replacing generic DataLoadedMsg and DataErrorMsg
 type (
+	// Topics loaded messages
+	TopicsLoadedMsg struct {
+		Topics map[string]api.Topic
+	}
+
+	TopicsLoadErrorMsg struct {
+		Error error
+	}
+
+	// Consumer groups loaded messages
+	ConsumerGroupsLoadedMsg struct {
+		Groups []api.ConsumerGroup
+	}
+
+	ConsumerGroupsLoadErrorMsg struct {
+		Error error
+	}
+
+	// Messages consumed
+	MessagesConsumedMsg struct {
+		Messages []api.Message
+	}
+
+	MessageConsumeErrorMsg struct {
+		Error error
+	}
+
+	// Schema loaded messages
+	SchemasLoadedMsg struct {
+		Schemas []api.SchemaInfo
+	}
+
+	SchemasLoadErrorMsg struct {
+		Error error
+	}
+
+	// Contexts loaded messages
+	ContextsLoadedMsg struct {
+		Contexts []string
+	}
+
+	ContextsLoadErrorMsg struct {
+		Error error
+	}
+
+	// Generic loading messages (for backward compatibility during migration)
 	DataLoadedMsg struct {
 		Type string
 		Data interface{}
@@ -183,5 +230,77 @@ func NewResourceSelectedMsg(resourceID, resourceType string, item interface{}) t
 			ResourceType: resourceType,
 			Item:         item,
 		}
+	}
+}
+
+// Typed message helper functions
+
+// NewTopicsLoadedMsg creates a command that sends a TopicsLoadedMsg
+func NewTopicsLoadedMsg(topics map[string]api.Topic) tea.Cmd {
+	return func() tea.Msg {
+		return TopicsLoadedMsg{Topics: topics}
+	}
+}
+
+// NewTopicsLoadErrorMsg creates a command that sends a TopicsLoadErrorMsg
+func NewTopicsLoadErrorMsg(err error) tea.Cmd {
+	return func() tea.Msg {
+		return TopicsLoadErrorMsg{Error: err}
+	}
+}
+
+// NewConsumerGroupsLoadedMsg creates a command that sends a ConsumerGroupsLoadedMsg
+func NewConsumerGroupsLoadedMsg(groups []api.ConsumerGroup) tea.Cmd {
+	return func() tea.Msg {
+		return ConsumerGroupsLoadedMsg{Groups: groups}
+	}
+}
+
+// NewConsumerGroupsLoadErrorMsg creates a command that sends a ConsumerGroupsLoadErrorMsg
+func NewConsumerGroupsLoadErrorMsg(err error) tea.Cmd {
+	return func() tea.Msg {
+		return ConsumerGroupsLoadErrorMsg{Error: err}
+	}
+}
+
+// NewMessagesConsumedMsg creates a command that sends a MessagesConsumedMsg
+func NewMessagesConsumedMsg(messages []api.Message) tea.Cmd {
+	return func() tea.Msg {
+		return MessagesConsumedMsg{Messages: messages}
+	}
+}
+
+// NewMessageConsumeErrorMsg creates a command that sends a MessageConsumeErrorMsg
+func NewMessageConsumeErrorMsg(err error) tea.Cmd {
+	return func() tea.Msg {
+		return MessageConsumeErrorMsg{Error: err}
+	}
+}
+
+// NewSchemasLoadedMsg creates a command that sends a SchemasLoadedMsg
+func NewSchemasLoadedMsg(schemas []api.SchemaInfo) tea.Cmd {
+	return func() tea.Msg {
+		return SchemasLoadedMsg{Schemas: schemas}
+	}
+}
+
+// NewSchemasLoadErrorMsg creates a command that sends a SchemasLoadErrorMsg
+func NewSchemasLoadErrorMsg(err error) tea.Cmd {
+	return func() tea.Msg {
+		return SchemasLoadErrorMsg{Error: err}
+	}
+}
+
+// NewContextsLoadedMsg creates a command that sends a ContextsLoadedMsg
+func NewContextsLoadedMsg(contexts []string) tea.Cmd {
+	return func() tea.Msg {
+		return ContextsLoadedMsg{Contexts: contexts}
+	}
+}
+
+// NewContextsLoadErrorMsg creates a command that sends a ContextsLoadErrorMsg
+func NewContextsLoadErrorMsg(err error) tea.Cmd {
+	return func() tea.Msg {
+		return ContextsLoadErrorMsg{Error: err}
 	}
 }

@@ -12,7 +12,8 @@ import (
 type Model struct {
 	dataSource   api.KafkaDataSource
 	Router       *router.Router   // Exported for testing
-	ShowHelp     bool             // Exported for testing
+	state        core.UIState     // Application state (replaces ShowHelp bool)
+	focusState   core.FocusState  // Focus state
 	HelpSystem   *core.HelpSystem // Help system
 	FocusManager *core.FocusManager
 	width        int
@@ -28,25 +29,46 @@ type keyMap struct {
 }
 
 // initialModelWithRouter creates a new Model using the router-based navigation
-func initialModelWithRouter(dataSource api.KafkaDataSource) Model {
+func initialModelWithRouter(dataSource api.KafkaDataSource) *Model {
 	r := router.NewRouter(dataSource)
 	helpSystem := core.NewHelpSystem()
 	focusManager := core.NewFocusManager()
 
-	return Model{
+	return &Model{
 		dataSource:   dataSource,
 		Router:       r,
-		ShowHelp:     false,
+		state:        core.StateNormal,
+		focusState:   core.FocusMain,
 		HelpSystem:   helpSystem,
 		FocusManager: focusManager,
 	}
 }
 
-func (m Model) Init() tea.Cmd {
+// GetState returns the current UI state
+func (m *Model) GetState() core.UIState {
+	return m.state
+}
+
+// GetFocusState returns the current focus state
+func (m *Model) GetFocusState() core.FocusState {
+	return m.focusState
+}
+
+// setState updates the UI state and handles side effects
+func (m *Model) setState(state core.UIState) {
+	m.state = state
+}
+
+// setFocusState updates the focus state
+func (m *Model) setFocusState(focus core.FocusState) {
+	m.focusState = focus
+}
+
+func (m *Model) Init() tea.Cmd {
 	return m.Router.Init()
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -58,7 +80,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		// Handle focus management first (if not in help mode)
-		if !m.ShowHelp {
+		if m.state != core.StateHelp {
 			if cmd := m.FocusManager.HandleKeyMsg(msg); cmd != nil {
 				return m, cmd
 			}
@@ -67,28 +89,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle global key bindings
 		switch {
 		case key.Matches(msg, core.DefaultGlobalKeys.Help):
-			m.ShowHelp = !m.ShowHelp
-			m.HelpSystem.Toggle()
-			// Update help system with current page
-			if currentPage := m.Router.GetCurrentPage(); currentPage != nil {
-				m.HelpSystem.SetCurrentPage(currentPage)
+			// Toggle help state
+			if m.state == core.StateHelp {
+				m.setState(core.StateNormal)
+				m.HelpSystem.Hide()
+			} else {
+				m.setState(core.StateHelp)
+				m.HelpSystem.Toggle()
+				// Update help system with current page
+				if currentPage := m.Router.GetCurrentPage(); currentPage != nil {
+					m.HelpSystem.SetCurrentPage(currentPage)
+				}
 			}
 			return m, nil
 		case key.Matches(msg, core.DefaultGlobalKeys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, core.DefaultGlobalKeys.Back):
-			if !m.ShowHelp {
+			if m.state != core.StateHelp {
 				return m, m.Router.Back()
 			}
 			// Close help if it's open
-			m.ShowHelp = false
+			m.setState(core.StateNormal)
 			m.HelpSystem.Hide()
 			return m, nil
 		}
 	}
 
 	// Handle router updates if not in help mode
-	if !m.ShowHelp {
+	if m.state != core.StateHelp {
 		_, cmd := m.Router.Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -96,8 +124,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) View() string {
-	if m.ShowHelp {
+func (m *Model) View() string {
+	if m.state == core.StateHelp {
 		return m.HelpSystem.Render()
 	}
 
@@ -105,11 +133,11 @@ func (m Model) View() string {
 }
 
 // NewUIModel creates a new UI model using router-based navigation
-func NewUIModel(dataSource api.KafkaDataSource) Model {
+func NewUIModel(dataSource api.KafkaDataSource) *Model {
 	return initialModelWithRouter(dataSource)
 }
 
 // NewUIModelWithRouter creates a new UI model using router-based navigation
-func NewUIModelWithRouter(dataSource api.KafkaDataSource) Model {
+func NewUIModelWithRouter(dataSource api.KafkaDataSource) *Model {
 	return initialModelWithRouter(dataSource)
 }

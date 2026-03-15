@@ -12,13 +12,22 @@ type Page interface {
 	View() string
 	SetDimensions(width, height int)
 	GetID() string
-	
+
 	// Navigation methods for enhanced routing
 	GetTitle() string
 	GetHelp() []key.Binding
 	HandleNavigation(msg tea.Msg) (Page, tea.Cmd)
 	OnFocus() tea.Cmd
 	OnBlur() tea.Cmd
+}
+
+// StatefulPage extends Page with state management capabilities
+type StatefulPage interface {
+	Page
+	GetState() UIState
+	GetFocusState() FocusState
+	SetState(UIState)
+	SetFocusState(FocusState)
 }
 
 // KeyHandler handles keyboard input

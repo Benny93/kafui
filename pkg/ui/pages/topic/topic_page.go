@@ -322,7 +322,9 @@ func (m *Model) updateTableDimensions(width, height int) {
 	// Account for table elements within the inner area:
 	// - Table header: 1 line
 	// - Header separator: 1 line
-	reservedLines := 2
+	// - Table footer (from WithPageSize pagination): 1 line
+	// Total reserved: 3 lines (4 when search mode is active)
+	reservedLines := 3
 	if m.searchMode {
 		reservedLines += 4 // Search bar lines (prompt + help + spacing)
 	}
@@ -341,8 +343,8 @@ func (m *Model) updateTableDimensions(width, height int) {
 	}
 
 	m.pagination.SetPerPage(tableHeight)
-	// Note: We don't set WithCurrentPage because we pass only current page's data
-	// The table is stateless - it displays exactly what we give it
+	// Note: We use WithPageSize to enable pagination footer and row limiting
+	// The table is stateless - we pass only current page's data
 	m.messageTable = m.messageTable.WithPageSize(tableHeight)
 
 	// Calculate column widths based on available width
@@ -1088,6 +1090,11 @@ func (t *TopicPageModel) GetTopicName() string {
 // GetSelectedMessage returns the currently selected message
 func (t *TopicPageModel) GetSelectedMessage() *api.Message {
 	return t.topicModel.GetSelectedMessage()
+}
+
+// TopicModel returns the internal topic model for testing purposes
+func (t *TopicPageModel) TopicModel() *Model {
+	return t.topicModel
 }
 
 // Navigation message for message detail selection
