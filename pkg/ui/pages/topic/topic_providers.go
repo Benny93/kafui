@@ -76,6 +76,7 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 	}
 
 	// Cache the render result
+	content = strings.TrimSpace(content)
 	t.model.setRenderCache(content)
 
 	return content

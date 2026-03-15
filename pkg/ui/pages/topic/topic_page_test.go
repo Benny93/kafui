@@ -435,8 +435,8 @@ func TestTopicPageModel_GetID_DifferentTopics(t *testing.T) {
 	assert.Contains(t, id2, "topic-2")
 }
 
-// TestAddMessage_MaxDisplayedMessages tests that only the last MaxDisplayedMessages are kept
-func TestAddMessage_MaxDisplayedMessages(t *testing.T) {
+// TestAddMessage_MaxMessageBuffer tests that only the last MaxMessageBuffer are kept
+func TestAddMessage_MaxMessageBuffer(t *testing.T) {
 	mockDS := &MockDataSource{}
 
 	topicDetails := api.Topic{
@@ -447,10 +447,10 @@ func TestAddMessage_MaxDisplayedMessages(t *testing.T) {
 
 	model := NewModel(mockDS, "test-topic", topicDetails)
 	// Set maxMessages for testing
-	model.maxMessages = MaxDisplayedMessages
+	model.maxMessages = MaxMessageBuffer
 
-	// Add more messages than the maximum displayed limit
-	numMessages := MaxDisplayedMessages + 10
+	// Add more messages than the maximum buffer limit
+	numMessages := MaxMessageBuffer + 10
 	for i := 0; i < numMessages; i++ {
 		msg := api.Message{
 			Key:       fmt.Sprintf("key-%d", i),
@@ -461,21 +461,21 @@ func TestAddMessage_MaxDisplayedMessages(t *testing.T) {
 		model.AddMessage(msg)
 	}
 
-	// Should only keep the last MaxDisplayedMessages
-	assert.Len(t, model.messages, MaxDisplayedMessages)
-	assert.Len(t, model.filteredMessages, MaxDisplayedMessages)
+	// Should only keep the last MaxMessageBuffer
+	assert.Len(t, model.messages, MaxMessageBuffer)
+	assert.Len(t, model.filteredMessages, MaxMessageBuffer)
 
 	// The first message should be the one at offset 10 (not 0)
 	assert.Equal(t, int64(10), model.messages[0].Offset)
 	assert.Equal(t, "key-10", model.messages[0].Key)
 
 	// The last message should be the one at offset numMessages-1
-	assert.Equal(t, int64(numMessages-1), model.messages[MaxDisplayedMessages-1].Offset)
-	assert.Equal(t, fmt.Sprintf("key-%d", numMessages-1), model.messages[MaxDisplayedMessages-1].Key)
+	assert.Equal(t, int64(numMessages-1), model.messages[MaxMessageBuffer-1].Offset)
+	assert.Equal(t, fmt.Sprintf("key-%d", numMessages-1), model.messages[MaxMessageBuffer-1].Key)
 }
 
-// TestAddMessage_ExactMaxDisplayedMessages tests behavior when exactly at the limit
-func TestAddMessage_ExactMaxDisplayedMessages(t *testing.T) {
+// TestAddMessage_ExactMaxMessageBuffer tests behavior when exactly at the limit
+func TestAddMessage_ExactMaxMessageBuffer(t *testing.T) {
 	mockDS := &MockDataSource{}
 
 	topicDetails := api.Topic{
@@ -486,10 +486,10 @@ func TestAddMessage_ExactMaxDisplayedMessages(t *testing.T) {
 
 	model := NewModel(mockDS, "test-topic", topicDetails)
 	// Set maxMessages for testing
-	model.maxMessages = MaxDisplayedMessages
+	model.maxMessages = MaxMessageBuffer
 
-	// Add exactly MaxDisplayedMessages messages
-	for i := 0; i < MaxDisplayedMessages; i++ {
+	// Add exactly MaxMessageBuffer messages
+	for i := 0; i < MaxMessageBuffer; i++ {
 		msg := api.Message{
 			Key:       fmt.Sprintf("key-%d", i),
 			Value:     fmt.Sprintf("value-%d", i),
@@ -499,24 +499,24 @@ func TestAddMessage_ExactMaxDisplayedMessages(t *testing.T) {
 		model.AddMessage(msg)
 	}
 
-	// Should have exactly MaxDisplayedMessages
-	assert.Len(t, model.messages, MaxDisplayedMessages)
+	// Should have exactly MaxMessageBuffer
+	assert.Len(t, model.messages, MaxMessageBuffer)
 
 	// Add one more message
 	extraMsg := api.Message{
 		Key:       "key-extra",
 		Value:     "value-extra",
-		Offset:    int64(MaxDisplayedMessages),
+		Offset:    int64(MaxMessageBuffer),
 		Partition: 0,
 	}
 	model.AddMessage(extraMsg)
 
-	// Should still have exactly MaxDisplayedMessages
-	assert.Len(t, model.messages, MaxDisplayedMessages)
+	// Should still have exactly MaxMessageBuffer
+	assert.Len(t, model.messages, MaxMessageBuffer)
 
 	// The first message should now be the one at offset 1
 	assert.Equal(t, int64(1), model.messages[0].Offset)
 
 	// The last message should be the extra message
-	assert.Equal(t, int64(MaxDisplayedMessages), model.messages[MaxDisplayedMessages-1].Offset)
+	assert.Equal(t, int64(MaxMessageBuffer), model.messages[MaxMessageBuffer-1].Offset)
 }

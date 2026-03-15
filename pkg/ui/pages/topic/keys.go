@@ -246,7 +246,7 @@ func (k *Keys) handlePauseResume(model *Model) tea.Cmd {
 
 func (k *Keys) handleRefresh(model *Model) tea.Cmd {
 	// Fetch latest messages from the topic
-	const fetchCount = 300
+	const fetchCount = 60
 	model.statusMessage = "Refreshing messages..."
 	return model.consumption.FetchLatestMessages(fetchCount)
 }

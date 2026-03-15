@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Benny93/kafui/pkg/api"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -97,6 +98,13 @@ func (h *Handlers) handleKeyMsg(model *Model, msg tea.KeyMsg) (tea.Model, tea.Cm
 func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (tea.Model, tea.Cmd) {
 	// Add the consumed message to internal storage (doesn't trigger view update)
 	model.addMessageInternal(msg.Message)
+	
+	// Ensure messages are sorted for pagination
+	model.sortMessages()
+	
+	// Update total messages for pagination
+	model.pagination.SetTotalMessages(len(model.filteredMessages))
+	
 	model.markRenderDirty()
 
 	// Continue listening for more messages if we're still consuming
@@ -108,13 +116,25 @@ func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (
 }
 
 func (h *Handlers) handleMessagesFetched(model *Model, msg MessagesFetchedMsg) (tea.Model, tea.Cmd) {
+	// Clear existing messages for fresh fetch (per user request to only hold a few pages)
+	model.mu.Lock()
+	model.messages = []api.Message{}
+	model.consumedMessages = make(map[string]api.Message)
+	model.mu.Unlock()
+
 	// Add all fetched messages
 	for _, m := range msg.Messages {
 		model.addMessageInternal(m)
 	}
 
+	// Ensure messages are sorted for pagination
+	model.sortMessages()
+
 	// Update pagination
 	model.pagination.SetTotalMessages(len(model.filteredMessages))
+
+	// Reset to first page to see the newest messages
+	model.pagination.FirstPage()
 
 	// Mark render as dirty to show the messages
 	model.markRenderDirty()

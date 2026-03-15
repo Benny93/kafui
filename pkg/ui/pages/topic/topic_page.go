@@ -21,9 +21,6 @@ import (
 	"github.com/evertras/bubble-table/table"
 )
 
-// Maximum number of messages to display in the table (default, will be overridden by height)
-const MaxDisplayedMessages = 50
-
 // Performance optimization constants
 const (
 	// MaxVisibleRows limits rendered rows (virtual scrolling) - default, overridden by height
@@ -173,7 +170,7 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 
 	// Initialize message table with bubble-table
 	messageTable := table.New(columns).
-		WithPageSize(MaxDisplayedMessages).
+		WithPageSize(DefaultPerPage).
 		WithHighlightedRow(0).
 		WithBaseStyle(
 			lipgloss.NewStyle().
@@ -277,8 +274,8 @@ func (m *Model) Init() tea.Cmd {
 	// Set initial loading state
 	m.loading = true
 
-	// Fetch latest 300 messages (15 pages of 20)
-	const fetchCount = 300
+	// Fetch latest 60 messages (3 pages of 20)
+	const fetchCount = 60
 	cmds := []tea.Cmd{
 		m.consumption.FetchLatestMessages(fetchCount),
 		m.spinner.Tick,
@@ -324,21 +321,29 @@ func (m *Model) updateTableDimensions(width, height int) {
 
 	// Account for table elements within the inner area:
 	// - Table header: 1 line
-	// - Table bottom border: 1 line
+	// - Header separator: 1 line
 	reservedLines := 2
 	if m.searchMode {
-		reservedLines += 3 // Search bar lines
+		reservedLines += 4 // Search bar lines (prompt + help + spacing)
 	}
 
 	// Update table height (number of visible rows) based on available height
 	tableHeight := innerHeight - reservedLines
-	if tableHeight < 5 {
-		tableHeight = 5 // Minimum visible rows
+	
+	// CRITICAL: Clamp table height to innerHeight to prevent layout overflow
+	// Minimum of 2 rows if space allows
+	if tableHeight < 2 && innerHeight > reservedLines {
+		tableHeight = 2
 	}
-	// Use calculated height - allow it to grow with terminal
-	if tableHeight > MaxDisplayedMessages {
-		tableHeight = MaxDisplayedMessages
+	
+	// Final absolute clamp
+	if tableHeight > innerHeight - reservedLines {
+		tableHeight = innerHeight - reservedLines
 	}
+	if tableHeight < 0 {
+		tableHeight = 0
+	}
+	
 	m.pagination.SetPerPage(tableHeight)
 	m.messageTable = m.messageTable.WithPageSize(tableHeight)
 
@@ -921,10 +926,15 @@ func contains(s, substr string) bool {
 
 // truncateString truncates a string to fit within maxLen visual characters
 // It properly handles ANSI escape codes and multi-byte characters
+// It also strips newlines to prevent layout corruption in tables
 func truncateString(s string, maxLen int) string {
 	if maxLen <= 0 {
 		return ""
 	}
+	// Strip newlines and carriage returns to prevent layout breaking
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	
 	// Use the styles utility which properly handles ANSI codes
 	return styles.TruncateWithEllipsis(s, maxLen)
 }
@@ -1021,8 +1031,8 @@ func (t *TopicPageModel) View() string {
 
 // SetDimensions implements the Page interface
 func (t *TopicPageModel) SetDimensions(width, height int) {
-	// Update both models
-	t.topicModel.SetDimensions(width, height)
+	// Only update the reusable app. The topic model's dimensions will be 
+	// updated by the ContentProvider with the correct inner content dimensions.
 	t.reusableApp.Update(tea.WindowSizeMsg{Width: width, Height: height})
 }
 
