@@ -58,21 +58,51 @@ func (k MainKeyMap) FullHelp() [][]key.Binding {
 
 // TopicKeyMap contains key bindings for the topic page
 type TopicKeyMap struct {
-	Select       key.Binding
-	Back         key.Binding
-	Search       key.Binding
-	Help         key.Binding
-	Quit         key.Binding
-	Pause        key.Binding
-	Format       key.Binding
-	Headers      key.Binding
-	Metadata     key.Binding
-	ScrollUp     key.Binding
-	ScrollDown   key.Binding
-	PageUp       key.Binding
-	PageDown     key.Binding
-	GotoStart    key.Binding
-	GotoEnd      key.Binding
+	// Navigation
+	Select     key.Binding
+	Back       key.Binding
+	Search     key.Binding
+	Help       key.Binding
+	Quit       key.Binding
+	
+	// Consumption control
+	Pause      key.Binding
+	Refresh    key.Binding
+	Retry      key.Binding
+	
+	// Display options
+	Format     key.Binding
+	Headers    key.Binding
+	Metadata   key.Binding
+	
+	// Scrolling
+	ScrollUp   key.Binding
+	ScrollDown key.Binding
+	PageUp     key.Binding
+	PageDown   key.Binding
+	GotoStart  key.Binding
+	GotoEnd    key.Binding
+	
+	// Message operations
+	CopyKey    key.Binding
+	CopyValue  key.Binding
+}
+
+// ShortHelp returns keybindings to be shown in the mini help view. It's part
+// of the help.KeyMap interface.
+func (k TopicKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Help, k.Search, k.Pause, k.Select, k.Back, k.Quit}
+}
+
+// FullHelp returns keybindings for the expanded help view. It's part of the
+// help.KeyMap interface.
+func (k TopicKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Select, k.Search, k.Pause},              // first column
+		{k.Refresh, k.Retry, k.Format},             // second column
+		{k.ScrollUp, k.ScrollDown, k.PageUp},       // third column
+		{k.Back, k.Help, k.Quit},                   // fourth column
+	}
 }
 
 // DetailKeyMap contains key bindings for the message detail page
@@ -215,6 +245,7 @@ func DefaultMainKeyMap() MainKeyMap {
 // DefaultTopicKeyMap returns the default topic page key bindings
 func DefaultTopicKeyMap() TopicKeyMap {
 	return TopicKeyMap{
+		// Navigation
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "view message"),
@@ -235,10 +266,20 @@ func DefaultTopicKeyMap() TopicKeyMap {
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
 		),
+		// Consumption control
 		Pause: key.NewBinding(
 			key.WithKeys("p", " "),
 			key.WithHelp("p", "pause/resume"),
 		),
+		Refresh: key.NewBinding(
+			key.WithKeys("R"),
+			key.WithHelp("R", "refresh messages"),
+		),
+		Retry: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "retry connection"),
+		),
+		// Display options
 		Format: key.NewBinding(
 			key.WithKeys("f"),
 			key.WithHelp("f", "format"),
@@ -251,6 +292,7 @@ func DefaultTopicKeyMap() TopicKeyMap {
 			key.WithKeys("m"),
 			key.WithHelp("m", "toggle metadata"),
 		),
+		// Scrolling
 		ScrollUp: key.NewBinding(
 			key.WithKeys("up", "k"),
 			key.WithHelp("↑", "scroll up"),
@@ -274,6 +316,15 @@ func DefaultTopicKeyMap() TopicKeyMap {
 		GotoEnd: key.NewBinding(
 			key.WithKeys("G", "end"),
 			key.WithHelp("G", "go to end"),
+		),
+		// Message operations
+		CopyKey: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "copy message key"),
+		),
+		CopyValue: key.NewBinding(
+			key.WithKeys("v"),
+			key.WithHelp("v", "copy message value"),
 		),
 	}
 }

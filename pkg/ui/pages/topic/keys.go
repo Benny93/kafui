@@ -9,223 +9,130 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Keys handles key bindings for the topic page
+// Keys handles key bindings for the topic page using centralized key definitions
 type Keys struct {
-	bindings keyMap
+	bindings keys.TopicKeyMap
 }
 
-type keyMap struct {
-	Search         key.Binding
-	Back           key.Binding
-	Quit           key.Binding
-	Enter          key.Binding
-	PauseResume    key.Binding
-	Refresh        key.Binding
-	Retry          key.Binding
-	Navigation     NavigationKeys
-	MessageControl MessageControlKeys
-}
-
-type NavigationKeys struct {
-	Up       key.Binding
-	Down     key.Binding
-	Left     key.Binding
-	Right    key.Binding
-	Home     key.Binding
-	End      key.Binding
-}
-
-type MessageControlKeys struct {
-	Select      key.Binding
-	CopyKey     key.Binding
-	CopyValue   key.Binding
-	ShowDetails key.Binding
-}
-
-// NewKeys creates a new Keys instance
+// NewKeys creates a new Keys instance using centralized key bindings
 func NewKeys() *Keys {
 	return &Keys{
-		bindings: keyMap{
-			Search: key.NewBinding(
-				key.WithKeys("/"),
-				key.WithHelp("/", "search messages"),
-			),
-			Back: key.NewBinding(
-				key.WithKeys("esc"),
-				key.WithHelp("esc", "back/exit search"),
-			),
-			Quit: key.NewBinding(
-				key.WithKeys("ctrl+c", "q"),
-				key.WithHelp("ctrl+c/q", "quit"),
-			),
-			Enter: key.NewBinding(
-				key.WithKeys("enter"),
-				key.WithHelp("enter", "view message details"),
-			),
-			PauseResume: key.NewBinding(
-				key.WithKeys(" "),
-				key.WithHelp("space", "pause/resume"),
-			),
-			Refresh: key.NewBinding(
-				key.WithKeys("R"),
-				key.WithHelp("R", "refresh messages"),
-			),
-			Retry: key.NewBinding(
-				key.WithKeys("r"),
-				key.WithHelp("r", "retry connection"),
-			),
-			Navigation: NavigationKeys{
-				Up: key.NewBinding(
-					key.WithKeys("up", "k"),
-					key.WithHelp("↑/k", "select prev row"),
-				),
-				Down: key.NewBinding(
-					key.WithKeys("down", "j"),
-					key.WithHelp("↓/j", "select next row"),
-				),
-				Left: key.NewBinding(
-					key.WithKeys("left", "h"),
-					key.WithHelp("←/h", "prev page"),
-				),
-				Right: key.NewBinding(
-					key.WithKeys("right", "l"),
-					key.WithHelp("→/l", "next page"),
-				),
-				Home: key.NewBinding(
-					key.WithKeys("g", "home"),
-					key.WithHelp("g", "first page"),
-				),
-				End: key.NewBinding(
-					key.WithKeys("G", "end"),
-					key.WithHelp("G", "last page"),
-				),
-			},
-			MessageControl: MessageControlKeys{
-				Select: key.NewBinding(
-					key.WithKeys("enter"),
-					key.WithHelp("enter", "select message"),
-				),
-				CopyKey: key.NewBinding(
-					key.WithKeys("c"),
-					key.WithHelp("c", "copy message key"),
-				),
-				CopyValue: key.NewBinding(
-					key.WithKeys("v"),
-					key.WithHelp("v", "copy message value"),
-				),
-				ShowDetails: key.NewBinding(
-					key.WithKeys("d"),
-					key.WithHelp("d", "show message details"),
-				),
-			},
-		},
+		bindings: keys.DefaultKeyMap().Topic,
 	}
 }
 
-// HandleKey processes key events
+// HandleKey processes key events using centralized key bindings
 func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	var cmds []tea.Cmd
 
 	// If in search mode, let the search input handle keys
-	// But handle Enter and Esc specially for search confirmation/cancellation
 	if model.searchMode {
-		// Handle Enter to confirm search
-		if msg.String() == "enter" {
-			model.searchMode = false
-			model.searchInput.Blur()
-			model.FilterMessages()
-			return nil
-		}
-
-		// Handle Esc to cancel search
-		if msg.String() == "esc" {
-			model.searchMode = false
-			model.searchInput.Blur()
-			model.searchInput.SetValue("")
-			model.FilterMessages()
-			return nil
-		}
-
-		// Let the search input handle other keys
-		var cmd tea.Cmd
-		model.searchInput, cmd = model.searchInput.Update(msg)
-		cmds = append(cmds, cmd)
-		model.FilterMessages()
-		return tea.Batch(cmds...)
+		return k.handleSearchMode(model, msg)
 	}
 
-	// Handle ESC key (back navigation when not in search mode)
-	if key.Matches(msg, k.bindings.Back) {
-		return k.handleBack(model)
-	}
-
-	// Handle other specific key combinations (only when not in search mode)
+	// Handle navigation keys
 	switch {
+	case key.Matches(msg, k.bindings.Back):
+		return k.handleBack(model)
 	case key.Matches(msg, k.bindings.Quit):
 		return k.handleQuit(model)
 	case key.Matches(msg, k.bindings.Search):
 		return k.handleSearch(model)
-	case key.Matches(msg, k.bindings.PauseResume):
+	case key.Matches(msg, k.bindings.Pause):
 		return k.handlePauseResume(model)
 	case key.Matches(msg, k.bindings.Refresh):
 		return k.handleRefresh(model)
 	case key.Matches(msg, k.bindings.Retry):
 		return k.handleRetry(model)
-	case key.Matches(msg, k.bindings.Enter):
-		return k.handleEnter(model)
+	case key.Matches(msg, k.bindings.Select):
+		return k.handleSelect(model)
 	}
 
-	// Handle message control keys (only when not in search mode)
+	// Handle display option keys
 	switch {
-	case key.Matches(msg, k.bindings.MessageControl.CopyKey):
-		return k.handleCopyKey(model)
-	case key.Matches(msg, k.bindings.MessageControl.CopyValue):
-		return k.handleCopyValue(model)
-	case key.Matches(msg, k.bindings.MessageControl.ShowDetails):
-		return k.handleShowDetails(model)
+	case key.Matches(msg, k.bindings.Format):
+		return k.handleFormat(model)
+	case key.Matches(msg, k.bindings.Headers):
+		return k.handleHeaders(model)
+	case key.Matches(msg, k.bindings.Metadata):
+		return k.handleMetadata(model)
 	}
 
-	// Handle navigation keys
+	// Handle scrolling keys
 	switch {
-	case key.Matches(msg, k.bindings.Navigation.Left):
-		return k.handleScroll(model, "up")
-	case key.Matches(msg, k.bindings.Navigation.Right):
-		return k.handleScroll(model, "down")
-	case key.Matches(msg, k.bindings.Navigation.Up):
+	case key.Matches(msg, k.bindings.ScrollUp):
 		return k.handleNavigation(model, "up")
-	case key.Matches(msg, k.bindings.Navigation.Down):
+	case key.Matches(msg, k.bindings.ScrollDown):
 		return k.handleNavigation(model, "down")
-	case key.Matches(msg, k.bindings.Navigation.Home):
+	case key.Matches(msg, k.bindings.PageUp):
+		return k.handleNavigation(model, "pageup")
+	case key.Matches(msg, k.bindings.PageDown):
+		return k.handleNavigation(model, "pagedown")
+	case key.Matches(msg, k.bindings.GotoStart):
 		return k.handleNavigation(model, "home")
-	case key.Matches(msg, k.bindings.Navigation.End):
+	case key.Matches(msg, k.bindings.GotoEnd):
 		return k.handleNavigation(model, "end")
+	}
+
+	// Handle message operation keys
+	switch {
+	case key.Matches(msg, k.bindings.CopyKey):
+		return k.handleCopyKey(model)
+	case key.Matches(msg, k.bindings.CopyValue):
+		return k.handleCopyValue(model)
 	}
 
 	return tea.Batch(cmds...)
 }
 
-func (k *Keys) handleBack(model *Model) tea.Cmd {
-	if model.searchMode {
-		// Exit search mode
+// handleSearchMode handles keys when search input is focused
+func (k *Keys) handleSearchMode(model *Model, msg tea.KeyMsg) tea.Cmd {
+	// Handle Enter to confirm search
+	if msg.String() == "enter" {
 		model.searchMode = false
 		model.searchInput.Blur()
 		model.FilterMessages()
 		return nil
 	}
 
-	// Return to previous page - cancel consumption first
+	// Handle Esc to cancel search
+	if msg.String() == "esc" {
+		model.searchMode = false
+		model.searchInput.Blur()
+		model.searchInput.SetValue("")
+		model.FilterMessages()
+		return nil
+	}
+
+	// Let the search input handle other keys
+	var cmd tea.Cmd
+	model.searchInput, cmd = model.searchInput.Update(msg)
+	cmds := []tea.Cmd{cmd}
+	model.FilterMessages()
+	return tea.Batch(cmds...)
+}
+
+// Key handling functions
+
+func (k *Keys) handleBack(model *Model) tea.Cmd {
+	if model.searchMode {
+		model.searchMode = false
+		model.searchInput.Blur()
+		model.FilterMessages()
+		return nil
+	}
+
+	// Cancel consumption first
 	if model.cancelConsumption != nil {
 		model.cancelConsumption()
 	}
 
-	// Use BackMsg to navigate back without adding to history
 	return func() tea.Msg {
 		return core.BackMsg{}
 	}
 }
 
 func (k *Keys) handleQuit(model *Model) tea.Cmd {
-	// Cancel consumption before quitting
 	if model.cancelConsumption != nil {
 		model.cancelConsumption()
 	}
@@ -233,41 +140,36 @@ func (k *Keys) handleQuit(model *Model) tea.Cmd {
 }
 
 func (k *Keys) handleSearch(model *Model) tea.Cmd {
-	// Enter search mode
 	model.searchMode = true
 	model.searchInput.Focus()
 	return nil
 }
 
 func (k *Keys) handlePauseResume(model *Model) tea.Cmd {
-	// Toggle pause/resume consumption
 	model.TogglePause()
 	return nil
 }
 
 func (k *Keys) handleRefresh(model *Model) tea.Cmd {
-	// Fetch latest messages from the topic
 	const fetchCount = 60
 	model.statusMessage = "Refreshing messages..."
 	return model.consumption.FetchLatestMessages(fetchCount)
 }
 
 func (k *Keys) handleRetry(model *Model) tea.Cmd {
-	// Manual retry connection
 	if model.consumption != nil {
 		return model.consumption.RetryConnection()
 	}
 	return nil
 }
 
-func (k *Keys) handleEnter(model *Model) tea.Cmd {
+func (k *Keys) handleSelect(model *Model) tea.Cmd {
 	if model.searchMode {
-		// In search mode, just apply the search
 		model.FilterMessages()
 		return nil
 	}
 
-	// Navigate to message detail page with a unique ID
+	// Navigate to message detail page
 	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil {
 		model.selectedMessage = selectedMsg
 		return func() tea.Msg {
@@ -279,8 +181,25 @@ func (k *Keys) handleEnter(model *Model) tea.Cmd {
 	return nil
 }
 
+func (k *Keys) handleFormat(model *Model) tea.Cmd {
+	// Toggle message format (placeholder - topic page may not support this)
+	model.statusMessage = "Format toggle not implemented"
+	return nil
+}
+
+func (k *Keys) handleHeaders(model *Model) tea.Cmd {
+	// Toggle headers display (placeholder)
+	model.statusMessage = "Headers toggle not implemented"
+	return nil
+}
+
+func (k *Keys) handleMetadata(model *Model) tea.Cmd {
+	// Toggle metadata display (placeholder)
+	model.statusMessage = "Metadata toggle not implemented"
+	return nil
+}
+
 func (k *Keys) handleCopyKey(model *Model) tea.Cmd {
-	// Copy message key to clipboard (placeholder)
 	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil && selectedMsg.Key != "" {
 		model.statusMessage = "Message key copied to clipboard"
 		// TODO: Implement actual clipboard copy
@@ -289,7 +208,6 @@ func (k *Keys) handleCopyKey(model *Model) tea.Cmd {
 }
 
 func (k *Keys) handleCopyValue(model *Model) tea.Cmd {
-	// Copy message value to clipboard (placeholder)
 	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil && selectedMsg.Value != "" {
 		model.statusMessage = "Message value copied to clipboard"
 		// TODO: Implement actual clipboard copy
@@ -297,21 +215,9 @@ func (k *Keys) handleCopyValue(model *Model) tea.Cmd {
 	return nil
 }
 
-func (k *Keys) handleShowDetails(model *Model) tea.Cmd {
-	// Show detailed message information
-	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil {
-		return func() tea.Msg {
-			return MessageSelectedMsg{Message: *selectedMsg}
-		}
-	}
-	return nil
-}
-
 func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
-	// Up/Down navigate rows within current page (table cursor)
 	switch direction {
 	case "up":
-		// Move highlight up by one row
 		currentRow := model.messageTable.GetHighlightedRowIndex()
 		if currentRow > 0 {
 			model.messageTable = model.messageTable.WithHighlightedRow(currentRow - 1)
@@ -319,10 +225,8 @@ func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
 		model.markRenderDirty()
 		return nil
 	case "down":
-		// Move highlight down by one row
 		currentRow := model.messageTable.GetHighlightedRowIndex()
 		pageSize := model.messageTable.PageSize()
-		// Get current visible messages count
 		visibleCount := len(model.pagination.GetVisibleMessages(model.filteredMessages))
 		if visibleCount == 0 {
 			visibleCount = pageSize
@@ -332,42 +236,48 @@ func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
 		}
 		model.markRenderDirty()
 		return nil
+	case "pageup":
+		if model.pagination.PrevPage() {
+			model.messageTable = model.messageTable.WithCurrentPage(model.pagination.Page + 1)
+			model.markRenderDirty()
+		}
+		return nil
+	case "pagedown":
+		if model.pagination.NextPage() {
+			model.messageTable = model.messageTable.WithCurrentPage(model.pagination.Page + 1)
+			model.markRenderDirty()
+		}
+		return nil
 	case "home":
-		// Go to first page
 		model.pagination.FirstPage()
 		model.messageTable = model.messageTable.PageFirst()
 		model.markRenderDirty()
 		return nil
 	case "end":
-		// Go to last page
 		model.pagination.LastPage()
 		model.messageTable = model.messageTable.PageLast()
 		model.markRenderDirty()
 		return nil
 	}
-
 	return nil
 }
 
-// GetKeyBindings returns the key bindings for help display
+// GetKeyBindings returns the centralized key bindings for help display
 func (k *Keys) GetKeyBindings() []key.Binding {
-	// Use centralized keys for standard bindings
-	centralizedKeys := keys.DefaultKeyMap().Topic
 	return []key.Binding{
-		centralizedKeys.Search,
-		centralizedKeys.Back,
-		centralizedKeys.Quit,
-		centralizedKeys.Select,
-		centralizedKeys.Pause,
-		centralizedKeys.Format,    // Repurpose for format toggle
-		centralizedKeys.Headers,   // Repurpose for copy key
-		centralizedKeys.Metadata,  // Repurpose for copy value
-		centralizedKeys.ScrollUp,
-		centralizedKeys.ScrollDown,
-		centralizedKeys.PageUp,
-		centralizedKeys.PageDown,
-		centralizedKeys.GotoStart,
-		centralizedKeys.GotoEnd,
+		k.bindings.Search,
+		k.bindings.Back,
+		k.bindings.Quit,
+		k.bindings.Select,
+		k.bindings.Pause,
+		k.bindings.Refresh,
+		k.bindings.Retry,
+		k.bindings.ScrollUp,
+		k.bindings.ScrollDown,
+		k.bindings.GotoStart,
+		k.bindings.GotoEnd,
+		k.bindings.CopyKey,
+		k.bindings.CopyValue,
 	}
 }
 
@@ -383,33 +293,15 @@ func (k *Keys) GetShortcuts() []string {
 		"Enter View details",
 		"Space Pause/resume",
 		"R     Refresh messages",
-		"←/→   Prev/Next page",
+		"g/G   First/Last page",
 		"/     Search messages",
 		"r     Retry connection",
 		"c     Copy key",
 		"v     Copy value",
-		"d     Show details",
+		"f     Toggle format",
+		"h     Toggle headers",
+		"m     Toggle metadata",
 		"Esc   Exit search",
 		"q/Esc Back to topics",
 	}
-}
-
-// handleScroll handles page navigation key bindings
-func (k *Keys) handleScroll(model *Model, direction string) tea.Cmd {
-	switch direction {
-	case "up":
-		// Previous page (older messages)
-		if model.pagination.PrevPage() {
-			model.messageTable = model.messageTable.WithCurrentPage(model.pagination.Page + 1)
-			model.markRenderDirty()
-		}
-	case "down":
-		// Next page (newer messages)
-		if model.pagination.NextPage() {
-			model.messageTable = model.messageTable.WithCurrentPage(model.pagination.Page + 1)
-			model.markRenderDirty()
-		}
-	}
-
-	return nil
 }
