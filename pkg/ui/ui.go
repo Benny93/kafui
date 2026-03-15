@@ -80,6 +80,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.HelpSystem.SetDimensions(msg.Width, msg.Height)
 
 	case tea.KeyMsg:
+		// Handle debug screenshot keys first (before focus manager)
+		switch msg.String() {
+		case "f3":
+			return m, m.takeScreenshot(false)
+		case "shift+f3":
+			return m, m.takeScreenshot(true)
+		}
+
 		// Handle focus management first (if not in help mode)
 		if m.state != core.StateHelp {
 			if cmd := m.FocusManager.HandleKeyMsg(msg); cmd != nil {
@@ -89,12 +97,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle global key bindings
 		switch {
-		case key.Matches(msg, core.DefaultGlobalKeys.DebugScreenshot):
-			// Take screenshot (full)
-			return m, m.takeScreenshot(false)
-		case key.Matches(msg, core.DefaultGlobalKeys.DebugScreenshotRedacted):
-			// Take screenshot (redacted)
-			return m, m.takeScreenshot(true)
 		case key.Matches(msg, core.DefaultGlobalKeys.ToggleTheme):
 			// Toggle theme between dark and light
 			if m.common.Styles != nil {
