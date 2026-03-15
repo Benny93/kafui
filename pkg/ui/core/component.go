@@ -3,6 +3,8 @@ package core
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Benny93/kafui/pkg/ui/layout"
 )
 
 // Component defines the interface that all UI components must implement.
@@ -115,16 +117,8 @@ type ComponentWithLayout interface {
 	Component
 
 	// GetLayout returns the component's layout rectangle.
-	GetLayout() Rectangle
+	GetLayout() layout.Rectangle
 
 	// SetLayout sets the component's layout rectangle.
-	SetLayout(rect Rectangle)
-}
-
-// Rectangle represents a rectangular area in the layout.
-type Rectangle struct {
-	X      int
-	Y      int
-	Width  int
-	Height int
+	SetLayout(rect layout.Rectangle)
 }

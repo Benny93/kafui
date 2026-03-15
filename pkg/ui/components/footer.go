@@ -53,30 +53,33 @@ func (f *Footer) RenderNormalFooter() string {
 		selected = f.config.SelectedItem
 	}
 	leftInfo := fmt.Sprintf("Selected: %s  •  %d items total", selected, f.config.TotalItems)
-	
+
 	// Right side: Status information
 	spinnerView := ""
 	if f.config.Spinner.View() != "" {
 		spinnerView = f.config.Spinner.View() + " "
 	}
-	
+
 	rightInfo := fmt.Sprintf("%s%s  •  Last update: %s",
 		spinnerView,
 		f.config.StatusMessage,
 		f.config.LastUpdate.Format("15:04:05"),
 	)
-	
-	// Calculate available width for each side
-	totalWidth := f.config.Width - 4 // Account for padding
+
+	// Use BaseComponent width for calculations
+	totalWidth := f.GetWidth() - 4 // Account for padding
+	if totalWidth <= 0 {
+		totalWidth = f.config.Width - 4 // Fallback to config width
+	}
 	leftWidth := len(leftInfo)
 	rightWidth := len(rightInfo)
-	
+
 	// If both fit, use them with proper spacing
 	if leftWidth+rightWidth+3 <= totalWidth {
 		spacer := strings.Repeat(" ", totalWidth-leftWidth-rightWidth)
 		return leftInfo + spacer + rightInfo
 	}
-	
+
 	// If they don't fit, truncate the left side
 	maxLeftWidth := totalWidth - rightWidth - 3
 	if maxLeftWidth > 20 {
@@ -86,7 +89,7 @@ func (f *Footer) RenderNormalFooter() string {
 		spacer := strings.Repeat(" ", totalWidth-len(leftInfo)-rightWidth)
 		return leftInfo + spacer + rightInfo
 	}
-	
+
 	// Fallback: just show the right info if space is very limited
 	return rightInfo
 }
