@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -350,21 +351,29 @@ func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
 
 // GetKeyBindings returns the key bindings for help display
 func (k *Keys) GetKeyBindings() []key.Binding {
+	// Use centralized keys for standard bindings
+	centralizedKeys := keys.DefaultKeyMap().Topic
 	return []key.Binding{
-		k.bindings.Search,
-		k.bindings.Back,
-		k.bindings.Quit,
-		k.bindings.Enter,
-		k.bindings.PauseResume,
-		k.bindings.Retry,
-		k.bindings.Navigation.Up,
-		k.bindings.Navigation.Down,
-		k.bindings.Navigation.Home,
-		k.bindings.Navigation.End,
-		k.bindings.MessageControl.CopyKey,
-		k.bindings.MessageControl.CopyValue,
-		k.bindings.MessageControl.ShowDetails,
+		centralizedKeys.Search,
+		centralizedKeys.Back,
+		centralizedKeys.Quit,
+		centralizedKeys.Select,
+		centralizedKeys.Pause,
+		centralizedKeys.Format,    // Repurpose for format toggle
+		centralizedKeys.Headers,   // Repurpose for copy key
+		centralizedKeys.Metadata,  // Repurpose for copy value
+		centralizedKeys.ScrollUp,
+		centralizedKeys.ScrollDown,
+		centralizedKeys.PageUp,
+		centralizedKeys.PageDown,
+		centralizedKeys.GotoStart,
+		centralizedKeys.GotoEnd,
 	}
+}
+
+// GetCentralizedKeyMap returns the centralized key map for footer display
+func GetCentralizedKeyMap() keys.TopicKeyMap {
+	return keys.DefaultKeyMap().Topic
 }
 
 // GetShortcuts returns formatted shortcut descriptions

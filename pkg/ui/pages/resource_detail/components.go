@@ -5,43 +5,31 @@ import (
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Keys handles key bindings for the resource detail page
 type Keys struct {
-	bindings keyMap
+	bindings keys.ResourceDetailKeyMap
 }
 
-type keyMap struct {
-	Back key.Binding
-	Quit key.Binding
-}
-
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Back, k.Quit}
-}
-
-func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Back, k.Quit},
+// NewKeys creates a new Keys instance using centralized key bindings
+func NewKeys() *Keys {
+	return &Keys{
+		bindings: keys.DefaultKeyMap().ResourceDetail,
 	}
 }
 
-// NewKeys creates a new Keys instance
-func NewKeys() *Keys {
-	return &Keys{
-		bindings: keyMap{
-			Back: key.NewBinding(
-				key.WithKeys("esc"),
-				key.WithHelp("esc", "back"),
-			),
-			Quit: key.NewBinding(
-				key.WithKeys("ctrl+c", "q"),
-				key.WithHelp("ctrl+c/q", "quit"),
-			),
-		},
+// GetKeyBindings returns all key bindings as a slice
+func (k *Keys) GetKeyBindings() []key.Binding {
+	return []key.Binding{
+		k.bindings.Back,
+		k.bindings.Quit,
+		k.bindings.ScrollUp,
+		k.bindings.ScrollDown,
+		k.bindings.Copy,
 	}
 }
 
@@ -57,14 +45,6 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return tea.Quit
 	}
 	return nil
-}
-
-// GetKeyBindings returns all key bindings as a slice
-func (k *Keys) GetKeyBindings() []key.Binding {
-	return []key.Binding{
-		k.bindings.Back,
-		k.bindings.Quit,
-	}
 }
 
 // Handlers manages event handling for the resource detail page
