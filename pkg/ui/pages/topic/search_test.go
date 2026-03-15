@@ -1,9 +1,6 @@
-//go:build pending
-
 package topic
 
-// TestSearchFunctionality skipped: bubble-table API incompatibility
-// TODO: Fix when table library migration is complete
+// TestSearchFunctionality - tests for search functionality
 
 import (
 	"testing"
@@ -17,15 +14,15 @@ func TestHighlightMatchingText(t *testing.T) {
 	// Test basic highlighting
 	result := highlightMatchingText("hello world", "world")
 	assert.Contains(t, result, "world") // Should contain the highlighted text
-	
+
 	// Test case insensitive matching
 	result = highlightMatchingText("Hello World", "world")
 	assert.Contains(t, result, "World") // Should highlight "World"
-	
+
 	// Test no match
 	result = highlightMatchingText("hello world", "xyz")
 	assert.Equal(t, "hello world", result) // Should return original text
-	
+
 	// Test empty query
 	result = highlightMatchingText("hello world", "")
 	assert.Equal(t, "hello world", result) // Should return original text
@@ -53,7 +50,7 @@ func TestSearchFilteringAndHighlighting(t *testing.T) {
 		{Key: "key2", Value: "another test message", Offset: 2, Partition: 0},
 		{Key: "search-key", Value: "find this message", Offset: 3, Partition: 0},
 	}
-	
+
 	for _, msg := range messages {
 		model.AddMessage(msg)
 	}
@@ -61,14 +58,14 @@ func TestSearchFilteringAndHighlighting(t *testing.T) {
 	// Enable search mode and set search query
 	model.searchMode = true
 	model.searchInput.SetValue("test")
-	
+
 	// Filter messages
 	model.FilterMessages()
-	
+
 	// Should have 1 matching message (the second one)
 	assert.Equal(t, 1, len(model.filteredMessages))
 	assert.Equal(t, "another test message", model.filteredMessages[0].Value)
-	
-	// Check that the table was updated
-	assert.Equal(t, 1, len(model.messageTable.Rows()))
+
+	// Note: Can't check table rows directly as bubble-table doesn't expose Rows()
+	// The filtering logic is tested via filteredMessages
 }

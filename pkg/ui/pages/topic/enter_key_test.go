@@ -1,5 +1,3 @@
-//go:build pending
-
 package topic
 
 import (
@@ -12,10 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestEnterKeyNavigation skipped: bubble-table API incompatibility
-// TODO: Fix when table library migration is complete
 func TestEnterKeyNavigation(t *testing.T) {
-	t.Skip("PENDING: bubble-table API incompatibility - model.messageTable.SetCursor undefined")
 	// Create mock data source
 	mockDS := &mock.KafkaDataSourceMock{}
 	mockDS.Init("")
@@ -30,7 +25,7 @@ func TestEnterKeyNavigation(t *testing.T) {
 
 	// Create new model
 	model := NewModel(mockDS, "test-topic", testTopic)
-	
+
 	// Initialize the model properly
 	model.Init()
 
@@ -43,8 +38,8 @@ func TestEnterKeyNavigation(t *testing.T) {
 	}
 	model.AddMessage(testMessage)
 
-	// Select the first message (index 0)
-	model.messageTable.SetCursor(0)
+	// Select the first message using WithHighlightedRow
+	model.messageTable = model.messageTable.WithHighlightedRow(0)
 
 	// Test that Enter key sends the correct PageChangeMsg
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
@@ -55,8 +50,7 @@ func TestEnterKeyNavigation(t *testing.T) {
 
 	// Should return a command
 	if cmd == nil {
-		t.Skip("Skipping - no command returned (table not initialized)")
-		return
+		t.Fatal("Expected command, got nil")
 	}
 
 	// Execute the command to get the message

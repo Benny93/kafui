@@ -1,9 +1,6 @@
-//go:build pending
-
 package topic
 
-// Performance tests skipped: bubble-table API incompatibility
-// TODO: Fix when table library migration is complete
+// Performance tests for topic page
 
 import (
 	"sync"
@@ -11,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
-	"github.com/charmbracelet/bubbles/table"
+	"github.com/evertras/bubble-table/table"
 )
 
 // TestMessageBufferLimit verifies that the message buffer limits messages
@@ -192,18 +189,10 @@ func TestWidthCaching(t *testing.T) {
 	// Initialize width cache
 	model.initWidthCache()
 
-	// Create mock columns
-	columns := []struct {
-		Title string
-		Width int
-	}{
-		{"Key", 20},
-		{"Value", 40},
-	}
-
-	tableColumns := make([]table.Column, len(columns))
-	for i, c := range columns {
-		tableColumns[i] = table.Column{Title: c.Title, Width: c.Width}
+	// Create mock columns using table.NewColumn
+	tableColumns := []table.Column{
+		table.NewColumn("key", "Key", 20),
+		table.NewColumn("value", "Value", 40),
 	}
 
 	// First call should calculate and cache
@@ -363,8 +352,8 @@ func BenchmarkWidthCache(b *testing.B) {
 	model.initWidthCache()
 
 	columns := []table.Column{
-		{Title: "Key", Width: 20},
-		{Title: "Value", Width: 40},
+		table.NewColumn("key", "Key", 20),
+		table.NewColumn("value", "Value", 40),
 	}
 
 	b.ResetTimer()
