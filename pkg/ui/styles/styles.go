@@ -27,6 +27,9 @@ var (
 
 // Styles contains all application-wide styles
 type Styles struct {
+	// Current theme
+	CurrentTheme ThemeType
+
 	// Text styles
 	Base   lipgloss.Style
 	Muted  lipgloss.Style
@@ -43,6 +46,31 @@ type Styles struct {
 	StatusStyle     StatusStyles
 	HelpStyle       HelpStyles
 	NavigationStyle NavigationStyles
+}
+
+// ToggleTheme switches between dark and light themes
+func (s *Styles) ToggleTheme() {
+	if s.CurrentTheme == LightTheme {
+		s.CurrentTheme = DarkTheme
+	} else {
+		s.CurrentTheme = LightTheme
+	}
+	
+	// Apply the new theme
+	theme := GetTheme(s.CurrentTheme)
+	s.ApplyTheme(theme)
+}
+
+// SetTheme sets a specific theme
+func (s *Styles) SetTheme(themeType ThemeType) {
+	s.CurrentTheme = themeType
+	theme := GetTheme(themeType)
+	s.ApplyTheme(theme)
+}
+
+// GetTheme returns the current theme type
+func (s *Styles) GetTheme() ThemeType {
+	return s.CurrentTheme
 }
 
 type HeaderStyles struct {
@@ -104,7 +132,9 @@ type NavigationStyles struct {
 
 // DefaultStyles returns the default application styles
 func DefaultStyles() *Styles {
-	s := &Styles{}
+	s := &Styles{
+		CurrentTheme: DarkTheme, // Default to dark theme
+	}
 
 	// Text styles
 	s.Base = lipgloss.NewStyle().Foreground(FgBase)

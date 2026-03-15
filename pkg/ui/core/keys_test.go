@@ -74,8 +74,8 @@ func TestDefaultGlobalKeys(t *testing.T) {
 
 func TestGetAllBindings(t *testing.T) {
 	bindings := DefaultGlobalKeys.GetAllBindings()
-	
-	expectedCount := 5
+
+	expectedCount := 6
 	if len(bindings) != expectedCount {
 		t.Errorf("Expected %d bindings, got %d", expectedCount, len(bindings))
 	}
@@ -87,6 +87,7 @@ func TestGetAllBindings(t *testing.T) {
 		DefaultGlobalKeys.Back,
 		DefaultGlobalKeys.NextPage,
 		DefaultGlobalKeys.PrevPage,
+		DefaultGlobalKeys.ToggleTheme,
 	}
 
 	for i, expected := range expectedBindings {

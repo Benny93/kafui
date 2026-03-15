@@ -99,6 +99,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle global key bindings
 		switch {
+		case key.Matches(msg, core.DefaultGlobalKeys.ToggleTheme):
+			// Toggle theme between dark and light
+			if m.common.Styles != nil {
+				m.common.Styles.ToggleTheme()
+				// Update config to reflect current theme
+				m.common.Config.Theme = string(m.common.Styles.GetTheme())
+			}
+			return m, nil
 		case key.Matches(msg, core.DefaultGlobalKeys.Help):
 			// Toggle help state
 			if m.state == core.StateHelp {

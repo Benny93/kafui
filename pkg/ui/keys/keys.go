@@ -27,10 +27,11 @@ type KeyMap struct {
 
 // GlobalKeyMap contains global key bindings available on all pages
 type GlobalKeyMap struct {
-	Quit  key.Binding
-	Help  key.Binding
-	Back  key.Binding
-	Search key.Binding
+	Quit       key.Binding
+	Help       key.Binding
+	Back       key.Binding
+	Search     key.Binding
+	ToggleTheme key.Binding
 }
 
 // MainKeyMap contains key bindings for the main page
@@ -208,6 +209,10 @@ func DefaultGlobalKeyMap() GlobalKeyMap {
 		Search: key.NewBinding(
 			key.WithKeys("/"),
 			key.WithHelp("/", "search"),
+		),
+		ToggleTheme: key.NewBinding(
+			key.WithKeys("T"),
+			key.WithHelp("T", "toggle theme"),
 		),
 	}
 }
