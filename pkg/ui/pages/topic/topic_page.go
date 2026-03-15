@@ -343,8 +343,8 @@ func (m *Model) updateTableDimensions(width, height int) {
 	m.messageTable = m.messageTable.WithPageSize(tableHeight)
 
 	// Calculate column widths based on available width
-	// Account for table border (2) and separators (4 for 5 columns) plus safety margin = 8 chars total overhead
-	availableWidth := width - 8
+	// Account for table border (2) and separators (4 for 5 columns) = 6 chars total overhead
+	availableWidth := width - 6
 	if availableWidth < 60 {
 		availableWidth = 60 // Minimum width for all columns
 	}
@@ -641,8 +641,8 @@ func (m *Model) renderTableCustom(width, height int) string {
 	messages = sortedMessages
 
 	// Calculate column widths based on available width
-	// Account for padding and separators
-	availableWidth := width - 6
+	// Account for spaces before each of the 4 columns
+	availableWidth := width - 4
 	if availableWidth < 60 {
 		availableWidth = 60
 	}
@@ -702,7 +702,7 @@ func (m *Model) renderTableCustom(width, height int) string {
 		m.topicName, m.pagination.Page+1, m.pagination.TotalPages, m.pagination.TotalMessages)
 	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")).Render(header))
 	sb.WriteString("\n")
-	sb.WriteString(strings.Repeat("─", width-2))
+	sb.WriteString(strings.Repeat("─", width))
 	sb.WriteString("\n")
 
 	// Column headers with dynamic widths
@@ -711,7 +711,7 @@ func (m *Model) renderTableCustom(width, height int) string {
 		fmt.Sprintf(colHeaderFmt, "Offset", "Partition", "Key", "Value"),
 	))
 	sb.WriteString("\n")
-	sb.WriteString(strings.Repeat("─", width-2))
+	sb.WriteString(strings.Repeat("─", width))
 	sb.WriteString("\n")
 
 	// Get current cursor position for highlighting

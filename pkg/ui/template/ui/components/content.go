@@ -13,7 +13,8 @@ const (
 	// ContentLeftPadding is the total horizontal padding (border + inner padding)
 	ContentLeftPadding = 4
 	// MaxContentWidth is the maximum width for content readability (matches CRUSH standard)
-	MaxContentWidth = 120
+	// Increased for Kafui to better support wide message tables
+	MaxContentWidth = 240
 )
 
 type Content interface {
