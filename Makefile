@@ -30,6 +30,10 @@ build:
 
 build-debug:
 	go build -tags debug -ldflags "-w -s" -o kafui-debug .
+	@echo ""
+	@echo "Debug build complete: ./kafui-debug"
+	@echo "Press F3 to save a screenshot"
+	@echo "Press Shift+F3 to save a redacted screenshot"
 
 run-debug:
 	go run -tags debug -ldflags "-w -s" .
@@ -38,6 +42,10 @@ test-debug:
 	go test -tags debug -v -cover -coverprofile=coverage.debug.out ./pkg/ui/debug/...
 	go tool cover -html=coverage.debug.out -o coverage.debug.html
 	@echo "Debug test coverage report generated: coverage.debug.html"
+	@echo ""
+	@echo "Debug features enabled:"
+	@echo "  F3        - Save screenshot"
+	@echo "  Shift+F3  - Save redacted screenshot"
 
 install:
 	go install -ldflags "-w -s" .
