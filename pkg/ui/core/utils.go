@@ -106,8 +106,8 @@ func WrapText(text string, width int) []string {
 	return lines
 }
 
-// StatusMessage formats a status message with type prefix
-func StatusMessage(message string, statusType StatusType) string {
+// FormatStatusMessage formats a status message with type prefix
+func FormatStatusMessage(message string, statusType StatusType) string {
 	var prefix string
 	switch statusType {
 	case StatusError:
