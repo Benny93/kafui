@@ -217,12 +217,12 @@ func DefaultGlobalKeyMap() GlobalKeyMap {
 			key.WithHelp("T", "toggle theme"),
 		),
 		DebugScreenshot: key.NewBinding(
-			key.WithKeys("ctrl+d"),
-			key.WithHelp("ctrl+d", "save screenshot"),
+			key.WithKeys("f3"),
+			key.WithHelp("F3", "save screenshot"),
 		),
 		DebugScreenshotRedacted: key.NewBinding(
-			key.WithKeys("ctrl+alt+d"),
-			key.WithHelp("ctrl+alt+d", "save redacted screenshot"),
+			key.WithKeys("shift+f3"),
+			key.WithHelp("Shift+F3", "save redacted screenshot"),
 		),
 	}
 }
