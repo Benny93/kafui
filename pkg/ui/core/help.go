@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -54,38 +55,38 @@ func createHelpStyles() HelpStyles {
 	return HelpStyles{
 		Container: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
+			BorderForeground(styles.Primary).
 			Padding(1, 2).
 			Margin(1).
-			Background(lipgloss.Color("235")),
-		
+			Background(styles.BgSubtle),
+
 		Title: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
+			Foreground(styles.Primary).
 			Bold(true).
 			Align(lipgloss.Center).
 			MarginBottom(1),
-		
+
 		SectionTitle: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("39")).
+			Foreground(styles.Info).
 			Bold(true).
 			MarginTop(1).
 			MarginBottom(1),
-		
+
 		KeyBinding: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("228")).
+			Foreground(styles.Accent).
 			Bold(true),
-		
+
 		Description: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252")),
-		
+			Foreground(styles.FgBase),
+
 		Footer: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
+			Foreground(styles.FgMuted).
 			Italic(true).
 			Align(lipgloss.Center).
 			MarginTop(1),
-		
+
 		Separator: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
+			Foreground(styles.FgMuted).
 			MarginTop(1).
 			MarginBottom(1),
 	}

@@ -2,6 +2,7 @@ package components
 
 import (
 	"github.com/Benny93/kafui/pkg/ui/core"
+	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -9,36 +10,36 @@ import (
 var (
 	modalStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
-			Background(lipgloss.Color("235")).
+			BorderForeground(stylesPkg.Primary).
+			Background(stylesPkg.BgSubtle).
 			Padding(1, 2).
 			Width(50).
 			Align(lipgloss.Center)
 
 	titleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
+			Foreground(stylesPkg.Primary).
 			Bold(true).
 			MarginBottom(1)
 
 	buttonStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Background(lipgloss.Color("235")).
+			Foreground(stylesPkg.FgMuted).
+			Background(stylesPkg.BgSubtle).
 			Padding(0, 2).
 			Margin(0, 1)
 
 	activeButtonStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("255")).
-				Background(lipgloss.Color("205")).
+				Foreground(stylesPkg.FgBase).
+				Background(stylesPkg.Primary).
 				Padding(0, 2).
 				Margin(0, 1)
 
 	inputStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240")).
+			BorderForeground(stylesPkg.FgMuted).
 			Padding(0, 1)
 
 	modalErrorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
+			Foreground(stylesPkg.Error).
 			Bold(true)
 )
 

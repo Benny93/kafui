@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -235,7 +236,7 @@ func (m *MessageDetailContentProvider) renderSplitContentTab() string {
 	
 	// Create styled schema headers
 	schemaHeaderStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(stylesPkg.FgMuted).
 		Italic(true).
 		Padding(0, 1)
 	
@@ -742,26 +743,26 @@ func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
 var (
 	inactiveTabBorder = tabBorderWithBottom("", "", "")
 	activeTabBorder   = tabBorderWithBottom("", " ", "")
-	highlightColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+	highlightColor    = stylesPkg.Primary
 	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
 	activeTabStyle    = inactiveTabStyle.Border(activeTabBorder, true)
 	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 1).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 
 	// Editor styles
-	cursorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
+	cursorStyle     = lipgloss.NewStyle().Foreground(stylesPkg.Warning)
 	cursorLineStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("57")).
-			Foreground(lipgloss.Color("230"))
+			Background(stylesPkg.Info).
+			Foreground(stylesPkg.FgBase)
 	placeholderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("238"))
+				Foreground(stylesPkg.FgSubtle)
 	endOfBufferStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("235"))
+				Foreground(stylesPkg.FgSubtle)
 	focusedPlaceholderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("99"))
+				Foreground(stylesPkg.Primary)
 	focusedBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(highlightColor)
 	blurredBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("238"))
+				BorderForeground(stylesPkg.FgSubtle)
 )
