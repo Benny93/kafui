@@ -10,6 +10,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
@@ -177,17 +178,17 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 		WithHighlightedRow(0).
 		WithBaseStyle(
 			lipgloss.NewStyle().
-				BorderForeground(lipgloss.Color("240")),
+				BorderForeground(stylesPkg.FgSubtle),
 		).
 		HeaderStyle(
 			lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")).
+				Foreground(stylesPkg.FgMuted).
 				Bold(true),
 		).
 		HighlightStyle(
 			lipgloss.NewStyle().
-				Background(lipgloss.Color("205")).
-				Foreground(lipgloss.Color("0")).
+				Background(stylesPkg.Primary).
+				Foreground(stylesPkg.BgBase).
 				Bold(true),
 		).
 		Focused(true).
@@ -202,7 +203,7 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 	// Initialize spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	sp.Style = lipgloss.NewStyle().Foreground(stylesPkg.Primary)
 
 	m := &Model{
 		common:           nil, // Will be set by NewTopicPageModelWithCommon
@@ -714,7 +715,7 @@ func (m *Model) renderTableCustom(width, height int) string {
 	// Header with pagination info
 	header := fmt.Sprintf(" %s | Page %d/%d | %d msgs",
 		m.topicName, m.pagination.Page+1, m.pagination.TotalPages, m.pagination.TotalMessages)
-	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")).Render(header))
+	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(stylesPkg.Primary).Render(header))
 	sb.WriteString("\n")
 	sb.WriteString(strings.Repeat("─", width))
 	sb.WriteString("\n")
@@ -743,7 +744,7 @@ func (m *Model) renderTableCustom(width, height int) string {
 
 		// Highlight selected row
 		if i == cursorRow {
-			line = lipgloss.NewStyle().Background(lipgloss.Color("205")).Foreground(lipgloss.Color("0")).Render(line)
+			line = lipgloss.NewStyle().Background(stylesPkg.Primary).Foreground(stylesPkg.BgBase).Render(line)
 		}
 
 		sb.WriteString(line)
@@ -758,7 +759,7 @@ func (m *Model) renderTableCustom(width, height int) string {
 	} else {
 		footer = fmt.Sprintf(" %d message(s) | [R] refresh | [/] search | [space] pause", m.pagination.TotalMessages)
 	}
-	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(footer))
+	sb.WriteString(lipgloss.NewStyle().Foreground(stylesPkg.FgMuted).Render(footer))
 
 	return sb.String()
 }
@@ -834,7 +835,7 @@ func highlightMatchingText(text, query string) string {
 
 		// Add highlighted match (using Lip Gloss styling)
 		match := text[actualIndex : actualIndex+len(query)]
-		highlighted := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render(match)
+		highlighted := lipgloss.NewStyle().Foreground(stylesPkg.Primary).Render(match)
 		result.WriteString(highlighted)
 
 		// Move start position
