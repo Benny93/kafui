@@ -97,6 +97,7 @@ func (h *Handlers) handleKeyMsg(model *Model, msg tea.KeyMsg) (tea.Model, tea.Cm
 func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (tea.Model, tea.Cmd) {
 	// Add the consumed message to internal storage (doesn't trigger view update)
 	model.addMessageInternal(msg.Message)
+	model.markRenderDirty()
 
 	// Continue listening for more messages if we're still consuming
 	if model.consuming && model.msgChan != nil {
@@ -114,10 +115,10 @@ func (h *Handlers) handleMessagesFetched(model *Model, msg MessagesFetchedMsg) (
 
 	// Update pagination
 	model.pagination.SetTotalMessages(len(model.filteredMessages))
-	
+
 	// Mark render as dirty to show the messages
 	model.markRenderDirty()
-	
+
 	model.statusMessage = fmt.Sprintf("Loaded %d messages", len(model.messages))
 
 	return model, nil

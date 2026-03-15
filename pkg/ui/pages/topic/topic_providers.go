@@ -50,7 +50,9 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 
 	// PERFORMANCE: For large datasets, use custom renderer (bypasses bubbles table overhead)
 	if len(t.model.filteredMessages) > UseCustomRenderer {
-		content = t.renderCustomTable(width, height)
+		content = t.model.renderTableCustom(width, height)
+		// Use MaxWidth to ensure content doesn't exceed available width
+		content = lipgloss.NewStyle().MaxWidth(width).Render(content)
 	} else {
 		// For small datasets, use standard table rendering
 		t.model.updateMessageTable()

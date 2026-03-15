@@ -3,6 +3,7 @@ package topic
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -123,7 +124,7 @@ type Model struct {
 	lastRenderTime time.Time
 	renderCache    string
 	renderCacheMu  sync.RWMutex
-	
+
 	// Dirty flag for render invalidation
 	dirtyRender bool
 }
@@ -155,11 +156,11 @@ func (m *Model) setRenderCache(render string) {
 func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api.Topic) *Model {
 	// Define table columns using bubble-table
 	const (
-		colOffset   = "offset"
+		colOffset    = "offset"
 		colPartition = "partition"
 		colTimestamp = "timestamp"
-		colKey      = "key"
-		colValue    = "value"
+		colKey       = "key"
+		colValue     = "value"
 	)
 
 	columns := []table.Column{
@@ -242,13 +243,40 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 	return m
 }
 
+// sortMessages sorts messages by offset ascending (required for pagination logic)
+func (m *Model) sortMessages() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Sort messages by offset ascending
+	sort.Slice(m.messages, func(i, j int) bool {
+		if m.messages[i].Offset != m.messages[j].Offset {
+			return m.messages[i].Offset < m.messages[j].Offset
+		}
+		return m.messages[i].Partition < m.messages[j].Partition
+	})
+
+	// Also sort filtered messages
+	if len(m.filteredMessages) > 0 && len(m.filteredMessages) != len(m.messages) {
+		sort.Slice(m.filteredMessages, func(i, j int) bool {
+			if m.filteredMessages[i].Offset != m.filteredMessages[j].Offset {
+				return m.filteredMessages[i].Offset < m.filteredMessages[j].Offset
+			}
+			return m.filteredMessages[i].Partition < m.filteredMessages[j].Partition
+		})
+	} else {
+		// Make sure filteredMessages is updated to the sorted messages
+		m.filteredMessages = m.messages
+	}
+}
+
 // Business logic methods for the original Model
 
 // Init implements the Page interface for the original model
 func (m *Model) Init() tea.Cmd {
 	// Set initial loading state
 	m.loading = true
-	
+
 	// Fetch latest 300 messages (15 pages of 20)
 	const fetchCount = 300
 	cmds := []tea.Cmd{
@@ -287,11 +315,13 @@ func (m *Model) updateTableDimensions(width, height int) {
 	m.lastTableWidth = width
 	m.lastTableHeight = height
 
+	m.markRenderDirty()
+
 	// Height passed is from content component, but actual usable height is less:
 	// - Content component has border (2) + padding (2) = 4 lines overhead
 	// So actual inner height = height - 4
 	innerHeight := height - 4
-	
+
 	// Account for table elements within the inner area:
 	// - Table header: 1 line
 	// - Table bottom border: 1 line
@@ -309,12 +339,12 @@ func (m *Model) updateTableDimensions(width, height int) {
 	if tableHeight > MaxDisplayedMessages {
 		tableHeight = MaxDisplayedMessages
 	}
+	m.pagination.SetPerPage(tableHeight)
 	m.messageTable = m.messageTable.WithPageSize(tableHeight)
 
 	// Calculate column widths based on available width
-	// Width passed is the capped content width from content component
-	// Account for table border and internal padding (approximately 4 chars total)
-	availableWidth := width - 4
+	// Account for table border (2) and separators (4 for 5 columns) plus safety margin = 8 chars total overhead
+	availableWidth := width - 8
 	if availableWidth < 60 {
 		availableWidth = 60 // Minimum width for all columns
 	}
@@ -485,17 +515,31 @@ func (m *Model) FilterMessages() {
 
 // updateMessageTable updates the table with paginated messages
 func (m *Model) updateMessageTable() {
+	// Ensure messages are sorted for pagination
+	m.sortMessages()
+
 	// Get paginated messages
 	paginatedMessages := m.pagination.GetVisibleMessages(m.filteredMessages)
 
+	// Sort messages for display based on current sort order
+	// Create a copy to avoid modifying the original slice
+	sortedMessages := make([]api.Message, len(paginatedMessages))
+	copy(sortedMessages, paginatedMessages)
+	sort.Slice(sortedMessages, func(i, j int) bool {
+		if m.pagination.SortOrder == "newest_first" {
+			return sortedMessages[i].Offset > sortedMessages[j].Offset
+		}
+		return sortedMessages[i].Offset < sortedMessages[j].Offset
+	})
+
 	// For large datasets, use fast rendering (bypass table component overhead)
 	if len(m.filteredMessages) > UseCustomRenderer {
-		m.renderTableFast(paginatedMessages)
+		m.renderTableFast(sortedMessages)
 		return
 	}
 
 	// For small datasets, use standard table rendering
-	rows := make([]table.Row, len(paginatedMessages))
+	rows := make([]table.Row, len(sortedMessages))
 
 	searchQuery := ""
 	if m.searchMode {
@@ -503,10 +547,22 @@ func (m *Model) updateMessageTable() {
 	}
 
 	// Get current column widths for proper truncation
-	keyMaxLen := 20
-	valueMaxLen := 40
+	var keyMaxLen, valueMaxLen int
+	for _, col := range m.tableColumns {
+		if col.Title() == "Key" {
+			keyMaxLen = col.Width() - 1 // allow 1 padding
+		} else if col.Title() == "Value" {
+			valueMaxLen = col.Width() - 1
+		}
+	}
+	if keyMaxLen < 1 {
+		keyMaxLen = 20
+	}
+	if valueMaxLen < 1 {
+		valueMaxLen = 40
+	}
 
-	for i, msg := range paginatedMessages {
+	for i, msg := range sortedMessages {
 		offset := "N/A"
 		if msg.Offset >= 0 {
 			offset = fmt.Sprintf("%d", msg.Offset)
@@ -565,14 +621,28 @@ func (m *Model) renderTableFast(messages []api.Message) {
 // renderTableCustom renders a custom table view for large datasets with pagination
 // This bypasses the bubbles table component overhead entirely
 func (m *Model) renderTableCustom(width, height int) string {
+	// Ensure messages are sorted for pagination
+	m.sortMessages()
+
 	messages := m.pagination.GetVisibleMessages(m.filteredMessages)
 	if len(messages) == 0 {
 		return "No messages"
 	}
 
+	// Sort messages for display based on current sort order
+	sortedMessages := make([]api.Message, len(messages))
+	copy(sortedMessages, messages)
+	sort.Slice(sortedMessages, func(i, j int) bool {
+		if m.pagination.SortOrder == "newest_first" {
+			return sortedMessages[i].Offset > sortedMessages[j].Offset
+		}
+		return sortedMessages[i].Offset < sortedMessages[j].Offset
+	})
+	messages = sortedMessages
+
 	// Calculate column widths based on available width
-	// Account for left padding (2) and right edge (2)
-	availableWidth := width - 4
+	// Account for padding and separators
+	availableWidth := width - 6
 	if availableWidth < 60 {
 		availableWidth = 60
 	}
@@ -613,7 +683,7 @@ func (m *Model) renderTableCustom(width, height int) string {
 	// - Content component has border (2) + padding (2) = 4 lines overhead
 	// So actual inner height = height - 4
 	innerHeight := height - 4
-	
+
 	// Reserve lines for: header (1), separator (1), column headers (1), separator (1), footer (1)
 	reservedLines := 5
 	availableRows := innerHeight - reservedLines
@@ -632,7 +702,7 @@ func (m *Model) renderTableCustom(width, height int) string {
 		m.topicName, m.pagination.Page+1, m.pagination.TotalPages, m.pagination.TotalMessages)
 	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")).Render(header))
 	sb.WriteString("\n")
-	sb.WriteString(strings.Repeat("─", width-4))
+	sb.WriteString(strings.Repeat("─", width-2))
 	sb.WriteString("\n")
 
 	// Column headers with dynamic widths
@@ -641,7 +711,7 @@ func (m *Model) renderTableCustom(width, height int) string {
 		fmt.Sprintf(colHeaderFmt, "Offset", "Partition", "Key", "Value"),
 	))
 	sb.WriteString("\n")
-	sb.WriteString(strings.Repeat("─", width-4))
+	sb.WriteString(strings.Repeat("─", width-2))
 	sb.WriteString("\n")
 
 	// Get current cursor position for highlighting
@@ -781,7 +851,7 @@ func (m *Model) addMessageInternal(msg api.Message) {
 
 		// Add new message
 		m.messages = append(m.messages, msg)
-		
+
 		// Update filtered messages but don't trigger render
 		m.filteredMessages = m.messages
 		m.pagination.SetTotalMessages(len(m.filteredMessages))
