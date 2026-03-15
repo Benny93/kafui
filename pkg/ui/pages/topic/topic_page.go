@@ -20,13 +20,13 @@ import (
 	"github.com/evertras/bubble-table/table"
 )
 
-// Maximum number of messages to display in the table
-const MaxDisplayedMessages = 20
+// Maximum number of messages to display in the table (default, will be overridden by height)
+const MaxDisplayedMessages = 50
 
 // Performance optimization constants
 const (
-	// MaxVisibleRows limits rendered rows (virtual scrolling)
-	MaxVisibleRows = 30
+	// MaxVisibleRows limits rendered rows (virtual scrolling) - default, overridden by height
+	MaxVisibleRows = 50
 	// UpdateThrottle prevents excessive re-renders
 	UpdateThrottle = 100 * time.Millisecond
 	// BatchSize for message processing
@@ -287,30 +287,34 @@ func (m *Model) updateTableDimensions(width, height int) {
 	m.lastTableWidth = width
 	m.lastTableHeight = height
 
-	// Calculate available space for content
-	// Height passed is already inner content height, account for:
-	// - Search bar (when active): ~3 lines
+	// Height passed is from content component, but actual usable height is less:
+	// - Content component has border (2) + padding (2) = 4 lines overhead
+	// So actual inner height = height - 4
+	innerHeight := height - 4
+	
+	// Account for table elements within the inner area:
 	// - Table header: 1 line
-	// - Table borders: 2 lines
-	// - Bottom padding/controls: 2 lines
-	reservedLines := 6
+	// - Table bottom border: 1 line
+	reservedLines := 2
 	if m.searchMode {
-		reservedLines += 3
+		reservedLines += 3 // Search bar lines
 	}
 
-	// Update table height (number of visible rows)
-	tableHeight := height - reservedLines
+	// Update table height (number of visible rows) based on available height
+	tableHeight := innerHeight - reservedLines
 	if tableHeight < 5 {
 		tableHeight = 5 // Minimum visible rows
 	}
+	// Use calculated height - allow it to grow with terminal
 	if tableHeight > MaxDisplayedMessages {
-		tableHeight = MaxDisplayedMessages // Maximum visible rows
+		tableHeight = MaxDisplayedMessages
 	}
 	m.messageTable = m.messageTable.WithPageSize(tableHeight)
 
 	// Calculate column widths based on available width
-	// Account for content padding (4 chars) and borders
-	availableWidth := width - 8
+	// Width passed is the capped content width from content component
+	// Account for table border and internal padding (approximately 4 chars total)
+	availableWidth := width - 4
 	if availableWidth < 60 {
 		availableWidth = 60 // Minimum width for all columns
 	}
@@ -343,6 +347,11 @@ func (m *Model) updateTableDimensions(width, height int) {
 	keyWidth := minKeyWidth + remainingWidth*20/100
 	// Value gets the remainder to ensure exact fit
 	valueWidth := availableWidth - offsetWidth - partitionWidth - timestampWidth - keyWidth
+
+	// Ensure value column gets at least its minimum
+	if valueWidth < minValueWidth {
+		valueWidth = minValueWidth
+	}
 
 	// Update column widths
 	columns := []table.Column{
@@ -561,27 +570,75 @@ func (m *Model) renderTableCustom(width, height int) string {
 		return "No messages"
 	}
 
-	// Column widths
+	// Calculate column widths based on available width
+	// Account for left padding (2) and right edge (2)
+	availableWidth := width - 4
+	if availableWidth < 60 {
+		availableWidth = 60
+	}
+
+	// Define minimum column widths
 	const (
-		offsetWidth = 10
-		partWidth   = 10
-		keyWidth    = 20
-		valueWidth  = 40
+		minOffsetWidth    = 10
+		minPartitionWidth = 10
+		minKeyWidth       = 20
+		minValueWidth     = 15
 	)
+
+	// Calculate total minimum width required
+	minTotalWidth := minOffsetWidth + minPartitionWidth + minKeyWidth + minValueWidth
+
+	// Ensure available width is at least the minimum total
+	if availableWidth < minTotalWidth {
+		availableWidth = minTotalWidth
+	}
+
+	// Calculate remaining width after allocating minimums
+	remainingWidth := availableWidth - minTotalWidth
+
+	// Distribute remaining width: Value column gets most (60%), others share the rest
+	offsetWidth := minOffsetWidth + remainingWidth*10/100
+	partitionWidth := minPartitionWidth + remainingWidth*10/100
+	keyWidth := minKeyWidth + remainingWidth*20/100
+	// Value gets the remainder to ensure exact fit
+	valueWidth := availableWidth - offsetWidth - partitionWidth - keyWidth
+
+	// Ensure value column gets at least its minimum
+	if valueWidth < minValueWidth {
+		valueWidth = minValueWidth
+	}
+
+	// Calculate available rows based on height
+	// Height passed is from content component:
+	// - Content component has border (2) + padding (2) = 4 lines overhead
+	// So actual inner height = height - 4
+	innerHeight := height - 4
+	
+	// Reserve lines for: header (1), separator (1), column headers (1), separator (1), footer (1)
+	reservedLines := 5
+	availableRows := innerHeight - reservedLines
+	if availableRows < 5 {
+		availableRows = 5
+	}
+	// Limit messages to available rows
+	if len(messages) > availableRows {
+		messages = messages[:availableRows]
+	}
 
 	var sb strings.Builder
 
 	// Header with pagination info
-	header := fmt.Sprintf(" %s | Page %d/%d | %d msgs", 
+	header := fmt.Sprintf(" %s | Page %d/%d | %d msgs",
 		m.topicName, m.pagination.Page+1, m.pagination.TotalPages, m.pagination.TotalMessages)
 	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")).Render(header))
 	sb.WriteString("\n")
 	sb.WriteString(strings.Repeat("─", width-4))
 	sb.WriteString("\n")
 
-	// Column headers
+	// Column headers with dynamic widths
+	colHeaderFmt := fmt.Sprintf(" %%-%ds %%-%ds %%-%ds %%-%ds", offsetWidth, partitionWidth, keyWidth, valueWidth)
 	sb.WriteString(lipgloss.NewStyle().Bold(true).Render(
-		fmt.Sprintf(" %-10s %-10s %-20s %-40s", "Offset", "Partition", "Key", "Value"),
+		fmt.Sprintf(colHeaderFmt, "Offset", "Partition", "Key", "Value"),
 	))
 	sb.WriteString("\n")
 	sb.WriteString(strings.Repeat("─", width-4))
@@ -590,14 +647,15 @@ func (m *Model) renderTableCustom(width, height int) string {
 	// Get current cursor position for highlighting
 	cursorRow := m.messageTable.GetHighlightedRowIndex()
 
-	// Rows
+	// Rows with dynamic widths
+	rowFmt := fmt.Sprintf(" %%-%ds %%-%ds %%-%ds %%-%ds", offsetWidth, partitionWidth, keyWidth, valueWidth)
 	for i, msg := range messages {
 		offset := fmt.Sprintf("%d", msg.Offset)
 		partition := fmt.Sprintf("%d", msg.Partition)
 		key := truncateString(msg.Key, keyWidth)
 		value := truncateString(msg.Value, valueWidth)
 
-		line := fmt.Sprintf(" %-10s %-10s %-20s %-40s", offset, partition, key, value)
+		line := fmt.Sprintf(rowFmt, offset, partition, key, value)
 
 		// Highlight selected row
 		if i == cursorRow {
@@ -611,7 +669,7 @@ func (m *Model) renderTableCustom(width, height int) string {
 	// Footer with pagination controls
 	var footer string
 	if m.pagination.TotalPages > 1 {
-		footer = fmt.Sprintf(" [←/→] Page %d/%d | [R] refresh | [/] search | [space] pause", 
+		footer = fmt.Sprintf(" [←/→] Page %d/%d | [R] refresh | [/] search | [space] pause",
 			m.pagination.Page+1, m.pagination.TotalPages)
 	} else {
 		footer = fmt.Sprintf(" %d message(s) | [R] refresh | [/] search | [space] pause", m.pagination.TotalMessages)

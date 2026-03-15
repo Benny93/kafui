@@ -200,15 +200,6 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return k.handleNavigation(model, "end")
 	}
 
-	// Skip default table navigation for large datasets (use pagination instead)
-	// For small datasets, use table cursor navigation
-	if model.pagination.TotalPages <= 1 {
-		// Let bubble-table handle navigation for single page
-		var cmd tea.Cmd
-		model.messageTable, cmd = model.messageTable.Update(msg)
-		cmds = append(cmds, cmd)
-	}
-
 	return tea.Batch(cmds...)
 }
 
@@ -319,11 +310,25 @@ func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
 	// Up/Down navigate rows within current page (table cursor)
 	switch direction {
 	case "up":
-		model.messageTable = model.messageTable.PageUp()
+		// Move highlight up by one row
+		currentRow := model.messageTable.GetHighlightedRowIndex()
+		if currentRow > 0 {
+			model.messageTable = model.messageTable.WithHighlightedRow(currentRow - 1)
+		}
 		model.markRenderDirty()
 		return nil
 	case "down":
-		model.messageTable = model.messageTable.PageDown()
+		// Move highlight down by one row
+		currentRow := model.messageTable.GetHighlightedRowIndex()
+		pageSize := model.messageTable.PageSize()
+		// Get current visible messages count
+		visibleCount := len(model.pagination.GetVisibleMessages(model.filteredMessages))
+		if visibleCount == 0 {
+			visibleCount = pageSize
+		}
+		if currentRow < visibleCount-1 {
+			model.messageTable = model.messageTable.WithHighlightedRow(currentRow + 1)
+		}
 		model.markRenderDirty()
 		return nil
 	case "home":

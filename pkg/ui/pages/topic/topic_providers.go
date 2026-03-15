@@ -26,14 +26,12 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 	if cached, ok := t.model.getRenderCache(); ok {
 		return cached
 	}
-	
+
 	// Update table dimensions based on actual content area size
 	// width/height here are the inner content dimensions (after border and padding)
-	// We need to add back the border (2) and padding (2) to get the full cell width
+	// They are already the correct dimensions for the table
 	if width > 0 && height > 0 {
-		cellWidth := width + 4 // Account for border and padding
-		cellHeight := height + 4
-		t.model.updateTableDimensions(cellWidth, cellHeight)
+		t.model.updateTableDimensions(width, height)
 	}
 
 	if t.model.error != nil {
@@ -71,13 +69,13 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 		// Use MaxWidth to ensure table doesn't exceed available width
 		tableView = lipgloss.NewStyle().MaxWidth(width).Render(tableView)
 		contentBuilder.WriteString(tableView)
-		
+
 		content = contentBuilder.String()
 	}
-	
+
 	// Cache the render result
 	t.model.setRenderCache(content)
-	
+
 	return content
 }
 
