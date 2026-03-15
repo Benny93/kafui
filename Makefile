@@ -9,6 +9,7 @@ GOBIN ?= $$(go env GOPATH)/bin
 
 .PHONY: build install run run-mock release release-snapshot test test-short test-integration test-benchmarks run-kafka stop-kafka docker-build
 .PHONY: vhs vhs-install vhs-clean
+.PHONY: build-debug run-debug test-debug
 
 
 install-go-test-coverage:
@@ -26,6 +27,18 @@ treemap-coverage: install-go-cover-treemap
 
 build:
 	go build -ldflags "-w -s" .
+
+build-debug:
+	go build -tags debug -ldflags "-w -s" -o kafui-debug .
+
+run-debug:
+	go run -tags debug -ldflags "-w -s" .
+
+test-debug:
+	go test -tags debug -v -cover -coverprofile=coverage.debug.out ./pkg/ui/debug/...
+	go tool cover -html=coverage.debug.out -o coverage.debug.html
+	@echo "Debug test coverage report generated: coverage.debug.html"
+
 install:
 	go install -ldflags "-w -s" .
 run:
