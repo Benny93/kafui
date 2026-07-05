@@ -4,7 +4,38 @@ import (
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/components"
 )
+
+// ConsumeMode controls how the topic page fetches and displays messages.
+type ConsumeMode int
+
+const (
+	// ModeNewest shows the latest N messages, paginated (Follow=false).
+	ModeNewest ConsumeMode = iota
+	// ModeOldest shows messages starting from the earliest offset, paginated (Follow=false).
+	ModeOldest
+	// ModeLive streams messages arriving in real time (Follow=true).
+	ModeLive
+)
+
+// String returns a short label for display in the UI.
+func (m ConsumeMode) String() string {
+	switch m {
+	case ModeNewest:
+		return "Newest"
+	case ModeOldest:
+		return "Oldest"
+	case ModeLive:
+		return "Live"
+	}
+	return "Unknown"
+}
+
+// Next cycles to the next mode in order: Newest → Oldest → Live → Newest.
+func (m ConsumeMode) Next() ConsumeMode {
+	return (m + 1) % 3
+}
 
 // Custom message types for the topic page
 type (
@@ -52,6 +83,24 @@ type (
 
 	// Fetch messages (non-streaming)
 	MessagesFetchedMsg struct {
+		Messages []api.Message
+	}
+
+	// StartFetchMsg signals that a background progress-tracked fetch has started.
+	// ProgressCh delivers per-item ProgressMsg updates (owned by FetchProgressBar).
+	// ResultCh delivers the final MessagesFetchedMsg when the fetch completes.
+	// When Append is true the handler merges results into the existing message store
+	// rather than replacing it.
+	StartFetchMsg struct {
+		ProgressCh <-chan components.ProgressMsg
+		ResultCh   <-chan MessagesFetchedMsg
+		Total      int
+		Append     bool // true for batch-pagination fetches
+	}
+
+	// VisibleMessagesDecodedMsg carries the result of lazily decoding the visible page.
+	// The handler merges decoded Key/Value back into the model's message store.
+	VisibleMessagesDecodedMsg struct {
 		Messages []api.Message
 	}
 

@@ -25,15 +25,36 @@ type KeyMap struct {
 	Search SearchKeyMap
 }
 
-// GlobalKeyMap contains global key bindings available on all pages
+// GlobalKeyMap contains global key bindings available on all pages. This is the
+// single canonical global registry (UI-17): the shell (pkg/ui/ui.go) and focus
+// manager match against GlobalKeys, and the help/footer render from it.
 type GlobalKeyMap struct {
-	Quit              key.Binding
-	Help              key.Binding
-	Back              key.Binding
-	Search            key.Binding
-	ToggleTheme       key.Binding
-	DebugScreenshot   key.Binding
+	Help                    key.Binding
+	Quit                    key.Binding
+	Back                    key.Binding
+	NextPage                key.Binding
+	PrevPage                key.Binding
+	ToggleTheme             key.Binding
+	Clusters                key.Binding
+	Ksql                    key.Binding
+	Metrics                 key.Binding
+	Config                  key.Binding
+	ClusterWizard           key.Binding
+	Search                  key.Binding
+	DebugScreenshot         key.Binding
 	DebugScreenshotRedacted key.Binding
+}
+
+// GlobalKeys is the shared instance the shell and focus manager match against.
+var GlobalKeys = DefaultGlobalKeyMap()
+
+// GetAllBindings returns every global binding (used by the help overlay/footer).
+func (g GlobalKeyMap) GetAllBindings() []key.Binding {
+	return []key.Binding{
+		g.Help, g.Quit, g.Back, g.NextPage, g.PrevPage, g.ToggleTheme,
+		g.Clusters, g.Ksql, g.Metrics, g.Config, g.ClusterWizard,
+		g.DebugScreenshot, g.DebugScreenshotRedacted,
+	}
 }
 
 // MainKeyMap contains key bindings for the main page
@@ -44,18 +65,29 @@ type MainKeyMap struct {
 	Help           key.Binding
 	Quit           key.Binding
 	Back           key.Binding
+	ScrollUp       key.Binding
+	ScrollDown     key.Binding
+	PageUp         key.Binding
+	PageDown       key.Binding
+	GotoStart      key.Binding
+	GotoEnd        key.Binding
+	Copy           key.Binding
+	Sort           key.Binding
+	SortReverse    key.Binding
+	Export         key.Binding
 }
 
 // ShortHelp returns keybindings to be shown in the mini help view
 func (k MainKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Search, k.SwitchResource, k.Quit}
+	return []key.Binding{k.Help, k.Search, k.SwitchResource, k.Select, k.Copy, k.Quit}
 }
 
 // FullHelp returns keybindings for the expanded help view
 func (k MainKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Search, k.SwitchResource, k.Select},
-		{k.Back, k.Help, k.Quit},
+		{k.Search, k.SwitchResource, k.Select, k.Copy},
+		{k.ScrollUp, k.ScrollDown, k.PageUp, k.PageDown},
+		{k.GotoStart, k.GotoEnd, k.Back, k.Help, k.Quit},
 	}
 }
 
@@ -67,17 +99,18 @@ type TopicKeyMap struct {
 	Search     key.Binding
 	Help       key.Binding
 	Quit       key.Binding
-	
+
 	// Consumption control
 	Pause      key.Binding
 	Refresh    key.Binding
 	Retry      key.Binding
-	
+	SwitchMode key.Binding
+
 	// Display options
 	Format     key.Binding
 	Headers    key.Binding
 	Metadata   key.Binding
-	
+
 	// Scrolling
 	ScrollUp   key.Binding
 	ScrollDown key.Binding
@@ -85,7 +118,7 @@ type TopicKeyMap struct {
 	PageDown   key.Binding
 	GotoStart  key.Binding
 	GotoEnd    key.Binding
-	
+
 	// Message operations
 	CopyKey    key.Binding
 	CopyValue  key.Binding
@@ -94,17 +127,17 @@ type TopicKeyMap struct {
 // ShortHelp returns keybindings to be shown in the mini help view. It's part
 // of the help.KeyMap interface.
 func (k TopicKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Search, k.Pause, k.Select, k.Back, k.Quit}
+	return []key.Binding{k.Help, k.Search, k.SwitchMode, k.Select, k.Back, k.Quit}
 }
 
 // FullHelp returns keybindings for the expanded help view. It's part of the
 // help.KeyMap interface.
 func (k TopicKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Select, k.Search, k.Pause},              // first column
-		{k.Refresh, k.Retry, k.Format},             // second column
-		{k.ScrollUp, k.ScrollDown, k.PageUp},       // third column
-		{k.Back, k.Help, k.Quit},                   // fourth column
+		{k.Select, k.Search, k.SwitchMode},        // first column
+		{k.Refresh, k.Retry, k.Format},            // second column
+		{k.ScrollUp, k.ScrollDown, k.PageUp},      // third column
+		{k.Back, k.Help, k.Quit},                  // fourth column
 	}
 }
 
@@ -193,28 +226,58 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-// DefaultGlobalKeyMap returns the default global key bindings
+// DefaultGlobalKeyMap returns the default global key bindings. Keys here are the
+// authoritative runtime bindings the shell matches against; changing them
+// changes behavior. Every binding carries key.WithHelp (UI-16/UI-17).
 func DefaultGlobalKeyMap() GlobalKeyMap {
 	return GlobalKeyMap{
-		Quit: key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q", "quit"),
-		),
 		Help: key.NewBinding(
-			key.WithKeys("?", "ctrl+g"),
+			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
 		),
+		Quit: key.NewBinding(
+			key.WithKeys("ctrl+c", "q"),
+			key.WithHelp("q/ctrl+c", "quit"),
+		),
 		Back: key.NewBinding(
-			key.WithKeys("esc", "q"),
+			key.WithKeys("esc"),
 			key.WithHelp("esc", "back"),
 		),
-		Search: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "search"),
+		NextPage: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "next page"),
+		),
+		PrevPage: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "prev page"),
 		),
 		ToggleTheme: key.NewBinding(
 			key.WithKeys("T"),
 			key.WithHelp("T", "toggle theme"),
+		),
+		Clusters: key.NewBinding(
+			key.WithKeys("C"),
+			key.WithHelp("C", "cluster dashboard"),
+		),
+		Ksql: key.NewBinding(
+			key.WithKeys("K"),
+			key.WithHelp("K", "ksqlDB"),
+		),
+		Metrics: key.NewBinding(
+			key.WithKeys("ctrl+t"),
+			key.WithHelp("ctrl+t", "metrics"),
+		),
+		Config: key.NewBinding(
+			key.WithKeys("ctrl+g"),
+			key.WithHelp("ctrl+g", "app config"),
+		),
+		ClusterWizard: key.NewBinding(
+			key.WithKeys("ctrl+w"),
+			key.WithHelp("ctrl+w", "cluster setup wizard"),
+		),
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "search"),
 		),
 		DebugScreenshot: key.NewBinding(
 			key.WithKeys("f3"),
@@ -231,7 +294,7 @@ func DefaultGlobalKeyMap() GlobalKeyMap {
 func DefaultMainKeyMap() MainKeyMap {
 	return MainKeyMap{
 		Select: key.NewBinding(
-			key.WithKeys("enter", "l", "right"),
+			key.WithKeys("enter"),
 			key.WithHelp("enter", "select"),
 		),
 		SwitchResource: key.NewBinding(
@@ -253,6 +316,46 @@ func DefaultMainKeyMap() MainKeyMap {
 		Back: key.NewBinding(
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "back"),
+		),
+		ScrollUp: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "scroll up"),
+		),
+		ScrollDown: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "scroll down"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup", "left", "h"),
+			key.WithHelp("pgup/←", "prev page"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown", "right", "l"),
+			key.WithHelp("pgdn/→", "next page"),
+		),
+		GotoStart: key.NewBinding(
+			key.WithKeys("home", "g"),
+			key.WithHelp("home/g", "first page"),
+		),
+		GotoEnd: key.NewBinding(
+			key.WithKeys("end", "G"),
+			key.WithHelp("end/G", "last page"),
+		),
+		Copy: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "copy row"),
+		),
+		Sort: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "sort column"),
+		),
+		SortReverse: key.NewBinding(
+			key.WithKeys("S"),
+			key.WithHelp("S", "sort direction"),
+		),
+		Export: key.NewBinding(
+			key.WithKeys("ctrl+e"),
+			key.WithHelp("ctrl+e", "export CSV"),
 		),
 	}
 }
@@ -283,7 +386,7 @@ func DefaultTopicKeyMap() TopicKeyMap {
 		),
 		// Consumption control
 		Pause: key.NewBinding(
-			key.WithKeys("p", " "),
+			key.WithKeys("p"),
 			key.WithHelp("p", "pause/resume"),
 		),
 		Refresh: key.NewBinding(
@@ -293,6 +396,10 @@ func DefaultTopicKeyMap() TopicKeyMap {
 		Retry: key.NewBinding(
 			key.WithKeys("r"),
 			key.WithHelp("r", "retry connection"),
+		),
+		SwitchMode: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "switch mode (Newest/Oldest/Live)"),
 		),
 		// Display options
 		Format: key.NewBinding(
@@ -317,12 +424,12 @@ func DefaultTopicKeyMap() TopicKeyMap {
 			key.WithHelp("↓", "scroll down"),
 		),
 		PageUp: key.NewBinding(
-			key.WithKeys("pgup", "b"),
-			key.WithHelp("pgup", "page up"),
+			key.WithKeys("pgup", "left", "b"),
+			key.WithHelp("pgup/←", "prev page"),
 		),
 		PageDown: key.NewBinding(
-			key.WithKeys("pgdown", " "),
-			key.WithHelp("pgdn", "page down"),
+			key.WithKeys("pgdown", "right", " "),
+			key.WithHelp("pgdn/→", "next page"),
 		),
 		GotoStart: key.NewBinding(
 			key.WithKeys("g", "home"),

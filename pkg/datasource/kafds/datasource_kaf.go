@@ -13,6 +13,9 @@ import (
 	"sort"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/serde"
+	"github.com/Benny93/kafui/pkg/appconfig"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/avro"
 	"github.com/birdayz/kaf/pkg/config"
@@ -49,6 +52,21 @@ func (kp *KafkaDataSourceKaf) Init(cfgOption string) {
 		cfgFile = cfgOption
 	}
 	onInit()
+}
+
+// GetTopicNames returns only the topic names using a lightweight Sarama client
+// metadata request. This is faster than GetTopics() because it skips the full
+// per-partition replica assignment that ListTopics() returns.
+func (kp KafkaDataSourceKaf) GetTopicNames() ([]string, error) {
+	client, err := getClient()
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+	if err := client.RefreshMetadata(); err != nil {
+		return nil, fmt.Errorf("failed to refresh metadata: %w", err)
+	}
+	return client.Topics()
 }
 
 // GetTopics retrieves a list of Kafka topics
@@ -91,6 +109,32 @@ func (kp KafkaDataSourceKaf) GetTopics() (map[string]api.Topic, error) {
 	return topics, err
 }
 
+// GetTopicMessageCounts fetches the approximate message count for each topic by summing
+// (newestOffset - oldestOffset) across all partitions. A single Sarama client is reused
+// for all topics to avoid repeated connection overhead. Topics that fail individually are
+// skipped so a partial result is always returned.
+func (kp KafkaDataSourceKaf) GetTopicMessageCounts(topics map[string]int32) (map[string]int64, error) {
+	client, err := getClient()
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	counts := make(map[string]int64, len(topics))
+	for name, numPartitions := range topics {
+		var total int64
+		for i := int32(0); i < numPartitions; i++ {
+			offs, err := getOffsets(client, name, i)
+			if err != nil {
+				continue
+			}
+			total += offs.newest - offs.oldest
+		}
+		counts[name] = total
+	}
+	return counts, nil
+}
+
 func (kp KafkaDataSourceKaf) GetContext() string {
 	// Check if cfg is properly initialized
 	if cfg.Clusters == nil {
@@ -115,28 +159,89 @@ func (kp KafkaDataSourceKaf) GetContexts() ([]string, error) {
 	return contexts, nil
 }
 
-func (kp KafkaDataSourceKaf) SetContext(contextName string) error {
-	cfg, err := kp.configManager.ReadConfig(cfgFile)
-	if err != nil {
-		return err
-	}
-
-	// Iterate through clusters in the config
+// GetClusterDetails returns configuration details for the named cluster.
+func (kp KafkaDataSourceKaf) GetClusterDetails(clusterName string) (api.ClusterInfo, error) {
+	currentCtx := kp.GetContext()
 	for _, cluster := range cfg.Clusters {
-		// Check if the cluster name matches the contextName
-		if cluster.Name == contextName {
-			currentCluster = cluster
-			err := cfg.SetCurrentCluster(currentCluster.Name)
-			if err != nil {
-				return err
+		if cluster.Name == clusterName {
+			return api.ClusterInfo{
+				Name:              cluster.Name,
+				Brokers:           cluster.Brokers,
+				SchemaRegistryURL: cluster.SchemaRegistryURL,
+				IsCurrent:         cluster.Name == currentCtx,
+			}, nil
+		}
+	}
+	return api.ClusterInfo{}, fmt.Errorf("cluster with name '%s' not found", clusterName)
+}
+
+// Reload rebuilds the in-memory kaf config and active cluster from the effective
+// kafui configuration, merging fully-kafui-defined clusters into the loaded
+// cluster list (replacing by name or appending), then invalidates caches
+// (mirroring SetContext). It NEVER reads or writes ~/.kaf/config — the merge is
+// entirely in memory. Called after an in-UI config apply to take effect without
+// restarting the process.
+func (kp *KafkaDataSourceKaf) Reload(effective appconfig.Config) error {
+	for name, ext := range effective.Clusters {
+		if !ext.IsFullyDefined() {
+			continue // overlay-only entry; it decorates an existing kaf cluster
+		}
+		kc := kafClusterFromExtension(name, ext)
+		replaced := false
+		for i, c := range cfg.Clusters {
+			if c.Name == name {
+				cfg.Clusters[i] = kc
+				replaced = true
+				break
 			}
-			return nil
+		}
+		if !replaced {
+			cfg.Clusters = append(cfg.Clusters, kc)
 		}
 	}
 
-	// If no matching cluster is found, return an error
-	return fmt.Errorf("cluster with name '%s' not found", contextName)
+	// Re-resolve the active cluster: keep the current one if it still exists,
+	// otherwise fall back to the first configured cluster.
+	target := cfg.CurrentCluster
+	if currentCluster != nil && currentCluster.Name != "" {
+		target = currentCluster.Name
+	}
+	found := false
+	for _, c := range cfg.Clusters {
+		if c.Name == target {
+			cc := *c
+			currentCluster = &cc
+			cfg.CurrentCluster = cc.Name
+			found = true
+			break
+		}
+	}
+	if !found && len(cfg.Clusters) > 0 {
+		cc := *cfg.Clusters[0]
+		currentCluster = &cc
+		cfg.CurrentCluster = cc.Name
+	}
 
+	// Invalidate caches (mirror SetContext).
+	cachedSchemaCache = nil
+	invalidateSerdeRegistry()
+	return nil
+}
+
+func (kp KafkaDataSourceKaf) SetContext(contextName string) error {
+	// Only update the in-memory currentCluster pointer — never write to disk.
+	// Calling cfg.SetCurrentCluster() would truncate ~/.kaf/config and re-serialize
+	// it, which strips TLS cert paths due to missing YAML tags in the kaf library.
+	for _, cluster := range cfg.Clusters {
+		if cluster.Name == contextName {
+			currentCluster = cluster
+			cfg.CurrentCluster = contextName
+			cachedSchemaCache = nil // invalidate schema cache on cluster switch
+			invalidateSerdeRegistry()
+			return nil
+		}
+	}
+	return fmt.Errorf("cluster with name '%s' not found", contextName)
 }
 
 func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) {
@@ -145,95 +250,92 @@ func (kp KafkaDataSourceKaf) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 		return nil, err
 	}
 
+	// ListConsumerGroups is a single fast broker round-trip that returns every
+	// group name and its protocol type.  DescribeConsumerGroups is intentionally
+	// skipped here: on large clusters it can take tens of seconds (or hang
+	// indefinitely) because it fan-outs to every partition coordinator.
 	groups, err := admin.ListConsumerGroups()
 	if err != nil {
 		return nil, err
 	}
 
-	groupList := make([]string, 0, len(groups))
-	for grp := range groups {
-		groupList = append(groupList, grp)
-	}
+	shared.Log.Info("GetConsumerGroups: raw list", "count", len(groups))
 
-	sort.Slice(groupList, func(i int, j int) bool {
-		return groupList[i] < groupList[j]
-	})
-
-	groupDescs, err := admin.DescribeConsumerGroups(groupList)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to describe consumer groups: %v\n", err)
-	}
-
-	finalGroups := make([]api.ConsumerGroup, 0, len(groupDescs))
-	for _, detail := range groupDescs {
-		state := detail.State
-		consumers := len(detail.Members)
-		tmpGroup := api.ConsumerGroup{
-			Name:      detail.GroupId,
-			State:     state,
-			Consumers: consumers,
+	finalGroups := make([]api.ConsumerGroup, 0, len(groups))
+	for name, protocol := range groups {
+		state := protocol
+		if state == "" {
+			state = "consumer"
 		}
-		finalGroups = append(finalGroups, tmpGroup)
-
+		finalGroups = append(finalGroups, api.ConsumerGroup{
+			Name:      name,
+			State:     state,
+			Consumers: 0,
+		})
 	}
+
+	sort.Slice(finalGroups, func(i, j int) bool {
+		return finalGroups[i].Name < finalGroups[j].Name
+	})
 
 	return finalGroups, nil
 }
 
 func (kp KafkaDataSourceKaf) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error {
-
-	admin, err := getClusterAdmin()
-	if err != nil {
-		return err
-	}
-	topicDetails, _ := admin.ListTopics()
-
-	keys := make([]string, 0, len(topicDetails))
-	for key := range topicDetails {
-		keys = append(keys, key)
-	}
-
 	DoConsume(ctx, topicName, flags, handleMessage, onError)
-
-	//cgs := []string{"message1", "message2", "message3"} // Example
 	return nil
+}
+
+// GetACLs implements api.KafkaDataSource (the match-any case of GetACLsFiltered).
+func (kp KafkaDataSourceKaf) GetACLs() ([]api.ACLEntry, error) {
+	return kp.GetACLsFiltered(api.ACLFilter{})
 }
 
 // GetMessageSchemaInfo implements api.KafkaDataSource
 func (kp KafkaDataSourceKaf) GetMessageSchemaInfo(keySchemaID, valueSchemaID string) (*api.MessageSchemaInfo, error) {
 	schemaInfo := &api.MessageSchemaInfo{}
 
-	// Get schema cache from current cluster configuration
-	schemaCache, err := getSchemaCache()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize schema cache: %v", err)
-	}
-
-	// If no schema registry is configured, return nil
-	if schemaCache == nil {
-		return nil, nil
-	}
-
-	// Handle key schema if provided
 	if keySchemaID != "" {
-		if keySchema, err := kp.fetchSchemaInfo(schemaCache, keySchemaID); err == nil && keySchema != nil {
+		if keySchema, err := kp.fetchSchemaInfo(keySchemaID); err == nil && keySchema != nil {
 			schemaInfo.KeySchema = keySchema
 		}
 	}
 
-	// Handle value schema if provided
 	if valueSchemaID != "" {
-		if valueSchema, err := kp.fetchSchemaInfo(schemaCache, valueSchemaID); err == nil && valueSchema != nil {
+		if valueSchema, err := kp.fetchSchemaInfo(valueSchemaID); err == nil && valueSchema != nil {
 			schemaInfo.ValueSchema = valueSchema
 		}
 	}
 
-	// Return nil if no schema information is available
 	if schemaInfo.KeySchema == nil && schemaInfo.ValueSchema == nil {
 		return nil, nil
 	}
-
 	return schemaInfo, nil
+}
+
+// DecodeMessage decodes Avro-encoded raw bytes stored in msg.RawKey / msg.RawValue
+// into human-readable strings. Messages without raw bytes are returned unchanged.
+// The schema registry client is shared across calls (see cachedSchemaCache).
+func (kp KafkaDataSourceKaf) DecodeMessage(_ context.Context, msg api.Message) (api.Message, error) {
+	if len(msg.RawKey) == 0 && len(msg.RawValue) == 0 {
+		return msg, nil
+	}
+	reg := getSerdeRegistry()
+	if len(msg.RawKey) > 0 {
+		text, name, _ := serde.Decode(reg, "", msg.RawKey)
+		msg.Key, msg.KeySerde = text, name
+	}
+	if len(msg.RawValue) > 0 {
+		text, name, _ := serde.Decode(reg, "", msg.RawValue)
+		msg.Value, msg.ValueSerde = text, name
+	}
+	return msg, nil
+}
+
+// ListSerdes returns the names of serdes available for decoding, driven by the
+// active cluster's registry (built-ins + configured). (MSG-18)
+func (kp KafkaDataSourceKaf) ListSerdes() []string {
+	return getSerdeRegistry().Names()
 }
 
 func getConfig() (saramaConfig *sarama.Config, e error) {
@@ -303,7 +405,7 @@ func getConfig() (saramaConfig *sarama.Config, e error) {
 			if cluster.TLS.Cafile != "" {
 				caCert, err := ioutil.ReadFile(cluster.TLS.Cafile)
 				if err != nil {
-					fmt.Println(err)
+					shared.Log.Error("failed to read TLS CA file", "file", cluster.TLS.Cafile, "err", err)
 					os.Exit(1)
 				}
 				caCertPool := x509.NewCertPool()
@@ -334,12 +436,26 @@ func getConfig() (saramaConfig *sarama.Config, e error) {
 }
 
 var (
-	outWriter io.Writer = os.Stdout
-	errWriter io.Writer = os.Stderr
-	inReader  io.Reader = os.Stdin
-
+	// outWriter and errWriter point to a discard writer during TUI operation.
+	// InitTUIWriters() must be called before tea.NewProgram to prevent any
+	// datasource output from corrupting Bubble Tea's alt-screen rendering.
+	outWriter    io.Writer = os.Stdout
+	errWriter    io.Writer = os.Stderr
+	inReader     io.Reader = os.Stdin
 	colorableOut io.Writer = colorable.NewColorableStdout()
 )
+
+// InitTUIWriters redirects outWriter and errWriter to the structured logger
+// and silences the sarama Kafka client logger so nothing corrupts the TUI.
+// Call this once before starting tea.NewProgram.
+func InitTUIWriters() {
+	w := shared.NewSlogWriter(shared.Log)
+	outWriter = w
+	errWriter = w
+	colorableOut = w
+	// Always route sarama logs to file — it is very chatty on reconnects.
+	sarama.Logger = log.New(w, "[sarama] ", 0)
+}
 
 // Will be replaced by GitHub action and by goreleaser
 // see https://goreleaser.com/customization/build/
@@ -363,7 +479,7 @@ var rootCmd = &cobra.Command{
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		shared.Log.Error("root command failed", "err", err)
 		os.Exit(1)
 	}
 }
@@ -380,6 +496,22 @@ var (
 	verbose           bool
 	clusterOverride   string
 )
+
+// SetOverrides applies CLI overrides before Init/onInit runs. Empty/nil values
+// leave the corresponding config value untouched. Kafui's own CLI calls this;
+// the embedded rootCmd below is never executed.
+func SetOverrides(brokers []string, schemaRegistry, cluster string, verboseLogging bool) {
+	if len(brokers) > 0 {
+		brokersFlag = brokers
+	}
+	if schemaRegistry != "" {
+		schemaRegistryURL = schemaRegistry
+	}
+	if cluster != "" {
+		clusterOverride = cluster
+	}
+	verbose = verboseLogging
+}
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.kaf/config)")
@@ -401,12 +533,49 @@ var setupProtoDescriptorRegistry = func(cmd *cobra.Command, args []string) {
 	}
 }*/
 
+// protectConfigFile is intentionally not called at runtime. The primary
+// protection against config corruption is that SetContext() never calls
+// cfg.Write() or cfg.SetCurrentCluster(). This function is kept for
+// reference but should not be invoked automatically.
+func protectConfigFile(cfgPath string) error {
+	path := cfgPath
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		path = home + "/.kaf/config"
+	}
+	return os.Chmod(path, 0444)
+}
+
+// InitFromConfig reads the kaf config file at cfgPath (pass "" to use the
+// default ~/.kaf/config) and sets the active cluster. This is identical to the
+// setup that the main CLI performs via cobra.OnInitialize; use it in examples
+// and standalone programs that do not go through the Cobra entry point.
+func InitFromConfig(cfgPath string) error {
+	var err error
+	cfg, err = config.ReadConfig(cfgPath)
+	if err != nil {
+		return fmt.Errorf("reading kaf config: %w", err)
+	}
+	cluster := cfg.ActiveCluster()
+	if cluster != nil {
+		currentCluster = cluster
+	} else {
+		currentCluster = &config.Cluster{
+			Brokers: []string{"localhost:9092"},
+		}
+	}
+	return nil
+}
+
 func onInit() {
 	var err error
 	cfg, err = config.ReadConfig(cfgFile)
 	if err != nil {
 		// Instead of panicking, create a default config
-		fmt.Fprintf(errWriter, "Warning: Could not read config file (%v). Using default configuration.\n", err)
+		shared.Log.Warn("could not read config file, using defaults", "err", err)
 		cfg = config.Config{
 			Clusters: []*config.Cluster{},
 		}
@@ -434,10 +603,7 @@ func onInit() {
 	if brokersFlag != nil {
 		currentCluster.Brokers = brokersFlag
 	}
-
-	if verbose {
-		sarama.Logger = log.New(errWriter, "[sarama] ", log.Lshortfile|log.LstdFlags)
-	}
+	// sarama.Logger is set by InitTUIWriters() before the TUI starts.
 }
 
 func getClusterAdmin() (admin ClusterAdminInterface, e error) {
@@ -479,7 +645,7 @@ func getClientFromConfig(config *sarama.Config) (sarama.Client, error) {
 }
 
 func getSchemaCache() (cache *avro.SchemaCache, er error) {
-	if currentCluster.SchemaRegistryURL == "" {
+	if currentCluster == nil || currentCluster.SchemaRegistryURL == "" {
 		return nil, nil
 	}
 	var username, password string
@@ -494,26 +660,22 @@ func getSchemaCache() (cache *avro.SchemaCache, er error) {
 	return cache, nil
 }
 
-// fetchSchemaInfo retrieves schema information for a given schema ID
-func (kp KafkaDataSourceKaf) fetchSchemaInfo(schemaCache *avro.SchemaCache, schemaIDStr string) (*api.SchemaInfo, error) {
-	// Parse schema ID
-	var schemaID int
-	if _, err := fmt.Sscanf(schemaIDStr, "%d", &schemaID); err != nil {
-		return nil, fmt.Errorf("invalid schema ID format: %s", schemaIDStr)
+// cachedSchemaCache is a process-lifetime cache of the schema registry client.
+// It is invalidated when SetContext switches the active cluster.
+var cachedSchemaCache *avro.SchemaCache
+
+// getOrInitSchemaCache returns the cached SchemaCache, initialising it on first
+// call. Returns nil (not an error) when no schema registry is configured.
+func getOrInitSchemaCache() (*avro.SchemaCache, error) {
+	if cachedSchemaCache != nil {
+		return cachedSchemaCache, nil
 	}
-
-	// For now, return basic schema info since we don't have direct access to schema registry
-	// In a real implementation, you would need to fetch the schema from the registry
-	// The SchemaCache from kaf doesn't expose a direct Get method for schema by ID
-	// but typically handles this internally via DecodeMessage
-
-	return &api.SchemaInfo{
-		ID:         schemaID,
-		Schema:     "",                                 // Would need to fetch from registry
-		Subject:    "",                                 // Would need to fetch from registry
-		Version:    0,                                  // Would need to fetch from registry
-		RecordName: fmt.Sprintf("Schema-%d", schemaID), // Placeholder
-	}, nil
+	sc, err := getSchemaCache()
+	if err != nil {
+		return nil, err
+	}
+	cachedSchemaCache = sc
+	return sc, nil
 }
 
 // extractRecordName extracts the record name from an Avro schema JSON

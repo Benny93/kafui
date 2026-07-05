@@ -135,6 +135,12 @@ func (a *ReusableApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(a.updateContentSize(), a.updateSidebarSize())
 
 	case tea.KeyMsg:
+		// When the content area has an active text input (e.g. search bar), suppress
+		// all app-level hotkeys so every keystroke reaches the input unmodified.
+		// ctrl+c is always allowed as an emergency exit.
+		if msg.String() != "ctrl+c" && a.content.IsInputMode() {
+			break
+		}
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return a, tea.Quit
@@ -144,6 +150,9 @@ func (a *ReusableApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showSidebar = !a.showSidebar
 				cmds = append(cmds, a.updateContentSize())
 				cmds = append(cmds, a.updateSidebarSize())
+				// Persist the user's explicit choice (UI-15); the shell handles it.
+				visible := a.showSidebar
+				cmds = append(cmds, func() tea.Msg { return core.SidebarToggledMsg{Visible: visible} })
 			}
 		case "ctrl+r":
 			if refreshable, ok := a.sidebar.(components.Refreshable); ok {
@@ -207,7 +216,7 @@ func (a *ReusableApp) View() string {
 	if a.showSidebar && a.sizeMode >= styles.SizeModeNormal {
 		// Just horizontally join content and sidebar
 		middleArea = lipgloss.JoinHorizontal(
-			lipgloss.Bottom,
+			lipgloss.Top,
 			a.content.View(),
 			a.sidebar.View(),
 		)
@@ -217,7 +226,13 @@ func (a *ReusableApp) View() string {
 
 	components = append(components, middleArea)
 
-	// Breadcrumbs (Status Bar at the bottom)
+	// Breadcrumbs (Status Bar at the bottom). Feed the page-actions slot (UI-11)
+	// from the content provider when it advertises context actions.
+	if a.config != nil {
+		if ap, ok := a.config.ContentProvider.(providers.PageActionsProvider); ok {
+			a.breadcrumb.SetActions(ap.PageActions())
+		}
+	}
 	breadcrumbView := a.breadcrumb.View()
 	if breadcrumbView != "" {
 		components = append(components, breadcrumbView)

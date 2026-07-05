@@ -84,11 +84,72 @@ type (
 		Type string
 	}
 
+	// LoadingMsg toggles a page's shared loading indicator (UI-12). Active
+	// starts/stops the centered spinner; Label is the optional caption.
 	LoadingMsg struct {
-		Type    string
-		Loading bool
+		Active bool
+		Label  string
 	}
 )
+
+// Confirmation dialog messages (handled by the root model, see pkg/ui/dialog)
+type (
+	// ShowConfirmMsg asks the shell to display a modal confirmation dialog.
+	// OnConfirm is dispatched only if the user confirms.
+	ShowConfirmMsg struct {
+		Title        string
+		Message      string
+		Danger       bool
+		ConfirmLabel string
+		OnConfirm    tea.Cmd
+	}
+
+	// ConfirmResolvedMsg reports the outcome of a confirmation dialog.
+	ConfirmResolvedMsg struct {
+		Confirmed bool
+	}
+)
+
+// ConfigReloadedMsg carries a freshly-loaded kafui config when the on-disk file
+// changed while kafui is running (AC-16). The shell hot-applies reloadable
+// settings (UI prefs, cluster extensions) but never reconnects the active
+// cluster. Carried as interface{} to avoid an appconfig import in core.
+type ConfigReloadedMsg struct {
+	Config interface{} // *appconfig.Config
+}
+
+// SidebarToggledMsg reports that the user explicitly toggled the template
+// sidebar (UI-15). The shell persists the preference to the kafui config.
+type SidebarToggledMsg struct {
+	Visible bool
+}
+
+// NotificationMsg is the unified, shell-owned notification (toast) message.
+// Every datasource error or success surfaced as a tea.Cmd should land here.
+type NotificationMsg struct {
+	Severity StatusType
+	Title    string
+	Message  string
+	Sticky   bool // when true, does not auto-dismiss
+}
+
+// NewNotification builds a command emitting a NotificationMsg.
+func NewNotification(sev StatusType, title, message string) tea.Cmd {
+	return func() tea.Msg {
+		return NotificationMsg{Severity: sev, Title: title, Message: message}
+	}
+}
+
+// NotifyError builds an error notification from an error value.
+func NotifyError(title string, err error) tea.Cmd {
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	return func() tea.Msg {
+		return NotificationMsg{Severity: StatusError, Title: title, Message: msg, Sticky: false}
+	}
+}
 
 // UI messages
 type (

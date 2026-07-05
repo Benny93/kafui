@@ -3,9 +3,11 @@ package topic
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/components"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -129,11 +131,17 @@ func (cc *ConsumptionController) ListenForErrors(errChan <-chan error) tea.Cmd {
 		select {
 		case err, ok := <-errChan:
 			if !ok {
-				return ErrorMsg(shared.NewUIError(
-					shared.ErrorTypeConnection,
-					"Error stream closed unexpectedly",
-					nil,
-				))
+				// Channel closed — only report if still in live consumption.
+				// A deliberate cancel (mode switch, page leave) sets consuming=false
+				// before the channel closes, so we silently return nil in that case.
+				if cc.model.consuming {
+					return ErrorMsg(shared.NewUIError(
+						shared.ErrorTypeConnection,
+						"Error stream closed unexpectedly",
+						nil,
+					))
+				}
+				return nil
 			}
 
 			// Return the error via the command
@@ -342,54 +350,252 @@ func (cc *ConsumptionController) GetHealthStatus() string {
 	return "idle"
 }
 
-// FetchLatestMessages fetches the latest N messages from the topic (non-streaming)
+// FetchLatestMessages fetches the latest N messages from the topic (non-streaming).
+// It returns immediately with a StartFetchMsg carrying two channels:
+//   - ProgressCh: per-item ProgressMsg updates driven by FetchProgressBar
+//   - ResultCh:   the final MessagesFetchedMsg when the fetch completes
 func (cc *ConsumptionController) FetchLatestMessages(count int) tea.Cmd {
 	return func() tea.Msg {
-		cc.model.loading = true
-		cc.model.SetConnectionStatus(StatusConnecting)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		// Collect messages
-		messages := make([]api.Message, 0, count)
-		done := make(chan struct{})
-
-		// Message handler
-		handleMessage := func(msg api.Message) {
-			select {
-			case <-done:
-				return
-			default:
-				messages = append(messages, msg)
-				if len(messages) >= count {
-					close(done)
-				}
-			}
-		}
-
-		// Error handler
-		onError := func(err any) {
-			select {
-			case <-done:
-				return
-			default:
-				close(done)
-			}
-		}
-
-		// Start consumption
-		go func() {
-			_ = cc.model.dataSource.ConsumeTopic(ctx, cc.model.topicName, cc.model.consumeFlags, handleMessage, onError)
-			close(done)
-		}()
-
-		// Wait for completion or timeout
-		<-done
-
-		cc.model.loading = false
-		cc.model.SetConnectionStatus(StatusConnected)
-
-		return MessagesFetchedMsg{Messages: messages}
+		progressCh := components.NewProgressChannel(count)
+		resultCh := make(chan MessagesFetchedMsg, 1)
+		go cc.fetchWithProgress(count, progressCh, resultCh)
+		return StartFetchMsg{ProgressCh: progressCh, ResultCh: resultCh, Total: count}
 	}
+}
+
+// FetchWithFlags fetches a fresh batch using explicit ConsumeFlags (not append).
+// Used by the seek dialog and partition filter to (re)start browsing with a
+// user-chosen query (MSG-21/MSG-22).
+func (cc *ConsumptionController) FetchWithFlags(flags api.ConsumeFlags, count int) tea.Cmd {
+	if count <= 0 {
+		count = int(batchSize)
+	}
+	return func() tea.Msg {
+		progressCh := components.NewProgressChannel(count)
+		resultCh := make(chan MessagesFetchedMsg, 1)
+		go cc.fetchWithProgressFlags(flags, count, progressCh, resultCh)
+		return StartFetchMsg{ProgressCh: progressCh, ResultCh: resultCh, Total: count, Append: false}
+	}
+}
+
+// FetchNextBatch fetches an additional batch using the provided flags.
+// Results are appended to the existing messages (not a fresh start).
+func (cc *ConsumptionController) FetchNextBatch(flags api.ConsumeFlags) tea.Cmd {
+	count := int(flags.LimitMessages)
+	if count <= 0 {
+		count = int(batchSize)
+	}
+	return func() tea.Msg {
+		progressCh := components.NewProgressChannel(count)
+		resultCh := make(chan MessagesFetchedMsg, 1)
+		go cc.fetchWithProgressFlags(flags, count, progressCh, resultCh)
+		return StartFetchMsg{ProgressCh: progressCh, ResultCh: resultCh, Total: count, Append: true}
+	}
+}
+
+// DecodeVisibleMessages decodes the Key/Value of messages that still hold raw
+// Avro bytes. Already-decoded messages pass through unchanged.
+// The result is delivered as a VisibleMessagesDecodedMsg.
+// Call this once for the full fetched batch so all messages are pre-decoded
+// before the user scrolls — avoids per-scroll schema registry round-trips.
+func (cc *ConsumptionController) DecodeVisibleMessages(msgs []api.Message) tea.Cmd {
+	if len(msgs) == 0 {
+		return nil
+	}
+	// Check whether any message actually needs decoding before spawning a goroutine.
+	needsDecode := false
+	for _, m := range msgs {
+		if (m.Key == "" || m.Value == "") && (len(m.RawKey) > 0 || len(m.RawValue) > 0) {
+			needsDecode = true
+			break
+		}
+	}
+	if !needsDecode {
+		return nil
+	}
+	return func() tea.Msg {
+		decoded := make([]api.Message, len(msgs))
+		for i, msg := range msgs {
+			if (msg.Key == "" || msg.Value == "") && (len(msg.RawKey) > 0 || len(msg.RawValue) > 0) {
+				if d, err := cc.model.dataSource.DecodeMessage(context.Background(), msg); err == nil {
+					decoded[i] = d
+				} else {
+					decoded[i] = msg
+				}
+			} else {
+				decoded[i] = msg
+			}
+		}
+		return VisibleMessagesDecodedMsg{Messages: decoded}
+	}
+}
+
+// listenForResult returns a Cmd that delivers the MessagesFetchedMsg from resultCh.
+func listenForResult(ch <-chan MessagesFetchedMsg) tea.Cmd {
+	return func() tea.Msg {
+		return <-ch
+	}
+}
+
+// fetchWithProgress runs the actual Kafka consumption in the background,
+// sending one ProgressMsg per received message via progressCh and delivering
+// the complete result set to resultCh when done.
+func (cc *ConsumptionController) fetchWithProgress(
+	count int,
+	progressCh chan<- components.ProgressMsg,
+	resultCh chan<- MessagesFetchedMsg,
+) {
+	shared.Log.Info("starting fetch", "topic", cc.model.topicName, "target", count)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var (
+		messages []api.Message
+		mu       sync.Mutex
+		done     = make(chan struct{})
+		closed   bool
+		fetchErr error
+	)
+
+	closeDone := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if !closed {
+			closed = true
+			close(done)
+		}
+	}
+
+	handleMsg := func(msg api.Message) {
+		mu.Lock()
+		messages = append(messages, msg)
+		current := len(messages)
+		mu.Unlock()
+
+		progressCh <- components.ProgressMsg{Current: current, Total: count}
+		if current >= count {
+			closeDone()
+		}
+	}
+
+	go func() {
+		// Use a one-shot (non-follow) variant of the flags so the consumer
+		// exits as soon as it reaches the end of the partition instead of
+		// waiting for new messages. Follow=true would block until the 5s
+		// context timeout every single fetch.
+		fetchFlags := cc.model.consumeFlags
+		fetchFlags.Follow = false
+		err := cc.model.dataSource.ConsumeTopic(
+			ctx, cc.model.topicName, fetchFlags, handleMsg,
+			func(e any) {
+				if e != nil {
+					mu.Lock()
+					fetchErr = fmt.Errorf("%v", e)
+					mu.Unlock()
+					shared.Log.Error("fetch error callback", "topic", cc.model.topicName, "err", fetchErr)
+				}
+				closeDone()
+			},
+		)
+		if err != nil {
+			mu.Lock()
+			fetchErr = err
+			mu.Unlock()
+			shared.Log.Error("ConsumeTopic returned error", "topic", cc.model.topicName, "err", err)
+		}
+		closeDone()
+	}()
+
+	<-done
+
+	mu.Lock()
+	result := make([]api.Message, len(messages))
+	copy(result, messages)
+	finalErr := fetchErr
+	mu.Unlock()
+
+	shared.Log.Info("fetch complete", "topic", cc.model.topicName, "fetched", len(result), "target", count, "err", finalErr)
+
+	progressCh <- components.ProgressMsg{Current: len(result), Total: count, Done: true}
+	resultCh <- MessagesFetchedMsg{Messages: result}
+}
+
+// fetchWithProgressFlags is identical to fetchWithProgress but uses an explicit
+// set of ConsumeFlags instead of deriving them from the current model state.
+// Used by FetchNextBatch to load additional messages at a specific offset.
+func (cc *ConsumptionController) fetchWithProgressFlags(
+	flags api.ConsumeFlags,
+	count int,
+	progressCh chan<- components.ProgressMsg,
+	resultCh chan<- MessagesFetchedMsg,
+) {
+	shared.Log.Info("starting batch fetch", "topic", cc.model.topicName, "offset", flags.OffsetFlag, "limit", flags.LimitMessages)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var (
+		messages []api.Message
+		mu       sync.Mutex
+		done     = make(chan struct{})
+		closed   bool
+		fetchErr error
+	)
+
+	closeDone := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if !closed {
+			closed = true
+			close(done)
+		}
+	}
+
+	handleMsg := func(msg api.Message) {
+		mu.Lock()
+		messages = append(messages, msg)
+		current := len(messages)
+		mu.Unlock()
+
+		progressCh <- components.ProgressMsg{Current: current, Total: count}
+		if count > 0 && current >= count {
+			closeDone()
+		}
+	}
+
+	go func() {
+		err := cc.model.dataSource.ConsumeTopic(
+			ctx, cc.model.topicName, flags, handleMsg,
+			func(e any) {
+				if e != nil {
+					mu.Lock()
+					fetchErr = fmt.Errorf("%v", e)
+					mu.Unlock()
+					shared.Log.Error("batch fetch error callback", "topic", cc.model.topicName, "err", fetchErr)
+				}
+				closeDone()
+			},
+		)
+		if err != nil {
+			mu.Lock()
+			fetchErr = err
+			mu.Unlock()
+			shared.Log.Error("ConsumeTopic (batch) returned error", "topic", cc.model.topicName, "err", err)
+		}
+		closeDone()
+	}()
+
+	<-done
+
+	mu.Lock()
+	result := make([]api.Message, len(messages))
+	copy(result, messages)
+	finalErr := fetchErr
+	mu.Unlock()
+
+	shared.Log.Info("batch fetch complete", "topic", cc.model.topicName, "fetched", len(result), "err", finalErr)
+
+	progressCh <- components.ProgressMsg{Current: len(result), Total: count, Done: true}
+	resultCh <- MessagesFetchedMsg{Messages: result}
 }

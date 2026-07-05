@@ -2,12 +2,16 @@ package topic
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/Benny93/kafui/pkg/ui/components"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // TopicContentProvider provides the main content for the topic page (message table and search)
@@ -21,29 +25,24 @@ func NewTopicContentProvider(model *Model) *TopicContentProvider {
 	}
 }
 
-func (t *TopicContentProvider) RenderContent(width, height int) string {
-	// PERFORMANCE: Check render cache first
-	if cached, ok := t.model.getRenderCache(); ok {
-		return cached
+func (t *TopicContentProvider) RenderContent(width, height int) (result string) {
+	// Catch rendering panics so a bad message never crashes the TUI.
+	defer func() {
+		if r := recover(); r != nil {
+			shared.Log.Error("panic in RenderContent", "topic", t.model.topicName, "panic", r,
+				"messages", len(t.model.messages), "width", width, "height", height)
+			result = fmt.Sprintf("Render error — see ~/.kafui/kafui.log\n%v", r)
+		}
+	}()
+
+	tableWidth := width - 2
+	tableHeight := height
+
+	if t.model.common != nil && t.model.common.Layout != nil {
+		tableWidth = t.model.common.Layout.GetAvailableWidth() - 2
+		tableHeight = t.model.common.Layout.GetAvailableHeight() - 4
 	}
 
-	// Use layout system for dimension calculations if available
-	var tableHeight int
-	var tableWidth int
-	
-	if t.model.common != nil && t.model.common.Layout != nil {
-		// Use layout system
-		layout := t.model.common.Layout
-		tableHeight = layout.GetAvailableHeight() - 4 // Reserve space for padding
-		tableWidth = layout.GetAvailableWidth() - 2
-	} else {
-		// Fallback to ad-hoc calculation
-		innerHeight := height - 4
-		tableHeight = innerHeight - 3 // reservedLines
-		tableWidth = width - 6
-	}
-	
-	// Ensure minimum dimensions
 	if tableHeight < 5 {
 		tableHeight = 5
 	}
@@ -51,9 +50,43 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 		tableWidth = 20
 	}
 
-	// Update table dimensions based on actual content area size
 	if tableWidth > 0 && tableHeight > 0 {
 		t.model.updateTableDimensions(tableWidth, tableHeight)
+	}
+
+	// Overlays take over the content area when open.
+	if t.model.showGroups {
+		return t.model.renderGroupsOverlay(width)
+	}
+	if t.model.showOverview {
+		return t.model.renderOverviewOverlay(width)
+	}
+	if t.model.showSettings {
+		return t.model.renderSettingsOverlay(width)
+	}
+	if t.model.showSettingsEdit {
+		return t.model.renderEditOverlay(width)
+	}
+	if t.model.showMutationForm {
+		return t.model.renderMutationOverlay(width)
+	}
+	if t.model.showAnalysis {
+		return t.model.renderAnalysisOverlay(width)
+	}
+	if t.model.showSeek {
+		return t.model.renderSeekOverlay(width)
+	}
+	if t.model.showPartitions {
+		return t.model.renderPartitionsOverlay(width)
+	}
+	if t.model.showProduce {
+		return t.model.renderProduceOverlay(width)
+	}
+	if t.model.showProjections {
+		return t.model.renderProjectionsOverlay(width)
+	}
+	if t.model.showSavedFilters {
+		return t.model.renderSavedFiltersOverlay(width)
 	}
 
 	if t.model.error != nil {
@@ -61,50 +94,29 @@ func (t *TopicContentProvider) RenderContent(width, height int) string {
 	}
 
 	if t.model.loading && len(t.model.messages) == 0 {
-		return t.renderLoading()
+		return t.renderLoading(tableWidth)
 	}
 
 	if len(t.model.messages) == 0 && !t.model.loading {
 		return t.renderEmpty()
 	}
 
-	var content string
+	var contentBuilder strings.Builder
 
-	// PERFORMANCE: For large datasets, use custom renderer (bypasses bubbles table overhead)
-	if len(t.model.filteredMessages) > UseCustomRenderer {
-		content = t.model.renderTableCustom(width, height)
-		// Use MaxWidth to ensure content doesn't exceed available width
-		content = lipgloss.NewStyle().MaxWidth(width).Render(content)
-	} else {
-		// For small datasets, use standard table rendering
-		t.model.updateMessageTable()
-
-		var contentBuilder strings.Builder
-
-		// Add search bar if in search mode
-		if t.model.searchMode {
-			searchBar := t.renderSearchBar(width)
-			contentBuilder.WriteString(searchBar)
-			contentBuilder.WriteString("\n\n")
-		}
-
-		// Render the main table with max width constraint to prevent overflow
-		tableView := t.model.messageTable.View()
-		// Use MaxWidth to ensure table doesn't exceed available width
-		tableView = lipgloss.NewStyle().MaxWidth(width).Render(tableView)
-		contentBuilder.WriteString(tableView)
-
-		content = contentBuilder.String()
+	if t.model.searchMode {
+		contentBuilder.WriteString(t.renderSearchBar(width))
+		contentBuilder.WriteString("\n\n")
 	}
 
-	// Cache the render result
-	content = strings.TrimSpace(content)
-	t.model.setRenderCache(content)
+	// renderTableCustom reuses cached row strings on cursor-only moves.
+	tableView := t.model.renderTableCustom(width, height)
+	tableView = zone.Mark("message-table", tableView)
+	contentBuilder.WriteString(tableView)
 
-	return content
+	return strings.TrimSpace(contentBuilder.String())
 }
 
-// renderCustomTable renders a custom table for large datasets (bypasses bubbles table)
+// renderCustomTable delegates to renderTableCustom (kept for compatibility).
 func (t *TopicContentProvider) renderCustomTable(width, height int) string {
 	return t.model.renderTableCustom(width, height)
 }
@@ -148,11 +160,24 @@ func (t *TopicContentProvider) renderError() string {
 	return style.Render(fmt.Sprintf("Error: %v", t.model.error))
 }
 
-func (t *TopicContentProvider) renderLoading() string {
-	style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("205")).
-		Padding(1)
-	return style.Render(fmt.Sprintf("%s Loading messages...", t.model.spinner.View()))
+func (t *TopicContentProvider) renderLoading(width int) string {
+	spinnerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+
+	if t.model.fetchProgressBar.IsActive() {
+		label := spinnerStyle.Render(t.model.spinner.View()) + " " +
+			labelStyle.Render(fmt.Sprintf(
+				"Fetching messages… %d / %d",
+				t.model.fetchProgressBar.Current(),
+				t.model.fetchProgressBar.Total(),
+			))
+		bar := t.model.fetchProgressBar.View(width - 4)
+		return lipgloss.NewStyle().Padding(1, 0).Render(label + "\n" + bar)
+	}
+
+	// Shared loading-indicator mechanism (UI-12): a centered spinner + label.
+	frame := spinnerStyle.Render(t.model.spinner.View())
+	return components.CenteredLoading(frame, labelStyle.Render("Loading messages…"), width, 0)
 }
 
 func (t *TopicContentProvider) renderEmpty() string {
@@ -163,7 +188,7 @@ func (t *TopicContentProvider) renderEmpty() string {
 	if t.model.consuming {
 		return style.Render(fmt.Sprintf("%s Waiting for messages...", t.model.spinner.View()))
 	}
-	return style.Render("No messages available. Press 'r' to start consumption or check connection.")
+	return style.Render("This topic has no messages.")
 }
 
 func (t *TopicContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
@@ -173,8 +198,29 @@ func (t *TopicContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
 }
 
 func (t *TopicContentProvider) InitContent() tea.Cmd {
-	// Start consuming messages
-	return t.model.consumption.StartConsuming()
+	shared.Log.Info("opening topic page", "topic", t.model.topicName,
+		"partitions", t.model.topicDetails.NumPartitions,
+		"replicationFactor", t.model.topicDetails.ReplicationFactor,
+		"knownMessageCount", t.model.topicDetails.MessageCount)
+
+	// If the message count was already loaded on the main page and is 0,
+	// skip the fetch entirely — no loading screen, show empty state immediately.
+	if t.model.topicDetails.MessageCount == 0 {
+		t.model.loading = false
+		t.model.statusMessage = "Topic is empty — no messages found"
+		return nil
+	}
+
+	t.model.loading = true
+	const fetchCount = 60
+	return tea.Batch(
+		t.model.consumption.FetchLatestMessages(fetchCount),
+		t.model.spinner.Tick,
+	)
+}
+
+func (t *TopicContentProvider) IsInputMode() bool {
+	return false
 }
 
 // GetContentSize returns the estimated content size for scrollbar calculation
@@ -215,17 +261,25 @@ func (t *TopicHeaderDataProvider) GetStatusData() map[string]interface{} {
 		"messages":  len(t.model.messages),
 		"consuming": t.model.consuming,
 		"paused":    t.model.paused,
+		"mode":      t.model.consumeMode.String(),
 	}
 }
 
 func (t *TopicHeaderDataProvider) HandleHeaderUpdate(msg tea.Msg) tea.Cmd {
-	// Handle timer ticks for header updates
+	// Handle timer ticks for header updates — only when actively consuming.
+	// Stopping the tick when idle prevents timer proliferation: if this
+	// handler and the model handler both re-schedule on the same message, the
+	// number of pending timers doubles every cycle.
 	switch msg := msg.(type) {
 	case TimerTickMsg:
 		t.model.lastUpdate = time.Time(msg)
-		return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
-			return TimerTickMsg(t)
-		})
+		if t.model.consuming {
+			return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+				return TimerTickMsg(t)
+			})
+		}
+		// Not consuming — let the timer stop.
+		return nil
 	}
 	return nil
 }
@@ -279,9 +333,16 @@ func (t *TopicInfoSection) RenderItems(maxItems, width int) []providers.SidebarI
 		},
 	}
 
-	// Add config entries (limited to fit)
+	// Add config entries in stable alphabetical order (map iteration is random).
+	configKeys := make([]string, 0, len(t.model.topicDetails.ConfigEntries))
+	for key := range t.model.topicDetails.ConfigEntries {
+		configKeys = append(configKeys, key)
+	}
+	sort.Strings(configKeys)
+
 	configCount := 0
-	for key, value := range t.model.topicDetails.ConfigEntries {
+	for _, key := range configKeys {
+		value := t.model.topicDetails.ConfigEntries[key]
 		if configCount >= maxItems-len(items) {
 			break
 		}
@@ -474,19 +535,22 @@ func (t *ConsumptionControlSection) RenderItems(maxItems, width int) []providers
 		Status: consumingStatus,
 	})
 
-	// Follow mode
-	followIcon := "📍"
-	followStatus := "muted"
-	if t.model.consumeFlags.Follow {
-		followIcon = "🔄"
-		followStatus = "info"
+	// Mode indicator
+	modeIcon := "📋"
+	modeStatus := "info"
+	if t.model.consumeMode == ModeLive {
+		modeIcon = "📡"
+		modeStatus = "success"
+	} else if t.model.consumeMode == ModeOldest {
+		modeIcon = "📜"
+		modeStatus = "muted"
 	}
 
 	items = append(items, providers.SidebarItem{
-		Icon:   followIcon,
-		Text:   "Follow",
-		Value:  fmt.Sprintf("%t", t.model.consumeFlags.Follow),
-		Status: followStatus,
+		Icon:   modeIcon,
+		Text:   "Mode",
+		Value:  t.model.consumeMode.String(),
+		Status: modeStatus,
 	})
 
 	return items

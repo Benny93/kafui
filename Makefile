@@ -7,6 +7,13 @@ BUILD_TAG ?= latest
 
 GOBIN ?= $$(go env GOPATH)/bin
 
+# Build metadata injected into pkg/version via -ldflags -X.
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  ?= $(shell git rev-parse HEAD 2>/dev/null || echo none)
+BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+VERSION_PKG := github.com/Benny93/kafui/pkg/version
+LDFLAGS := -w -s -X $(VERSION_PKG).Version=$(VERSION) -X $(VERSION_PKG).Commit=$(COMMIT) -X $(VERSION_PKG).BuildTime=$(BUILD_TIME)
+
 .PHONY: build install run run-mock release release-snapshot test test-short test-integration test-benchmarks run-kafka stop-kafka docker-build
 .PHONY: vhs vhs-install vhs-clean
 .PHONY: build-debug run-debug test-debug
@@ -26,17 +33,17 @@ treemap-coverage: install-go-cover-treemap
 	${GOBIN}/go-cover-treemap -coverprofile ./coverage.out > coverage.svg
 
 build:
-	go build -ldflags "-w -s" .
+	go build -ldflags "$(LDFLAGS)" .
 
 build-debug:
-	go build -tags debug -ldflags "-w -s" -o kafui-debug .
+	go build -tags debug -ldflags "$(LDFLAGS)" -o kafui-debug .
 	@echo ""
 	@echo "Debug build complete: ./kafui-debug"
 	@echo "Press F3 to save a screenshot"
 	@echo "Press Shift+F3 to save a redacted screenshot"
 
 run-debug:
-	go run -tags debug -ldflags "-w -s" .
+	go run -tags debug -ldflags "$(LDFLAGS)" .
 
 test-debug:
 	go test -tags debug -v -cover -coverprofile=coverage.debug.out ./pkg/ui/debug/...
@@ -48,11 +55,11 @@ test-debug:
 	@echo "  Shift+F3  - Save redacted screenshot"
 
 install:
-	go install -ldflags "-w -s" .
+	go install -ldflags "$(LDFLAGS)" .
 run:
-	go run -ldflags "-w -s" .
+	go run -ldflags "$(LDFLAGS)" .
 run-mock:
-	go run -ldflags "-w -s" . --mock
+	go run -ldflags "$(LDFLAGS)" . --mock
 release:
 	goreleaser --clean
 release-snapshot:

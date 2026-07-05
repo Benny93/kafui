@@ -21,6 +21,9 @@ type Content interface {
 	Component
 	Sizeable
 	Focusable
+	// IsInputMode returns true when the content's provider has an active text input.
+	// ReusableApp uses this to suppress hotkeys that would steal keystrokes from the input.
+	IsInputMode() bool
 }
 
 type content struct {
@@ -72,13 +75,23 @@ func (c *content) View() string {
 
 	t := styles.CurrentTheme()
 
-	// Calculate capped width for content readability
-	contentWidth := cappedContentWidth(c.width)
+	// Calculate capped width for content readability. Reserve one column for the
+	// optional vertical scrollbar (added below when content overflows) so
+	// full-width content — e.g. a framed table — doesn't overflow the pane and
+	// wrap its border when the scrollbar appears.
+	contentWidth := cappedContentWidth(c.width) - 1
 
 	// Get content from provider with capped width
+	// Pass inner content dimensions (excluding border+padding overhead) so providers
+	// can set table page sizes accurately without guessing the chrome.
+	// Inner height = outer height - border(2) - padding(2) = height - 4
+	innerHeight := c.height - 4
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
 	var content string
 	if c.provider != nil {
-		content = c.provider.RenderContent(contentWidth, c.height)
+		content = c.provider.RenderContent(contentWidth, innerHeight)
 	}
 
 	// Check if content needs scrollbar
@@ -141,4 +154,11 @@ func (c *content) Blur() tea.Cmd {
 
 func (c *content) IsFocused() bool {
 	return c.focused
+}
+
+func (c *content) IsInputMode() bool {
+	if c.provider != nil {
+		return c.provider.IsInputMode()
+	}
+	return false
 }

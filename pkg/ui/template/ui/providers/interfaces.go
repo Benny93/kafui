@@ -16,6 +16,20 @@ type ContentProvider interface {
 
 	// GetContentSize returns the actual content size (number of lines) for scrollbar calculation
 	GetContentSize(width int) int
+
+	// IsInputMode returns true when the provider has an active text input (e.g. search bar).
+	// While in input mode, app-level hotkeys must not be intercepted so that every
+	// keystroke reaches the input field unmodified.
+	IsInputMode() bool
+}
+
+// PageActionsProvider is an optional interface a ContentProvider can implement
+// to advertise its context actions (e.g. "d delete • e edit") in the header/
+// breadcrumb bar's page-actions slot (UI-11). Feature plans populate this so the
+// available page-level operations are consistently surfaced across pages.
+type PageActionsProvider interface {
+	// PageActions returns a short, pre-rendered actions string, or "" for none.
+	PageActions() string
 }
 
 // SidebarSection defines the interface for sidebar sections
@@ -40,15 +54,19 @@ type SidebarSection interface {
 type SidebarItem struct {
 	// Icon is the status icon (●, ○, ×, ⚠, ✓, etc.)
 	Icon string
-	
+
 	// Text is the main text content
 	Text string
-	
+
 	// Value is optional secondary text (size, percentage, etc.)
 	Value string
-	
+
 	// Status determines the color styling ("success", "error", "warning", "info", "muted")
 	Status string
+
+	// ZoneID is an optional bubblezone ID. When set the sidebar renderer wraps
+	// the rendered line with zone.Mark so that mouse clicks can be detected.
+	ZoneID string
 }
 
 // HeaderDataProvider defines the interface for providing header data

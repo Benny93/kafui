@@ -2,29 +2,43 @@ package messagedetail
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
+	"github.com/evertras/bubble-table/table"
+
+	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
+)
+
+const (
+	colMdName  = "md_name"
+	colMdValue = "md_value"
+	colHdrKey  = "hdr_key"
+	colHdrVal  = "hdr_val"
 )
 
 // MessageDetailContentProvider implements the ContentProvider interface for message detail view
 type MessageDetailContentProvider struct {
-	model          *Model
-	tabs           []string
-	activeTab      int
-	keyEditor      textarea.Model
-	valueEditor    textarea.Model
-	headerEditor   textarea.Model
-	metadataEditor textarea.Model
-	focusedEditor  int // 0 = key, 1 = value (only for Content tab)
-	width          int
-	height         int
+	model         *Model
+	tabs          []string
+	activeTab     int
+	keyEditor     textarea.Model
+	valueEditor   textarea.Model
+	headersTable  table.Model
+	metadataTable table.Model
+	focusedEditor int // 0 = key, 1 = value (only for Content tab)
+	width         int
+	height        int
 }
 
 // NewMessageDetailContentProvider creates a new content provider for message detail
@@ -39,8 +53,8 @@ func NewMessageDetailContentProvider(model *Model) *MessageDetailContentProvider
 	// Initialize editors
 	provider.keyEditor = provider.newTextarea("Key", true)
 	provider.valueEditor = provider.newTextarea("Value", false)
-	provider.headerEditor = provider.newTextarea("Headers", false)
-	provider.metadataEditor = provider.newTextarea("Metadata", false)
+	provider.headersTable = createHeadersTable()
+	provider.metadataTable = createMetadataTable()
 
 	// Set initial content
 	provider.updateEditorContent()
@@ -96,24 +110,11 @@ func (m *MessageDetailContentProvider) updateEditorContent() {
 	// Update value editor
 	m.valueEditor.SetValue(m.model.GetFormattedValue())
 
-	// Update headers editor
-	if len(m.model.message.Headers) > 0 {
-		var headerContent strings.Builder
-		for _, header := range m.model.message.Headers {
-			headerContent.WriteString(fmt.Sprintf("%s: %s\n", header.Key, header.Value))
-		}
-		m.headerEditor.SetValue(headerContent.String())
-	} else {
-		m.headerEditor.SetValue("No headers available")
-	}
+	// Update headers table
+	m.headersTable = m.headersTable.WithRows(buildHeadersRows(m.model.message.Headers))
 
-	// Update metadata editor
-	info := m.model.GetMessageInfo()
-	var metadataContent strings.Builder
-	for key, value := range info {
-		metadataContent.WriteString(fmt.Sprintf("%-15s: %s\n", key, value))
-	}
-	m.metadataEditor.SetValue(metadataContent.String())
+	// Update metadata table
+	m.metadataTable = m.metadataTable.WithRows(buildMetadataRows(m.model.GetMessageInfo()))
 }
 
 // RenderContent renders the message detail content with tabs
@@ -164,7 +165,8 @@ func (m *MessageDetailContentProvider) RenderContent(width, height int) string {
 	return result
 }
 
-// renderTabs renders the tab navigation
+// renderTabs renders the tab navigation. Each tab is zone-marked so that
+// mouse left-clicks can switch the active tab without using the keyboard.
 func (m *MessageDetailContentProvider) renderTabs(width int) string {
 	var renderedTabs []string
 
@@ -187,7 +189,15 @@ func (m *MessageDetailContentProvider) renderTabs(width int) string {
 			border.BottomRight = ""
 		}
 		style = style.Border(border)
-		renderedTabs = append(renderedTabs, style.Render(tab))
+
+		// Active tab gets a filled dot prefix so it is unmistakable at a glance.
+		label := "  " + tab
+		if isActive {
+			label = "● " + tab
+		}
+
+		rendered := zone.Mark(fmt.Sprintf("md-tab-%d", i), style.Render(label))
+		renderedTabs = append(renderedTabs, rendered)
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
@@ -201,9 +211,15 @@ func (m *MessageDetailContentProvider) renderActiveTabContent(width, height int)
 	case 0: // Content tab (Key and Value split view)
 		content = m.renderSplitContentTab()
 	case 1: // Headers tab
-		content = m.headerEditor.View()
+		content = lipgloss.JoinVertical(lipgloss.Left,
+			m.renderSelectedKeyLabel(m.headersTable, colHdrKey),
+			m.headersTable.View(),
+		)
 	case 2: // Metadata tab
-		content = m.metadataEditor.View()
+		content = lipgloss.JoinVertical(lipgloss.Left,
+			m.renderSelectedKeyLabel(m.metadataTable, colMdName),
+			m.metadataTable.View(),
+		)
 	default:
 		content = "Unknown tab"
 	}
@@ -217,37 +233,247 @@ func (m *MessageDetailContentProvider) renderActiveTabContent(width, height int)
 	return content
 }
 
+// renderSelectedKeyLabel returns a styled one-line label showing the full key
+// of the currently highlighted row in the given table. If no row is selected
+// or the row has no value for keyCol, an empty string is returned so the
+// layout doesn't shift.
+func (m *MessageDetailContentProvider) renderSelectedKeyLabel(t table.Model, keyCol string) string {
+	rows := t.GetVisibleRows()
+	idx := t.GetHighlightedRowIndex()
+	if idx < 0 || idx >= len(rows) {
+		return ""
+	}
+	raw := rows[idx].Data[keyCol]
+	if raw == nil {
+		return ""
+	}
+	key := fmt.Sprintf("%v", raw)
+	if key == "" {
+		return ""
+	}
+	label := lipgloss.NewStyle().
+		Foreground(stylesPkg.Primary).
+		Bold(true).
+		Padding(0, 1).
+		Render("▶ " + key)
+	return label
+}
+
 // renderSplitContentTab renders the key and value editors side by side
 func (m *MessageDetailContentProvider) renderSplitContentTab() string {
 	// Get schema information
 	schemaInfo := m.model.GetSchemaInfo()
-	
-	// Prepare key section with schema name
+
+	// Max width for the schema label — each side gets roughly half the total width
+	// minus the "Schema: " label (8 chars) and some padding.
+	const schemaLabelPrefix = "Schema: "
+	maxSubjectLen := m.width/2 - len(schemaLabelPrefix) - 6
+	if maxSubjectLen < 10 {
+		maxSubjectLen = 10
+	}
+
+	// Prepare key section — show Avro record name, then subject as fallback.
 	keySchemaName := "Schema: N/A"
-	if schemaInfo != nil && schemaInfo.KeySchema != nil && schemaInfo.KeySchema.RecordName != "" {
-		keySchemaName = fmt.Sprintf("Schema: %s", schemaInfo.KeySchema.RecordName)
+	if schemaInfo != nil && schemaInfo.KeySchema != nil {
+		if display := schemaDisplayName(schemaInfo.KeySchema, maxSubjectLen); display != "" {
+			keySchemaName = schemaLabelPrefix + display
+		}
 	}
-	
-	// Prepare value section with schema name
+
+	// Prepare value section — same priority: record name > subject.
 	valueSchemaName := "Schema: N/A"
-	if schemaInfo != nil && schemaInfo.ValueSchema != nil && schemaInfo.ValueSchema.RecordName != "" {
-		valueSchemaName = fmt.Sprintf("Schema: %s", schemaInfo.ValueSchema.RecordName)
+	if schemaInfo != nil && schemaInfo.ValueSchema != nil {
+		if display := schemaDisplayName(schemaInfo.ValueSchema, maxSubjectLen); display != "" {
+			valueSchemaName = schemaLabelPrefix + display
+		}
 	}
-	
+
 	// Create styled schema headers
 	schemaHeaderStyle := lipgloss.NewStyle().
 		Foreground(stylesPkg.FgMuted).
 		Italic(true).
 		Padding(0, 1)
-	
+
 	keySchemaHeader := schemaHeaderStyle.Render(keySchemaName)
 	valueSchemaHeader := schemaHeaderStyle.Render(valueSchemaName)
-	
+
 	// Combine schema headers with editors
 	keySection := lipgloss.JoinVertical(lipgloss.Left, keySchemaHeader, m.keyEditor.View())
 	valueSection := lipgloss.JoinVertical(lipgloss.Left, valueSchemaHeader, m.valueEditor.View())
-	
+
 	return lipgloss.JoinHorizontal(lipgloss.Top, keySection, valueSection)
+}
+
+// schemaDisplayName returns the best human-readable label for a SchemaInfo.
+// Priority: Avro record name (from the schema "name" field) > subject name.
+// Long strings are truncated from the left so the most specific suffix stays visible.
+func schemaDisplayName(s *api.SchemaInfo, maxLen int) string {
+	if s == nil {
+		return ""
+	}
+	if s.RecordName != "" && s.RecordName != "Unknown" {
+		return truncateSubjectLeft(s.RecordName, maxLen)
+	}
+	if s.Subject != "" {
+		return truncateSubjectLeft(s.Subject, maxLen)
+	}
+	return ""
+}
+
+// truncateSubjectLeft truncates s from the beginning when it exceeds maxLen,
+// replacing the removed prefix with "...". This keeps the most specific
+// (rightmost) part of a dotted schema subject name visible.
+func truncateSubjectLeft(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	const ellipsis = "..."
+	if maxLen <= len(ellipsis) {
+		return ellipsis
+	}
+	return ellipsis + s[len(s)-(maxLen-len(ellipsis)):]
+}
+
+// createHeadersTable returns a freshly initialised bubble-table for the
+// Headers tab. Column widths are adjusted dynamically in sizeEditors().
+func createHeadersTable() table.Model {
+	return table.New([]table.Column{
+		table.NewColumn(colHdrKey, "Key", 30),
+		table.NewColumn(colHdrVal, "Value", 50),
+	}).
+		WithPageSize(30).
+		Focused(true).
+		WithBaseStyle(
+			lipgloss.NewStyle().BorderForeground(stylesPkg.FgSubtle),
+		).
+		HeaderStyle(
+			lipgloss.NewStyle().Foreground(stylesPkg.FgMuted).Bold(true),
+		).
+		HighlightStyle(
+			lipgloss.NewStyle().
+				Background(stylesPkg.Primary).
+				Foreground(stylesPkg.BgBase).
+				Bold(true),
+		)
+}
+
+// buildHeadersRows converts a message's headers slice to a slice of table rows.
+func buildHeadersRows(headers []api.MessageHeader) []table.Row {
+	rows := make([]table.Row, 0, len(headers))
+	for _, h := range headers {
+		rows = append(rows, table.NewRow(table.RowData{
+			colHdrKey: h.Key,
+			colHdrVal: h.Value,
+		}))
+	}
+	return rows
+}
+
+// copyHeadersAsCSV serialises the headers table as RFC-4180 CSV and writes to clipboard.
+func (m *MessageDetailContentProvider) copyHeadersAsCSV() {
+	var buf strings.Builder
+	buf.WriteString("Key,Value\n")
+	for _, h := range m.model.message.Headers {
+		k, v := h.Key, h.Value
+		if strings.ContainsAny(k, ",\"\n") {
+			k = `"` + strings.ReplaceAll(k, `"`, `""`) + `"`
+		}
+		if strings.ContainsAny(v, ",\"\n") {
+			v = `"` + strings.ReplaceAll(v, `"`, `""`) + `"`
+		}
+		buf.WriteString(k + "," + v + "\n")
+	}
+	if err := clipboard.WriteAll(buf.String()); err != nil {
+		m.model.statusMsg = "Failed to copy: " + err.Error()
+		m.model.statusTime = time.Now()
+		return
+	}
+	m.model.statusMsg = "Headers copied as CSV"
+	m.model.statusTime = time.Now()
+}
+
+// createMetadataTable returns a freshly initialised bubble-table for the
+// Metadata tab. Column widths are adjusted dynamically in sizeEditors().
+func createMetadataTable() table.Model {
+	return table.New([]table.Column{
+		table.NewColumn(colMdName, "Name", 20),
+		table.NewColumn(colMdValue, "Value", 40),
+	}).
+		WithPageSize(30).
+		Focused(true).
+		WithBaseStyle(
+			lipgloss.NewStyle().BorderForeground(stylesPkg.FgSubtle),
+		).
+		HeaderStyle(
+			lipgloss.NewStyle().Foreground(stylesPkg.FgMuted).Bold(true),
+		).
+		HighlightStyle(
+			lipgloss.NewStyle().
+				Background(stylesPkg.Primary).
+				Foreground(stylesPkg.BgBase).
+				Bold(true),
+		)
+}
+
+// buildMetadataRows converts the GetMessageInfo map to a sorted slice of
+// table rows so the display order is stable regardless of map iteration.
+func buildMetadataRows(info map[string]string) []table.Row {
+	keys := make([]string, 0, len(info))
+	for k := range info {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	rows := make([]table.Row, 0, len(info))
+	for _, k := range keys {
+		rows = append(rows, table.NewRow(table.RowData{
+			colMdName:  k,
+			colMdValue: info[k],
+		}))
+	}
+	return rows
+}
+
+// copyMetadataAsCSV serialises the current metadata rows as RFC-4180 CSV
+// (header line + one row per field, sorted by name) and writes to clipboard.
+func (m *MessageDetailContentProvider) copyMetadataAsCSV() {
+	info := m.model.GetMessageInfo()
+	keys := make([]string, 0, len(info))
+	for k := range info {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var buf strings.Builder
+	buf.WriteString("Name,Value\n")
+	for _, k := range keys {
+		v := info[k]
+		// Wrap fields that contain commas, quotes, or newlines in double-quotes.
+		if strings.ContainsAny(v, ",\"\n") {
+			v = `"` + strings.ReplaceAll(v, `"`, `""`) + `"`
+		}
+		buf.WriteString(k + "," + v + "\n")
+	}
+
+	if err := clipboard.WriteAll(buf.String()); err != nil {
+		m.model.statusMsg = "Failed to copy: " + err.Error()
+		m.model.statusTime = time.Now()
+		return
+	}
+	m.model.statusMsg = "Metadata copied as CSV"
+	m.model.statusTime = time.Now()
+}
+
+// exportMessageToFile writes the message to a JSON file next to the working
+// directory and reports the path in the status line (MSG-29).
+func (m *MessageDetailContentProvider) exportMessageToFile() {
+	path := shared.DefaultExportPath(m.model.topicName, m.model.message)
+	if err := shared.ExportMessageJSON(path, m.model.topicName, m.model.message); err != nil {
+		m.model.statusMsg = "Export failed: " + err.Error()
+	} else {
+		m.model.statusMsg = "Saved message to " + path
+	}
+	m.model.statusTime = time.Now()
 }
 
 // sizeEditors updates the size of all editors based on current dimensions
@@ -281,15 +507,27 @@ func (m *MessageDetailContentProvider) sizeEditors() {
 			m.valueEditor.Focus()
 		}
 
-	case 1: // Headers tab
-		m.headerEditor.SetWidth(m.width - 6)
-		m.headerEditor.SetHeight(editorHeight)
-		m.headerEditor.Focus()
+	case 1: // Headers tab — resize the value column to fill available width
+		const hdrKeyWidth = 30
+		hdrValWidth := m.width - 6 - hdrKeyWidth
+		if hdrValWidth < 20 {
+			hdrValWidth = 20
+		}
+		m.headersTable = m.headersTable.WithColumns([]table.Column{
+			table.NewColumn(colHdrKey, "Key", hdrKeyWidth),
+			table.NewColumn(colHdrVal, "Value", hdrValWidth),
+		})
 
-	case 2: // Metadata tab
-		m.metadataEditor.SetWidth(m.width - 6)
-		m.metadataEditor.SetHeight(editorHeight)
-		m.metadataEditor.Focus()
+	case 2: // Metadata tab — resize the value column to fill available width
+		const nameColWidth = 20
+		valueColWidth := m.width - 6 - nameColWidth
+		if valueColWidth < 20 {
+			valueColWidth = 20
+		}
+		m.metadataTable = m.metadataTable.WithColumns([]table.Column{
+			table.NewColumn(colMdName, "Name", nameColWidth),
+			table.NewColumn(colMdValue, "Value", valueColWidth),
+		})
 	}
 }
 
@@ -300,6 +538,23 @@ func (m *MessageDetailContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd 
 	}
 
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		switch msg.Button {
+		case tea.MouseButtonWheelUp, tea.MouseButtonWheelDown:
+			// Pass scroll events directly to the active editor so the user can
+			// scroll through long content with the mouse wheel.
+			return m.updateActiveEditor(msg)
+		case tea.MouseButtonLeft:
+			// Check if the user clicked on one of the tab labels.
+			for i := range m.tabs {
+				z := zone.Get(fmt.Sprintf("md-tab-%d", i))
+				if z.InBounds(msg) {
+					m.activeTab = i
+					return nil
+				}
+			}
+		}
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "shift+tab":
@@ -321,10 +576,17 @@ func (m *MessageDetailContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd 
 			}
 			return nil
 		case "c":
-			// Copy content to clipboard (only on Content tab)
 			if m.activeTab == 0 {
 				m.model.CopyContentWithFeedback()
+			} else if m.activeTab == 1 {
+				m.copyHeadersAsCSV()
+			} else if m.activeTab == 2 {
+				m.copyMetadataAsCSV()
 			}
+			return nil
+		case "e":
+			// Export the whole message to a JSON file (MSG-29).
+			m.exportMessageToFile()
 			return nil
 		case "r":
 			// Refresh schema info
@@ -351,9 +613,9 @@ func (m *MessageDetailContentProvider) updateActiveEditor(msg tea.Msg) tea.Cmd {
 			m.valueEditor, cmd = m.valueEditor.Update(msg)
 		}
 	case 1: // Headers tab
-		m.headerEditor, cmd = m.headerEditor.Update(msg)
+		m.headersTable, cmd = m.headersTable.Update(msg)
 	case 2: // Metadata tab
-		m.metadataEditor, cmd = m.metadataEditor.Update(msg)
+		m.metadataTable, cmd = m.metadataTable.Update(msg)
 	}
 
 	return cmd
@@ -365,6 +627,10 @@ func (m *MessageDetailContentProvider) InitContent() tea.Cmd {
 		return m.model.LoadSchemaInfoAsync()
 	}
 	return nil
+}
+
+func (m *MessageDetailContentProvider) IsInputMode() bool {
+	return false
 }
 
 // GetContentSize returns the estimated content size for scrollbar calculation

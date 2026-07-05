@@ -84,6 +84,10 @@ func (p *ResourceDetailContentProvider) InitContent() tea.Cmd {
 	return nil
 }
 
+func (p *ResourceDetailContentProvider) IsInputMode() bool {
+	return false
+}
+
 // GetContentSize returns the estimated content size for scrollbar calculation
 func (p *ResourceDetailContentProvider) GetContentSize(width int) int {
 	// Estimate based on content lines

@@ -200,27 +200,18 @@ func TestHelpSystemSections(t *testing.T) {
 	
 	rendered := help.Render()
 	
-	// Should contain all expected sections
-	expectedSections := []string{
-		"Global Keys",
-		"Navigation", 
-		"Focus Management",
+	// After UI-16 the overlay renders from the unified keys.GlobalKeys registry:
+	// the single "Global Keys" section carries navigation/focus bindings too.
+	if !strings.Contains(rendered, "Global Keys") {
+		t.Error("Expected help to contain section 'Global Keys'")
 	}
-	
-	for _, section := range expectedSections {
-		if !strings.Contains(rendered, section) {
-			t.Errorf("Expected help to contain section '%s'", section)
-		}
+
+	// Navigation/focus bindings now live in the global section.
+	if !strings.Contains(rendered, "next page") {
+		t.Error("Expected global 'next page' (tab) binding in overlay")
 	}
-	
-	// Should contain navigation bindings
-	if !strings.Contains(rendered, "move up") {
-		t.Error("Expected navigation bindings")
-	}
-	
-	// Should contain focus bindings
-	if !strings.Contains(rendered, "next component") {
-		t.Error("Expected focus management bindings")
+	if !strings.Contains(rendered, "back") {
+		t.Error("Expected global 'back' (esc) binding in overlay")
 	}
 }
 

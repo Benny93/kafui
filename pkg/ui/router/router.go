@@ -2,13 +2,24 @@ package router
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	appconfigpage "github.com/Benny93/kafui/pkg/ui/pages/appconfig_view"
+	brokerpage "github.com/Benny93/kafui/pkg/ui/pages/broker"
+	clusterformpage "github.com/Benny93/kafui/pkg/ui/pages/cluster_form"
+	clusterspage "github.com/Benny93/kafui/pkg/ui/pages/clusters"
+	connectorpage "github.com/Benny93/kafui/pkg/ui/pages/connector"
+	consumergrouppage "github.com/Benny93/kafui/pkg/ui/pages/consumer_group"
+	errorpage "github.com/Benny93/kafui/pkg/ui/pages/errorpage"
+	ksqlpage "github.com/Benny93/kafui/pkg/ui/pages/ksql"
+	metricspage "github.com/Benny93/kafui/pkg/ui/pages/metrics"
 	mainpage "github.com/Benny93/kafui/pkg/ui/pages/main"
 	messagedetailpage "github.com/Benny93/kafui/pkg/ui/pages/message_detail"
 	resourcedetailpage "github.com/Benny93/kafui/pkg/ui/pages/resource_detail"
+	schemadetailpage "github.com/Benny93/kafui/pkg/ui/pages/schema_detail"
 	topicpage "github.com/Benny93/kafui/pkg/ui/pages/topic"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,6 +33,17 @@ type Router struct {
 	currentPage string
 	width       int
 	height      int
+
+	// initialPageID/initialData deep-link the first render to a page other than
+	// "main" (UI-9); "main" is seeded beneath it so esc/back behaves normally.
+	initialPageID string
+	initialData   interface{}
+}
+
+// SetInitialRoute deep-links the app to a page on startup (before Init).
+func (r *Router) SetInitialRoute(pageID string, data interface{}) {
+	r.initialPageID = pageID
+	r.initialData = data
 }
 
 // NavigationData contains data passed during navigation
@@ -31,6 +53,10 @@ type NavigationData struct {
 	Message      api.Message
 	ResourceItem shared.ResourceItem
 	ResourceType string
+	SchemaItem   *mainpage.SchemaResourceItem
+	BrokerID     int32
+	BrokerInfo   api.BrokerInfo
+	HasBroker    bool
 }
 
 // NewRouter creates a new Router instance
@@ -45,12 +71,26 @@ func NewRouter(com *core.Common) *Router {
 
 // NavigateTo switches to a specific page with optional data
 func (r *Router) NavigateTo(pageID string, data interface{}) tea.Cmd {
-	// Add current page to history if it's different from the target
-	if r.currentPage != "" && r.currentPage != pageID {
-		r.history = append(r.history, r.currentPage)
-	}
-
+	r.pushHistory(pageID)
 	return tea.Batch(r.navigateToWithoutHistory(pageID, data), r.updateBreadcrumbs())
+}
+
+// pushHistory records r.currentPage onto the history stack before navigating
+// to pageID. When pageID is actually the page we just came from (a page
+// returning to its caller via forward navigation, e.g. a PageChangeMsg,
+// instead of Router.Back()), that top entry is popped instead of appending a
+// duplicate — otherwise repeating such a round trip (e.g. open the Clusters
+// dashboard, switch context back to "main", reopen) grows history and the
+// breadcrumb bar without bound (BUG-8).
+func (r *Router) pushHistory(pageID string) {
+	if r.currentPage == "" || r.currentPage == pageID {
+		return
+	}
+	if len(r.history) > 0 && r.history[len(r.history)-1] == pageID {
+		r.history = r.history[:len(r.history)-1]
+		return
+	}
+	r.history = append(r.history, r.currentPage)
 }
 
 // updateBreadcrumbs creates a command to update breadcrumbs for the current page
@@ -194,7 +234,15 @@ func (r *Router) createPage(pageID string, data interface{}) core.Page {
 	case "message_detail", "detail":
 		// Extract message data - handle both "message_detail" and legacy "detail" page IDs
 		if navData, ok := data.(*NavigationData); ok {
-			return messagedetailpage.NewMessageDetailPageModelWithCommon(r.com, navData.TopicName, navData.Message)
+			// PageID format is "detail:<topicName>:<partition>:<offset>"; extract topic name if not set
+			topicName := navData.TopicName
+			if topicName == "" {
+				parts := strings.SplitN(pageID, ":", 3)
+				if len(parts) >= 2 {
+					topicName = parts[1]
+				}
+			}
+			return messagedetailpage.NewMessageDetailPageModelWithCommon(r.com, topicName, navData.Message)
 		}
 		// Fallback with empty data
 		return messagedetailpage.NewMessageDetailPageModelWithCommon(r.com, "unknown", api.Message{})
@@ -208,9 +256,71 @@ func (r *Router) createPage(pageID string, data interface{}) core.Page {
 		minimalResource := &shared.MinimalResourceItem{ID: "unknown"}
 		return resourcedetailpage.NewModelWithCommon(minimalResource, "unknown", r.com)
 
-	default:
-		// Default to main page for unknown page IDs
+	case "schema_detail":
+		if navData, ok := data.(*NavigationData); ok && navData.SchemaItem != nil {
+			return schemadetailpage.NewSchemaDetailPageModel(r.com, navData.SchemaItem)
+		}
 		return mainpage.NewModelWithCommon(r.com)
+
+	case "appconfig":
+		return appconfigpage.NewModelWithCommon(r.com)
+
+	case "clusters":
+		return clusterspage.NewModelWithCommon(r.com)
+
+	case "ksql":
+		return ksqlpage.NewModelWithCommon(r.com)
+
+	case "metrics":
+		return metricspage.NewModelWithCommon(r.com)
+
+	case "cluster_form":
+		// cluster_form or cluster_form:<name> — empty name = add mode.
+		name := ""
+		if idx := strings.Index(pageID, ":"); idx != -1 {
+			name = pageID[idx+1:]
+		}
+		return clusterformpage.NewModelWithCommon(r.com, name)
+
+	case "ksql_query":
+		if navData, ok := data.(*NavigationData); ok && navData.TopicName != "" {
+			return ksqlpage.NewQueryModelWithSeed(r.com, navData.TopicName)
+		}
+		return ksqlpage.NewQueryModelWithCommon(r.com)
+
+	case "connector":
+		// connector:<connectCluster>:<name> — connect-cluster names contain no ':'.
+		parts := strings.SplitN(pageID, ":", 3)
+		if len(parts) == 3 {
+			return connectorpage.NewModelWithCommon(r.com, parts[1], parts[2])
+		}
+		return mainpage.NewModelWithCommon(r.com)
+
+	case "consumer_group":
+		// consumer_group:<groupID> — parse the id from the page ID (robust even
+		// if a group id contains ':', since we take everything after the first).
+		if idx := strings.Index(pageID, ":"); idx != -1 {
+			return consumergrouppage.NewModelWithCommon(r.com, pageID[idx+1:])
+		}
+		return mainpage.NewModelWithCommon(r.com)
+
+	case "broker":
+		// broker:<id> — extract the broker id (and optional info) from data or the ID.
+		if navData, ok := data.(*NavigationData); ok && navData.HasBroker {
+			return brokerpage.NewModelWithInfo(r.com, navData.BrokerID, navData.BrokerInfo)
+		}
+		// Fall back to parsing the id out of "broker:<id>".
+		if idx := strings.Index(pageID, ":"); idx != -1 {
+			if id, err := strconv.Atoi(pageID[idx+1:]); err == nil {
+				return brokerpage.NewModelWithCommon(r.com, int32(id))
+			}
+		}
+		return mainpage.NewModelWithCommon(r.com)
+
+	default:
+		// Unknown page ID → a not-found error page (UI-10) rather than silently
+		// aborting navigation or masquerading as the main page.
+		return errorpage.New(r.com, errorpage.NotFound, "Page not found", "No page is registered for \""+pageID+"\".")
 	}
 }
 
@@ -248,6 +358,16 @@ func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if resourceType, ok := data["resourceType"].(string); ok {
 					navData.ResourceType = resourceType
 				}
+				if schemaItem, ok := data["schemaItem"].(*mainpage.SchemaResourceItem); ok {
+					navData.SchemaItem = schemaItem
+				}
+				if brokerID, ok := data["brokerID"].(int32); ok {
+					navData.BrokerID = brokerID
+					navData.HasBroker = true
+				}
+				if brokerInfo, ok := data["brokerInfo"].(api.BrokerInfo); ok {
+					navData.BrokerInfo = brokerInfo
+				}
 			case *NavigationData:
 				navData = data
 			case NavigationData:
@@ -259,6 +379,13 @@ func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// Pass a genuinely nil interface{} when there's no data, rather than a
+		// non-nil interface wrapping a nil *NavigationData — createPage's `data,
+		// ok := data.(*NavigationData)` type assertions succeed on the latter
+		// (the dynamic type matches) and then dereference the nil pointer.
+		if navData == nil {
+			return r, r.NavigateTo(msg.PageID, nil)
+		}
 		return r, r.NavigateTo(msg.PageID, navData)
 	}
 
@@ -279,11 +406,7 @@ func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if newPage != nil {
 			// Determine the page ID from the new page
 			newPageID := newPage.GetID()
-
-			// Add current page to history
-			if r.currentPage != "" && r.currentPage != newPageID {
-				r.history = append(r.history, r.currentPage)
-			}
+			r.pushHistory(newPageID)
 
 			// Blur current page
 			if r.currentPage != "" {
@@ -327,7 +450,12 @@ func (r *Router) View() string {
 	return currentPage.View()
 }
 
-// Init initializes the router by navigating to the main page
+// Init initializes the router by navigating to the main page, then to the
+// deep-link target (if any) so "main" sits beneath it in history.
 func (r *Router) Init() tea.Cmd {
-	return r.NavigateTo("main", nil)
+	mainCmd := r.NavigateTo("main", nil)
+	if r.initialPageID == "" || r.initialPageID == "main" {
+		return mainCmd
+	}
+	return tea.Batch(mainCmd, r.NavigateTo(r.initialPageID, r.initialData))
 }

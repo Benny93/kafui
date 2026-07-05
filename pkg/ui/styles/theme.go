@@ -114,8 +114,11 @@ func (s *Styles) ApplyTheme(theme Theme) {
 	FgMuted = theme.FgMuted
 	FgSubtle = theme.FgSubtle
 
-	// Re-initialize styles with new colors
+	// Re-initialize styles with new colors. DefaultStyles() hardcodes the dark
+	// theme type, so restore the applied theme's name afterwards (UI-3) — without
+	// this the toggle silently reverted to dark and persistence recorded "dark".
 	*s = *DefaultStyles()
+	s.CurrentTheme = theme.Name
 }
 
 // GetTheme returns the theme for a given theme type

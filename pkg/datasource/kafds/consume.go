@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/IBM/sarama"
@@ -78,6 +79,20 @@ type ConsumeConfig struct {
 	LimitMessagesFlag int64
 	Reg               *proto.DescriptorRegistry
 	DecodeMsgPack     bool
+
+	// Typed seek model (MSG-1..4). When Seek is set it drives per-partition
+	// offset resolution instead of OffsetFlag.
+	Seek          api.SeekMode
+	SeekOffset    *int64
+	SeekTimestamp *time.Time
+
+	// Resource controls (MSG-10). TailRatePerSec throttles follow delivery;
+	// MaxBytesPerSec throttles browse fetches. Zero disables each.
+	TailRatePerSec int
+	MaxBytesPerSec int
+
+	// OnEvent, when set, receives browse phase/statistics events (MSG-7).
+	OnEvent func(api.BrowseEvent)
 }
 
 // DefaultConsumeConfig returns a default configuration
@@ -111,7 +126,7 @@ func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.Con
 		onError(err)
 		return
 	}
-	
+
 	// Update config from flags
 	config.OffsetFlag = consumeFlags.OffsetFlag
 	if config.OffsetFlag == "" {
@@ -120,10 +135,36 @@ func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.Con
 	config.Follow = consumeFlags.Follow
 	config.Tail = consumeFlags.Tail
 	config.GroupFlag = consumeFlags.GroupFlag
-	
+	config.LimitMessagesFlag = consumeFlags.LimitMessages
+	config.Seek = consumeFlags.Seek
+	config.SeekOffset = consumeFlags.SeekOffset
+	config.SeekTimestamp = consumeFlags.SeekTimestamp
+	if len(consumeFlags.Partitions) > 0 {
+		config.FlagPartitions = consumeFlags.Partitions
+	}
+	if config.Seek == api.SeekLive {
+		config.Follow = true
+	}
+
+	// Validate the typed seek model before doing any work (MSG-1).
+	if err := consumeFlags.Validate(); err != nil {
+		onError(err)
+		return
+	}
+
 	// Allow deprecated flag to override when outputFormat is not specified, or default.
 	if config.OutputFormat == OutputFormatDefault && config.Raw {
 		config.OutputFormat = OutputFormatRaw
+	}
+
+	// Initialize the Avro schema cache from the active cluster config so that
+	// Avro-encoded message values and keys are decoded to JSON automatically.
+	// getSchemaCache() returns nil (not an error) when no registry URL is set,
+	// in which case avroDecodeWithCache passes the raw bytes through unchanged.
+	if config.SchemaCache == nil {
+		if sc, err := getSchemaCache(); err == nil {
+			config.SchemaCache = sc
+		}
 	}
 
 	switch config.OffsetFlag {
@@ -222,23 +263,46 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
 		return
 	}
 
+	availablePartitions, err := saramaConsumer.Partitions(topic)
+	if err != nil {
+		onError(fmt.Sprintf("Unable to get partitions: %v\n", err))
+		return
+	}
+
 	var partitions []int32
 	if len(config.FlagPartitions) == 0 {
-		partitions, err = saramaConsumer.Partitions(topic)
-		if err != nil {
-			onError(fmt.Sprintf("Unable to get partitions: %v\n", err))
-			return
-		}
+		partitions = availablePartitions
 	} else {
+		// Validate requested partitions against topic metadata (MSG-4).
+		avail := make(map[int32]bool, len(availablePartitions))
+		for _, p := range availablePartitions {
+			avail[p] = true
+		}
+		for _, p := range config.FlagPartitions {
+			if !avail[p] {
+				onError(api.NewPartitionError("partition does not exist", topic, p))
+				return
+			}
+		}
 		partitions = config.FlagPartitions
 	}
+
+	emitEvent(config, api.BrowseEvent{Phase: api.PhaseCreatingConsumer, Description: "creating consumer"})
+
+	// Per-follow-loop rate limiter shared across partitions (MSG-10). In live
+	// mode delivery is capped so it can't overwhelm the terminal.
+	tailRate := config.TailRatePerSec
+	if config.Follow && tailRate == 0 {
+		tailRate = api.DefaultTailRate
+	}
+	limiter := api.NewRateLimiter(tailRate)
 
 	wg := sync.WaitGroup{}
 	mu := sync.Mutex{} // Synchronizes stderr and stdout.
 	for _, partition := range partitions {
 		wg.Add(1)
 
-		go func(partition int32, offset int64) {
+		go func(partition int32, legacyOffset int64) {
 			defer wg.Done()
 			defer func() {
 				if r := recover(); r != nil {
@@ -250,44 +314,155 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
 			offsets, err := getOffsets(client, topic, partition)
 			if err != nil {
 				onError(fmt.Errorf("Failed to get %s offsets for partition %d: %w", topic, partition, err))
+				return
 			}
 
-			if config.Tail != 0 {
-				offset = offsets.newest - int64(config.Tail)
-				if offset < offsets.oldest {
-					offset = offsets.oldest
-				}
-			}
-
-			// Already at end of partition, return early
+			// Skip empty partitions when browsing (MSG-4).
 			if !config.Follow && offsets.newest == offsets.oldest {
 				return
 			}
 
-			pc, err := saramaConsumer.ConsumePartition(topic, partition, offset)
+			start, stop, backward, err := resolvePartitionSeek(client, topic, partition, offsets, config, legacyOffset)
 			if err != nil {
-				onError(fmt.Errorf("Unable to consume partition: %v %v %v %v\n", topic, partition, offset, err))
+				onError(err)
+				return
+			}
+
+			pc, err := saramaConsumer.ConsumePartition(topic, partition, start)
+			if err != nil {
+				onError(fmt.Errorf("Unable to consume partition: %v %v %v %v\n", topic, partition, start, err))
+				return
 			}
 
 			var count int64 = 0
+
+			// In non-follow mode, reset this timer on every received message.
+			// If no message arrives within the window we've likely hit the end of
+			// readable messages (remaining offsets are control/transaction markers
+			// that Sarama filters out but that advance the high-water mark).
+			const idleTimeout = 300 * time.Millisecond
+			idleTimer := func() <-chan time.Time {
+				if config.Follow {
+					return nil // no idle timeout in follow mode
+				}
+				return time.After(idleTimeout)
+			}
+			idle := idleTimer()
+
 			for {
 				select {
 				case <-ctx.Done():
 					return
+				case <-idle:
+					// No readable message received within the idle window; the
+					// remaining offsets are control messages — we're done.
+					return
 				case msg := <-pc.Messages():
+					// Backward window: stop once we pass the resolved end offset.
+					if backward && msg.Offset >= stop {
+						return
+					}
+					if config.Follow {
+						if err := limiter.Wait(ctx); err != nil {
+							return
+						}
+					}
 					handleMessageWithConfig(msg, &mu, config, handler)
 					count++
 					if config.LimitMessagesFlag > 0 && count >= config.LimitMessagesFlag {
 						return
 					}
-					if !config.Follow && msg.Offset+1 >= pc.HighWaterMarkOffset() {
+					if !config.Follow && !backward && msg.Offset+1 >= pc.HighWaterMarkOffset() {
 						return
 					}
+					// Reset idle timer after each real message.
+					idle = idleTimer()
 				}
 			}
 		}(partition, offset)
 	}
+	emitEvent(config, api.BrowseEvent{Phase: api.PhasePolling, Description: "polling partitions"})
 	wg.Wait()
+	emitEvent(config, api.BrowseEvent{Phase: api.PhaseDone, Description: "done", Done: true})
+}
+
+// emitEvent forwards a browse event when a callback is configured (MSG-7).
+func emitEvent(config *ConsumeConfig, ev api.BrowseEvent) {
+	if config != nil && config.OnEvent != nil {
+		config.OnEvent(ev)
+	}
+}
+
+// resolvePartitionSeek computes the start offset (inclusive), the stop offset
+// (exclusive; only meaningful when backward is true), and whether the read runs
+// backward, for a single partition given the configured seek model (MSG-2/3/4).
+// legacyStart is the offset derived from the deprecated OffsetFlag and is used
+// when no typed seek mode is set.
+func resolvePartitionSeek(client sarama.Client, topic string, partition int32, offs *offsets, config *ConsumeConfig, legacyStart int64) (start, stop int64, backward bool, err error) {
+	window := config.LimitMessagesFlag
+	if window <= 0 {
+		window = int64(api.DefaultPageSize)
+	}
+
+	switch config.Seek {
+	case api.SeekFromOffset:
+		return clampSeekOffset(*config.SeekOffset, offs), offs.newest, false, nil
+
+	case api.SeekToOffset:
+		end := clampSeekOffset(*config.SeekOffset, offs)
+		start = end - window
+		if start < offs.oldest {
+			start = offs.oldest
+		}
+		return start, end + 1, true, nil // inclusive of the target offset
+
+	case api.SeekFromTimestamp:
+		o, e := client.GetOffset(topic, partition, config.SeekTimestamp.UnixMilli())
+		if e != nil {
+			return 0, 0, false, fmt.Errorf("resolve timestamp offset for partition %d: %w", partition, e)
+		}
+		if o < 0 { // no message at/after T — nothing new to read; sit at the end
+			o = offs.newest
+		}
+		return clampSeekOffset(o, offs), offs.newest, false, nil
+
+	case api.SeekToTimestamp:
+		o, e := client.GetOffset(topic, partition, config.SeekTimestamp.UnixMilli())
+		if e != nil {
+			return 0, 0, false, fmt.Errorf("resolve timestamp offset for partition %d: %w", partition, e)
+		}
+		if o < 0 { // no match — read backward from the end
+			o = offs.newest
+		}
+		end := clampSeekOffset(o, offs)
+		start = end - window
+		if start < offs.oldest {
+			start = offs.oldest
+		}
+		return start, end, true, nil // exclusive: messages strictly before T
+
+	default:
+		// Legacy behaviour: newest with a tail window, else the OffsetFlag offset.
+		if config.Tail != 0 {
+			start = offs.newest - int64(config.Tail)
+			if start < offs.oldest {
+				start = offs.oldest
+			}
+			return start, offs.newest, false, nil
+		}
+		return legacyStart, offs.newest, false, nil
+	}
+}
+
+// clampSeekOffset constrains a requested offset to the partition's [oldest, newest] range.
+func clampSeekOffset(o int64, offs *offsets) int64 {
+	if o < offs.oldest {
+		return offs.oldest
+	}
+	if o > offs.newest {
+		return offs.newest
+	}
+	return o
 }
 
 func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
@@ -305,31 +480,24 @@ func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
 func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config *ConsumeConfig, handler api.MessageHandlerFunc) {
 	var stderr bytes.Buffer
 
-	var dataToDisplay []byte
-	var keyToDisplay []byte
+	// Default to raw bytes; proto/msgpack decode inline, Avro deferred to DecodeMessage.
+	dataToDisplay := msg.Value
+	keyToDisplay := msg.Key
 	var err error
 
 	if config.ProtoType != "" {
-		dataToDisplay, err = protoDecode(config.Reg, msg.Value, config.ProtoType)
-		if err != nil {
-			fmt.Fprintf(&stderr, "failed to decode proto. falling back to binary output. Error: %v\n", err)
-		}
-	} else {
-		dataToDisplay, err = avroDecodeWithCache(msg.Value, config.SchemaCache)
-		if err != nil {
-			fmt.Fprintf(&stderr, "could not decode Avro data: %v\n", err)
+		if decoded, decErr := protoDecode(config.Reg, msg.Value, config.ProtoType); decErr == nil {
+			dataToDisplay = decoded
+		} else {
+			fmt.Fprintf(&stderr, "failed to decode proto. falling back to binary output. Error: %v\n", decErr)
 		}
 	}
 
 	if config.KeyProtoType != "" {
-		keyToDisplay, err = protoDecode(config.Reg, msg.Key, config.KeyProtoType)
-		if err != nil {
-			fmt.Fprintf(&stderr, "failed to decode proto key. falling back to binary output. Error: %v\n", err)
-		}
-	} else {
-		keyToDisplay, err = avroDecodeWithCache(msg.Key, config.SchemaCache)
-		if err != nil {
-			fmt.Fprintf(&stderr, "could not decode Avro data: %v\n", err)
+		if decoded, decErr := protoDecode(config.Reg, msg.Key, config.KeyProtoType); decErr == nil {
+			keyToDisplay = decoded
+		} else {
+			fmt.Fprintf(&stderr, "failed to decode proto key. falling back to binary output. Error: %v\n", decErr)
 		}
 	}
 
@@ -338,11 +506,11 @@ func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config
 		err = msgpack.Unmarshal(msg.Value, &obj)
 		if err != nil {
 			fmt.Fprintf(&stderr, "could not decode msgpack data: %v\n", err)
-		}
-
-		dataToDisplay, err = json.Marshal(obj)
-		if err != nil {
-			fmt.Fprintf(&stderr, "could not decode msgpack data: %v\n", err)
+		} else {
+			dataToDisplay, err = json.Marshal(obj)
+			if err != nil {
+				fmt.Fprintf(&stderr, "could not decode msgpack data: %v\n", err)
+			}
 		}
 	}
 
@@ -357,18 +525,86 @@ func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config
 		headers = append(headers, header)
 	}
 
+	// For Avro-encoded messages, store raw bytes and defer decoding to DecodeMessage.
+	// For proto/msgpack/plain messages, store the already-decoded string directly.
+	var keyStr, valueStr string
+	var rawKey, rawValue []byte
+
+	if keySchema != "" {
+		rawKey = make([]byte, len(msg.Key))
+		copy(rawKey, msg.Key)
+	} else {
+		keyStr = string(keyToDisplay)
+	}
+
+	if valueSchema != "" {
+		rawValue = make([]byte, len(msg.Value))
+		copy(rawValue, msg.Value)
+	} else {
+		valueStr = string(dataToDisplay)
+	}
+
+	// Per-message metadata (MSG-5). Distinguish null (nil) from empty (len 0).
+	var keySize, valueSize *int
+	keyNull := msg.Key == nil
+	valueNull := msg.Value == nil
+	if !keyNull {
+		n := len(msg.Key)
+		keySize = &n
+	}
+	if !valueNull {
+		n := len(msg.Value)
+		valueSize = &n
+	}
+	headersSize := 0
+	for _, h := range msg.Headers {
+		headersSize += len(h.Key) + len(h.Value)
+	}
+	tsType := api.TimestampTypeNone
+	if !msg.BlockTimestamp.IsZero() {
+		tsType = api.TimestampTypeLogAppend
+	} else if !msg.Timestamp.IsZero() {
+		tsType = api.TimestampTypeCreate
+	}
+
 	newMessage := api.Message{
-		Key:           string(keyToDisplay),
+		Key:           keyStr,
+		Value:         valueStr,
+		RawKey:        rawKey,
+		RawValue:      rawValue,
 		Headers:       headers,
-		Value:         string(dataToDisplay),
 		Offset:        msg.Offset,
 		Partition:     msg.Partition,
 		KeySchemaID:   keySchema,
 		ValueSchemaID: valueSchema,
+		Timestamp:     msg.Timestamp,
+		TimestampType: tsType,
+		KeySize:       keySize,
+		ValueSize:     valueSize,
+		HeadersSize:   headersSize,
+		KeyNull:       keyNull,
+		ValueNull:     valueNull,
+		KeySerde:      serdeName(keySchema, config.KeyProtoType, config),
+		ValueSerde:    serdeName(valueSchema, config.ProtoType, config),
 	}
-	
+
 	if handler != nil {
 		handler(newMessage)
+	}
+}
+
+// serdeName reports the decoder currently used for a key or value. It is a
+// placeholder until the serde framework (MSG-11..) replaces the hardwired paths.
+func serdeName(schemaID, protoType string, config *ConsumeConfig) string {
+	switch {
+	case schemaID != "":
+		return "avro"
+	case protoType != "":
+		return "protobuf"
+	case config.DecodeMsgPack:
+		return "msgpack"
+	default:
+		return "string"
 	}
 }
 

@@ -517,9 +517,8 @@ m.error = err
 
 ## Related Documents
 
-- [BUBBLE_TEA_IMPROVEMENT_PLAN.md](./BUBBLE_TEA_IMPROVEMENT_PLAN.md) - Improvement plan
 - [ARCHITECTURE_DECISIONS.md](./ARCHITECTURE_DECISIONS.md) - Architecture decisions
-- [UI_ARCHITECTURE.md](./UI_ARCHITECTURE.md) - Architecture documentation
+- [pkg/ui/UI_ARCHITECTURE.md](./pkg/ui/UI_ARCHITECTURE.md) - Architecture documentation
 
 ---
 

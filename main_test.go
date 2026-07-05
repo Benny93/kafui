@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"testing"
+
+	cmd "github.com/Benny93/kafui/cmd/kafui"
 )
 
 // TestMain tests the main function execution
@@ -106,6 +108,13 @@ func TestMain_InvalidFlag(t *testing.T) {
 
 	// Test with invalid flag
 	os.Args = []string{"kafui", "--invalid-flag"}
+
+	// DoExecute calls os.Exit(1) on a parse error (bug #2: no more raw panic),
+	// which would kill this test binary outright — swap in a panic so the
+	// existing recover() below can observe the error path instead.
+	originalExit := cmd.OsExit
+	cmd.OsExit = func(int) { panic("os.Exit(1)") }
+	defer func() { cmd.OsExit = originalExit }()
 
 	// Capture if main() panics
 	defer func() {

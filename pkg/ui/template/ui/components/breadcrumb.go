@@ -6,8 +6,14 @@ import (
 
 // Breadcrumb represents a breadcrumb navigation component
 type Breadcrumb struct {
-	width int
-	items []string
+	width   int
+	items   []string
+	actions string // page-actions slot rendered right-aligned (UI-11)
+}
+
+// SetActions sets the page-actions text rendered on the right of the bar.
+func (b *Breadcrumb) SetActions(actions string) {
+	b.actions = actions
 }
 
 // NewBreadcrumb creates a new breadcrumb component
@@ -65,6 +71,15 @@ func (b *Breadcrumb) View() string {
 
 	// Join items with a bit of space but no separator, or maybe a subtle one
 	content := lipgloss.JoinHorizontal(lipgloss.Top, renderedItems...)
+
+	// Page-actions slot (UI-11): right-align advertised page actions on the bar.
+	if b.actions != "" {
+		actions := statusNugget.Copy().Foreground(lipgloss.Color("#C1C6B2")).Render(b.actions)
+		fill := b.width - lipgloss.Width(content) - lipgloss.Width(actions)
+		if fill > 0 {
+			content = lipgloss.JoinHorizontal(lipgloss.Top, content, lipgloss.NewStyle().Width(fill).Render(""), actions)
+		}
+	}
 
 	return statusBarStyle.Render(content)
 }

@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"testing"
+
+	"github.com/Benny93/kafui/pkg/ui"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestCfgFileVariable tests the global cfgFile variable
@@ -18,7 +22,7 @@ func TestCfgFileVariable(t *testing.T) {
 
 // TestCreateRootCommand tests the CreateRootCommand function
 func TestCreateRootCommand(t *testing.T) {
-	mockInit := func(configFile string, mock bool) {
+	mockInit := func(opts ui.InitOptions) {
 		// Mock function for testing
 	}
 
@@ -60,10 +64,10 @@ func TestCreateRootCommandRun(t *testing.T) {
 	var receivedConfig string
 	var receivedMock bool
 
-	mockInit := func(configFile string, mock bool) {
+	mockInit := func(opts ui.InitOptions) {
 		initCalled = true
-		receivedConfig = configFile
-		receivedMock = mock
+		receivedConfig = opts.ConfigFile
+		receivedMock = opts.Mock
 	}
 
 	tests := []struct {
@@ -133,6 +137,75 @@ func TestCreateRootCommandRun(t *testing.T) {
 	}
 }
 
+// TestOverrideFlagsReachInit verifies broker/schema-registry/cluster overrides
+// are parsed and threaded into InitOptions.
+func TestOverrideFlagsReachInit(t *testing.T) {
+	var got ui.InitOptions
+	mockInit := func(opts ui.InitOptions) { got = opts }
+
+	brokersFlag = nil
+	schemaRegistryURL = ""
+	clusterFlag = ""
+
+	cmd := CreateRootCommand(mockInit)
+	if err := cmd.ParseFlags([]string{"--brokers", "a:9092,b:9092", "--schema-registry", "http://sr:8081", "--cluster", "prod"}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	cmd.Run(cmd, []string{})
+
+	if len(got.Brokers) != 2 || got.Brokers[0] != "a:9092" {
+		t.Errorf("brokers = %v, want [a:9092 b:9092]", got.Brokers)
+	}
+	if got.SchemaRegistry != "http://sr:8081" {
+		t.Errorf("schema-registry = %s", got.SchemaRegistry)
+	}
+	if got.Cluster != "prod" {
+		t.Errorf("cluster = %s", got.Cluster)
+	}
+}
+
+// TestReadOnlyFlagReachesInit verifies the global --read-only flag is parsed and
+// threaded into InitOptions (AA-4).
+func TestReadOnlyFlagReachesInit(t *testing.T) {
+	var got ui.InitOptions
+	mockInit := func(opts ui.InitOptions) { got = opts }
+
+	readOnlyFlag = false
+	cmd := CreateRootCommand(mockInit)
+	if f := cmd.PersistentFlags().Lookup("read-only"); f == nil {
+		t.Fatal("read-only flag not found")
+	}
+	if err := cmd.ParseFlags([]string{"--read-only"}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	cmd.Run(cmd, []string{})
+
+	if !got.ReadOnly {
+		t.Errorf("InitOptions.ReadOnly = %v, want true", got.ReadOnly)
+	}
+}
+
+// TestMetricsListenFlagReachesInit verifies the --metrics-listen flag is parsed
+// and threaded into InitOptions (MM-16).
+func TestMetricsListenFlagReachesInit(t *testing.T) {
+	var got ui.InitOptions
+	mockInit := func(opts ui.InitOptions) { got = opts }
+
+	metricsListenFlag = ""
+	cmd := CreateRootCommand(mockInit)
+	if f := cmd.PersistentFlags().Lookup("metrics-listen"); f == nil {
+		t.Fatal("metrics-listen flag not found")
+	}
+	if err := cmd.ParseFlags([]string{"--metrics-listen", ":9090"}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	cmd.Run(cmd, []string{})
+
+	if got.MetricsListen != ":9090" {
+		t.Errorf("InitOptions.MetricsListen = %q, want %q", got.MetricsListen, ":9090")
+	}
+}
+
 // TestDoExecute tests the DoExecute function
 func TestDoExecute(t *testing.T) {
 	originalArgs := os.Args
@@ -165,9 +238,9 @@ func TestDoExecuteWithMockInit(t *testing.T) {
 	var receivedMock bool
 
 	// Replace the default init function
-	defaultKafuiInit = func(configFile string, mock bool) {
+	defaultKafuiInit = func(opts ui.InitOptions) {
 		initCalled = true
-		receivedMock = mock
+		receivedMock = opts.Mock
 	}
 
 	// Test with mock flag
@@ -189,4 +262,19 @@ func TestDefaultKafuiInit(t *testing.T) {
 	if defaultKafuiInit == nil {
 		t.Error("defaultKafuiInit should not be nil")
 	}
+}
+
+// TestRootCommandSilencesErrorsAndUsage guards against bug #2 regressing: a
+// subcommand error must not make cobra print its own "Error:"/usage on top of
+// DoExecute's single message, and must not panic.
+func TestRootCommandSilencesErrorsAndUsage(t *testing.T) {
+	cmd := CreateRootCommand(func(ui.InitOptions) {})
+	assert.True(t, cmd.SilenceErrors, "SilenceErrors should be set so cobra doesn't double-print")
+	assert.True(t, cmd.SilenceUsage, "SilenceUsage should be set so a runtime failure doesn't dump usage")
+
+	cmd.SetArgs([]string{"get", "brokers", "--format", "json"})
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetErr(new(bytes.Buffer))
+	err := cmd.Execute()
+	assert.Error(t, err, "unsupported format should surface as an error, not a panic")
 }

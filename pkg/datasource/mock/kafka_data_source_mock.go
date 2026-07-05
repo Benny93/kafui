@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/serde"
 )
 
 var currentContext string = "kafka-dev"
@@ -47,6 +48,37 @@ type KafkaDataSourceMock struct {
 	counterMutex    sync.RWMutex
 	// Random seed for varied data
 	randSource *rand.Rand
+	// Broker mock state (lazily initialised; see broker.go).
+	brokerMu      sync.Mutex
+	brokers       []api.BrokerInfo
+	brokerConfigs map[int32][]api.BrokerConfigEntry
+	brokerLogDirs map[int32][]api.BrokerLogDir
+	// Consumer-group detail/mutation mock state (lazily initialised; see
+	// consumer_groups.go).
+	groupMu sync.Mutex
+	groups  map[string]*mockGroup
+	// Topic-administration + analysis mock state (see topic_admin.go).
+	topicMu          sync.Mutex
+	deletionDisabled bool
+	analyses         map[string]*api.TopicAnalysis
+	// Produced messages, kept in-memory so they are browsable via ConsumeTopic
+	// (MSG-30). Keyed by topic; per-partition offsets tracked in producedOffsets.
+	producedMu      sync.Mutex
+	produced        map[string][]api.Message
+	producedOffsets map[string]map[int32]int64
+	// In-memory schema registry state (lazily initialised; see schema_registry.go).
+	schemaRegMu sync.Mutex
+	schemaReg   *mockRegistry
+	// In-memory ACL + client-quota state (lazily initialised; see acls_quotas.go).
+	aclMu      sync.Mutex
+	acls       []api.ACLEntry
+	aclsInit   bool
+	quotaMu    sync.Mutex
+	quotas     []api.ClientQuotaEntry
+	quotasInit bool
+	// In-memory Kafka Connect state (lazily initialised; see connect.go).
+	connectMu    sync.Mutex
+	connectState *mockConnectState
 }
 
 func (kp *KafkaDataSourceMock) Init(cfgOption string) {
@@ -56,6 +88,9 @@ func (kp *KafkaDataSourceMock) Init(cfgOption string) {
 	kp.messageCounters = make(map[string]int64)
 	// Initialize random source
 	kp.randSource = rand.New(rand.NewSource(time.Now().UnixNano()))
+	// Initialize produced-message store
+	kp.produced = make(map[string][]api.Message)
+	kp.producedOffsets = make(map[string]map[int32]int64)
 
 	// Pre-populate schema cache with common schemas
 	kp.preloadSchemas()
@@ -162,6 +197,31 @@ func (kp *KafkaDataSourceMock) GetContexts() ([]string, error) {
 	return contexts, nil
 }
 
+// GetClusterDetails returns mock configuration details for the named cluster.
+func (kp *KafkaDataSourceMock) GetClusterDetails(clusterName string) (api.ClusterInfo, error) {
+	descriptions := map[string]string{
+		"kafka-dev":  "localhost:9092",
+		"kafka-test": "test-kafka:9092",
+		"kafka-prod": "prod-kafka-1:9092,prod-kafka-2:9092",
+	}
+	brokerStr, exists := descriptions[clusterName]
+	if !exists {
+		return api.ClusterInfo{}, fmt.Errorf("cluster '%s' not found", clusterName)
+	}
+	brokers := strings.Split(brokerStr, ",")
+	schemaURL := ""
+	if clusterName == "kafka-prod" || clusterName == "kafka-dev" {
+		schemaURL = "http://" + brokers[0][:strings.LastIndex(brokers[0], ":")] + ":8081"
+	}
+	return api.ClusterInfo{
+		Name:              clusterName,
+		Brokers:           brokers,
+		SchemaRegistryURL: schemaURL,
+		IsCurrent:         clusterName == currentContext,
+		ReadOnly:          isReadOnlyMock(clusterName),
+	}, nil
+}
+
 // GetTopics retrieves a list of Kafka topics for the current context
 func (kp *KafkaDataSourceMock) GetTopics() (map[string]api.Topic, error) {
 	ctxData, exists := mockContexts[currentContext]
@@ -177,6 +237,19 @@ func (kp *KafkaDataSourceMock) GetTopics() (map[string]api.Topic, error) {
 	return topics, nil
 }
 
+// GetTopicNames returns only topic names (mock version, same data as GetTopics but names only).
+func (kp *KafkaDataSourceMock) GetTopicNames() ([]string, error) {
+	ctxData, exists := mockContexts[currentContext]
+	if !exists {
+		return []string{}, nil
+	}
+	names := make([]string, 0, len(ctxData.topics))
+	for name := range ctxData.topics {
+		names = append(names, name)
+	}
+	return names, nil
+}
+
 // GetConsumerGroups retrieves consumer groups for the current context
 func (kp *KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 	ctxData, exists := mockContexts[currentContext]
@@ -190,13 +263,63 @@ func (kp *KafkaDataSourceMock) GetConsumerGroups() ([]api.ConsumerGroup, error) 
 	return groups, nil
 }
 
-// ConsumeTopic simulates real-time message consumption from a Kafka topic
+// mockStart anchors the simulated message-count growth so the metrics collector
+// sees ever-increasing counts and derives a live, stable message-in rate under
+// `make run-mock` without needing a real broker.
+var mockStart = time.Now()
+
+// mockTopicIngestRate returns a deterministic, per-topic messages-per-second
+// used to simulate steady ingestion (varies by topic name for visual variety).
+func mockTopicIngestRate(name string) int64 {
+	var sum int64
+	for _, r := range name {
+		sum += int64(r)
+	}
+	return 5 + sum%20 // 5..24 msg/s
+}
+
+// GetTopicMessageCounts returns simulated message counts for the given topics.
+// Counts grow with elapsed time so successive calls yield increasing values,
+// letting the background collector derive message-in rates from the deltas.
+func (kp *KafkaDataSourceMock) GetTopicMessageCounts(topics map[string]int32) (map[string]int64, error) {
+	ctxData, exists := mockContexts[currentContext]
+	elapsed := int64(time.Since(mockStart).Seconds())
+	counts := make(map[string]int64, len(topics))
+	for name := range topics {
+		base := int64(1000) // sensible mock default
+		if exists {
+			if topic, ok := ctxData.topics[name]; ok && topic.MessageCount >= 0 {
+				base = topic.MessageCount
+			}
+		}
+		counts[name] = base + mockTopicIngestRate(name)*elapsed
+	}
+	return counts, nil
+}
+
 func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName string, flags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) error {
 	// Simulate initial connection delay
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Validate the typed seek model (MSG-1).
+	if err := flags.Validate(); err != nil {
+		onError(err)
+		return err
+	}
+
+	// First, deliver any produced messages for this topic (MSG-30) honoring the
+	// seek/partition/limit filters (MSG-2/3/4). These are browsable in-memory.
+	for _, msg := range kp.browseProduced(topicName, flags) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			handleMessage(msg)
+		}
 	}
 
 	// Get or initialize message counter for this topic with realistic starting offset
@@ -252,6 +375,165 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 			// Continue to next iteration
 		}
 	}
+}
+
+// ProduceMessage appends a record to the in-memory store so it is browsable
+// via ConsumeTopic (MSG-30).
+func (kp *KafkaDataSourceMock) ProduceMessage(ctx context.Context, topic string, rec api.ProduceRecord) error {
+	// Validate that the topic exists in the current context.
+	ctxData, ok := mockContexts[currentContext]
+	if !ok {
+		return api.NewConnectionError("no active context")
+	}
+	t, exists := ctxData.topics[topic]
+	if !exists {
+		return api.TopicNotFoundError{TopicName: topic}
+	}
+
+	kp.producedMu.Lock()
+	defer kp.producedMu.Unlock()
+
+	if kp.producedOffsets[topic] == nil {
+		kp.producedOffsets[topic] = make(map[int32]int64)
+	}
+
+	// Resolve the target partition.
+	var partition int32
+	if rec.Partition != nil {
+		if *rec.Partition < 0 || *rec.Partition >= t.NumPartitions {
+			return api.NewPartitionError(
+				fmt.Sprintf("partition %d out of range (topic has %d partitions)", *rec.Partition, t.NumPartitions),
+				topic, *rec.Partition)
+		}
+		partition = *rec.Partition
+	} else {
+		// Auto: round-robin over the partition count (fallback to 0).
+		if t.NumPartitions > 0 {
+			partition = int32(kp.producedOffsets[topic][-1] % int64(t.NumPartitions))
+			kp.producedOffsets[topic][-1]++
+		}
+	}
+
+	offset := kp.producedOffsets[topic][partition]
+	kp.producedOffsets[topic][partition] = offset + 1
+
+	msg := api.Message{
+		Offset:        offset,
+		Partition:     partition,
+		Headers:       append([]api.MessageHeader(nil), rec.Headers...),
+		Timestamp:     time.Now(),
+		TimestampType: api.TimestampTypeCreate,
+		KeySerde:      "string",
+		ValueSerde:    "string",
+	}
+	if rec.Key != nil {
+		msg.Key = string(rec.Key)
+		n := len(rec.Key)
+		msg.KeySize = &n
+	} else {
+		msg.KeyNull = true
+	}
+	if rec.Value != nil {
+		msg.Value = string(rec.Value)
+		n := len(rec.Value)
+		msg.ValueSize = &n
+	} else {
+		msg.ValueNull = true
+	}
+	for _, h := range rec.Headers {
+		msg.HeadersSize += len(h.Key) + len(h.Value)
+	}
+
+	kp.produced[topic] = append(kp.produced[topic], msg)
+	return nil
+}
+
+// browseProduced returns the produced messages for a topic filtered by the
+// seek/partition/limit flags (MSG-2/3/4).
+func (kp *KafkaDataSourceMock) browseProduced(topic string, flags api.ConsumeFlags) []api.Message {
+	kp.producedMu.Lock()
+	msgs := append([]api.Message(nil), kp.produced[topic]...)
+	kp.producedMu.Unlock()
+	return browseMessages(msgs, flags)
+}
+
+// browseMessages is a pure helper applying partition, seek and limit filters to
+// a set of messages, ordered per the seek direction (MSG-2/3/4/6).
+func browseMessages(msgs []api.Message, flags api.ConsumeFlags) []api.Message {
+	if len(msgs) == 0 {
+		return nil
+	}
+
+	// Partition filter (empty = all).
+	if len(flags.Partitions) > 0 {
+		allowed := make(map[int32]bool, len(flags.Partitions))
+		for _, p := range flags.Partitions {
+			allowed[p] = true
+		}
+		filtered := msgs[:0:0]
+		for _, m := range msgs {
+			if allowed[m.Partition] {
+				filtered = append(filtered, m)
+			}
+		}
+		msgs = filtered
+	}
+	if len(msgs) == 0 {
+		return nil
+	}
+
+	// Offset bounds for clamping.
+	minOff, maxOff := msgs[0].Offset, msgs[0].Offset
+	for _, m := range msgs {
+		if m.Offset < minOff {
+			minOff = m.Offset
+		}
+		if m.Offset > maxOff {
+			maxOff = m.Offset
+		}
+	}
+	clamp := func(o int64) int64 {
+		if o < minOff {
+			return minOff
+		}
+		if o > maxOff {
+			return maxOff
+		}
+		return o
+	}
+
+	keep := msgs[:0:0]
+	for _, m := range msgs {
+		switch flags.Seek {
+		case api.SeekFromOffset:
+			if m.Offset >= clamp(*flags.SeekOffset) {
+				keep = append(keep, m)
+			}
+		case api.SeekToOffset:
+			if m.Offset <= clamp(*flags.SeekOffset) {
+				keep = append(keep, m)
+			}
+		case api.SeekFromTimestamp:
+			if !m.Timestamp.Before(*flags.SeekTimestamp) {
+				keep = append(keep, m)
+			}
+		case api.SeekToTimestamp:
+			if m.Timestamp.Before(*flags.SeekTimestamp) {
+				keep = append(keep, m)
+			}
+		default:
+			keep = append(keep, m)
+		}
+	}
+	msgs = keep
+
+	api.SortMessages(msgs, flags.Seek.Backward())
+
+	// Limit.
+	if flags.LimitMessages > 0 && int64(len(msgs)) > flags.LimitMessages {
+		msgs = msgs[:flags.LimitMessages]
+	}
+	return msgs
 }
 
 // generateMessage creates a realistic message based on topic name
@@ -693,6 +975,36 @@ func (kp *KafkaDataSourceMock) GetMessageSchemaInfo(keySchemaID, valueSchemaID s
 	}
 
 	return schemaInfo, nil
+}
+
+// DecodeMessage implements api.KafkaDataSource.
+// Mock messages already have decoded Key/Value; RawKey/RawValue are treated as plain text.
+func (kp *KafkaDataSourceMock) DecodeMessage(_ context.Context, msg api.Message) (api.Message, error) {
+	reg := mockSerdeRegistry()
+	if len(msg.RawKey) > 0 && msg.Key == "" {
+		text, name, _ := serde.Decode(reg, "", msg.RawKey)
+		msg.Key, msg.KeySerde = text, name
+	}
+	if len(msg.RawValue) > 0 && msg.Value == "" {
+		text, name, _ := serde.Decode(reg, "", msg.RawValue)
+		msg.Value, msg.ValueSerde = text, name
+	}
+	return msg, nil
+}
+
+// mockSerde builds a built-in-only registry once (no schema registry).
+var mockSerdeReg *serde.Registry
+
+func mockSerdeRegistry() *serde.Registry {
+	if mockSerdeReg == nil {
+		mockSerdeReg, _ = serde.BuildRegistry(nil, nil)
+	}
+	return mockSerdeReg
+}
+
+// ListSerdes returns a plausible static list of serde names. (MSG-18)
+func (kp *KafkaDataSourceMock) ListSerdes() []string {
+	return mockSerdeRegistry().Names()
 }
 
 // getSchemaFromCache retrieves schema from cache (thread-safe)

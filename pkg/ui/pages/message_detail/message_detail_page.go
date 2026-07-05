@@ -83,6 +83,27 @@ func (m *Model) GetMessageInfo() map[string]string {
 		"Headers":    fmt.Sprintf("%d", len(m.message.Headers)),
 	}
 
+	// Per-message metadata (MSG-22): timestamp, timestamp type, serde names,
+	// null-ness. Only shown when populated.
+	if !m.message.Timestamp.IsZero() {
+		info["Timestamp"] = m.message.Timestamp.Format(time.RFC3339)
+	}
+	if m.message.TimestampType != "" {
+		info["Timestamp Type"] = string(m.message.TimestampType)
+	}
+	if m.message.KeySerde != "" {
+		info["Key Serde"] = m.message.KeySerde
+	}
+	if m.message.ValueSerde != "" {
+		info["Value Serde"] = m.message.ValueSerde
+	}
+	if m.message.KeyNull {
+		info["Key"] = "<null>"
+	}
+	if m.message.ValueNull {
+		info["Value"] = "<null>"
+	}
+
 	// Add schema information if available
 	if m.message.KeySchemaID != "" {
 		info["Key Schema ID"] = m.message.KeySchemaID

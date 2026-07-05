@@ -1,6 +1,7 @@
 package core
 
 import (
+	keys "github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -235,9 +236,9 @@ func (fm *FocusManager) HandleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	}
 	
 	switch {
-	case key.Matches(msg, DefaultGlobalKeys.NextPage): // Tab
+	case key.Matches(msg, keys.GlobalKeys.NextPage): // Tab
 		return fm.FocusNext()
-	case key.Matches(msg, DefaultGlobalKeys.PrevPage): // Shift+Tab
+	case key.Matches(msg, keys.GlobalKeys.PrevPage): // Shift+Tab
 		return fm.FocusPrevious()
 	}
 	

@@ -1,0 +1,66 @@
+# Example kafui configuration (~/.config/kafui/config.yaml).
+#
+# kafui layers this file over the read-only ~/.kaf/config. This example focuses
+# on the authorization (authz) and audit sections added by the auth-rbac-audit
+# feature. All keys are optional; omit a section to keep its defaults.
+
+# --- Authorization: local permission profiles (AA-2/AA-3) --------------------
+#
+# kafui is a single-user local tool, so "profiles" are a self-imposed guardrail
+# (like a read-only kubeconfig), NOT a security boundary — the real enforcement
+# is broker-side ACLs plus your SASL/TLS credentials. When this section is
+# omitted (no profiles and no default) authorization is DISABLED and every
+# operation is allowed.
+#
+# Each profile lists the clusters it applies to and a set of permissions. A
+# permission grants actions on a resource type, optionally narrowed to resource
+# names matching a full-match regex. Non-view actions imply "view"; the "all"
+# wildcard expands to every action of the resource.
+#
+# Resource types: topic, consumer-group, schema, connect-cluster, connector,
+#   sql-engine, acl, audit, client-quotas, cluster-configuration,
+#   application-configuration.
+# Actions (per resource): view, read messages, produce messages,
+#   delete messages, run analysis, create, edit, delete, reset offsets,
+#   execute, modify compatibility, pause, resume, restart, all.
+authz:
+  # Optional: force a specific profile regardless of cluster membership.
+  # activeProfile: viewer
+
+  profiles:
+    - name: viewer               # connect to prod read-only-by-intent
+      clusters: [prod]
+      permissions:
+        - resource: topic
+          actions: [view, read messages]
+        - resource: consumer-group
+          actions: [view]
+
+    - name: orders-admin         # full control, but only over orders-* topics
+      clusters: [staging]
+      permissions:
+        - resource: topic
+          name: "orders-.*"      # regex, must fully match the topic name
+          actions: [all]
+
+  # Optional fallback applied when no named profile covers the active cluster.
+  default:
+    permissions:
+      - resource: topic
+        actions: [view]
+
+# Per-cluster read-only is set in the clusters section (independent of authz).
+# The global --read-only CLI flag forces read-only on every cluster.
+clusters:
+  prod:
+    readOnly: true
+
+# --- Audit log (AA-5/AA-6) ---------------------------------------------------
+#
+# Appends one JSON line per audited operation to a local file. Disabled by
+# default. level "alter_only" (default) records only state-changing operations;
+# "all" records reads too. Audit write failures never fail the operation.
+audit:
+  enabled: true
+  level: alter_only            # alter_only | all
+  # path: ~/.kafui/audit.log   # default when omitted

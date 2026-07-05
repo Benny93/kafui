@@ -2,6 +2,7 @@ package topic
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/keys"
@@ -30,6 +31,78 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return k.handleSearchMode(model, msg)
 	}
 
+	// Overlays capture keys while open (each owns its own key routing).
+	if model.showGroups {
+		return k.handleGroupsOverlayKey(model, msg)
+	}
+	if model.showOverview {
+		return k.handleOverviewKey(model, msg)
+	}
+	if model.showSettings {
+		return k.handleSettingsKey(model, msg)
+	}
+	if model.showAnalysis {
+		return k.handleAnalysisKey(model, msg)
+	}
+	if model.showSettingsEdit {
+		return k.handleEditFormKey(model, msg)
+	}
+	if model.showMutationForm {
+		return k.handleMutationFormKey(model, msg)
+	}
+	if model.showSeek {
+		return k.handleSeekFormKey(model, msg)
+	}
+	if model.showPartitions {
+		return k.handlePartitionFormKey(model, msg)
+	}
+	if model.showProduce {
+		return k.handleProduceFormKey(model, msg)
+	}
+	if model.showProjections {
+		return k.handleProjectionsKey(model, msg)
+	}
+	if model.showSavedFilters {
+		return k.handleSavedFiltersKey(model, msg)
+	}
+
+	// Overlay-open and header-action keys (checked before the centralized
+	// bindings so single-character actions don't collide with them).
+	switch msg.String() {
+	case "C":
+		return k.handleShowGroups(model)
+	case "o":
+		return k.handleShowOverview(model)
+	case "s":
+		return k.handleShowSettings(model)
+	case "E":
+		return k.handleShowSettingsEdit(model)
+	case "t":
+		return k.handleShowAnalysis(model)
+	case "+":
+		return k.handleIncreasePartitionsDialog(model)
+	case "F":
+		return k.handleReplicationFactorDialog(model)
+	case "ctrl+p":
+		return k.handleClearAllMessages(model)
+	case "ctrl+r":
+		return k.handleRecreateTopic(model)
+	case "ctrl+d":
+		return k.handleDeleteTopic(model)
+	case "S":
+		return k.handleShowSeek(model)
+	case "#":
+		return k.handleShowPartitions(model)
+	case "P":
+		return k.handleShowProduce(model)
+	case "Y":
+		return k.handleReproduce(model)
+	case "L":
+		return k.handleShowSavedFilters(model)
+	case "X":
+		return k.handleShowProjections(model)
+	}
+
 	// Handle navigation keys
 	switch {
 	case key.Matches(msg, k.bindings.Back):
@@ -40,6 +113,8 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return k.handleSearch(model)
 	case key.Matches(msg, k.bindings.Pause):
 		return k.handlePauseResume(model)
+	case key.Matches(msg, k.bindings.SwitchMode):
+		return k.handleSwitchMode(model)
 	case key.Matches(msg, k.bindings.Refresh):
 		return k.handleRefresh(model)
 	case key.Matches(msg, k.bindings.Retry):
@@ -85,14 +160,22 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// handleSearchMode handles keys when search input is focused
+// handleSearchMode handles keys when search input is focused.
+// A value prefixed with "~" is a smart-filter expression (MSG-25), compiled on
+// Enter; anything else is a substring search over key/value/headers (MSG-23).
 func (k *Keys) handleSearchMode(model *Model, msg tea.KeyMsg) tea.Cmd {
 	// Handle Enter to confirm search
 	if msg.String() == "enter" {
 		model.searchMode = false
 		model.searchInput.Blur()
+		var cmd tea.Cmd
+		if val := model.searchInput.Value(); strings.HasPrefix(val, smartFilterPrefix) {
+			cmd = model.setSmartFilter(strings.TrimPrefix(val, smartFilterPrefix))
+		} else {
+			model.smartFilter = nil
+		}
 		model.FilterMessages()
-		return nil
+		return cmd
 	}
 
 	// Handle Esc to cancel search
@@ -100,15 +183,25 @@ func (k *Keys) handleSearchMode(model *Model, msg tea.KeyMsg) tea.Cmd {
 		model.searchMode = false
 		model.searchInput.Blur()
 		model.searchInput.SetValue("")
+		model.smartFilter = nil
 		model.FilterMessages()
 		return nil
+	}
+
+	// Ctrl+S saves the active smart filter (MSG-25).
+	if msg.String() == "ctrl+s" {
+		return model.saveCurrentFilter()
 	}
 
 	// Let the search input handle other keys
 	var cmd tea.Cmd
 	model.searchInput, cmd = model.searchInput.Update(msg)
 	cmds := []tea.Cmd{cmd}
-	model.FilterMessages()
+	// Live substring filtering only — smart-filter expressions compile on Enter.
+	if !strings.HasPrefix(model.searchInput.Value(), smartFilterPrefix) {
+		model.smartFilter = nil
+		model.FilterMessages()
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -150,10 +243,23 @@ func (k *Keys) handlePauseResume(model *Model) tea.Cmd {
 	return nil
 }
 
+func (k *Keys) handleSwitchMode(model *Model) tea.Cmd {
+	// Stop any active live consumption before switching.
+	if model.consuming {
+		if model.cancelConsumption != nil {
+			model.cancelConsumption()
+			model.cancelConsumption = nil
+		}
+		model.consuming = false
+	}
+	model.consumeMode = model.consumeMode.Next()
+	model.statusMessage = fmt.Sprintf("Mode: %s", model.consumeMode)
+	return model.startForMode()
+}
+
 func (k *Keys) handleRefresh(model *Model) tea.Cmd {
-	const fetchCount = 60
-	model.statusMessage = "Refreshing messages..."
-	return model.consumption.FetchLatestMessages(fetchCount)
+	model.statusMessage = fmt.Sprintf("Refreshing… (mode: %s)", model.consumeMode)
+	return model.startForMode()
 }
 
 func (k *Keys) handleRetry(model *Model) tea.Cmd {
@@ -172,6 +278,8 @@ func (k *Keys) handleSelect(model *Model) tea.Cmd {
 	// Navigate to message detail page
 	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil {
 		model.selectedMessage = selectedMsg
+		// Load schema info here (once, on explicit open) — not in the render path.
+		model.loadSchemaInfoForMessage(selectedMsg)
 		return func() tea.Msg {
 			pageID := fmt.Sprintf("detail:%s:%d:%d", model.topicName, selectedMsg.Partition, selectedMsg.Offset)
 			return core.PageChangeMsg{PageID: pageID, Data: *selectedMsg}
@@ -218,44 +326,50 @@ func (k *Keys) handleCopyValue(model *Model) tea.Cmd {
 func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
 	switch direction {
 	case "up":
-		currentRow := model.messageTable.GetHighlightedRowIndex()
-		if currentRow > 0 {
-			model.messageTable = model.messageTable.WithHighlightedRow(currentRow - 1)
+		if model.cursorRow > 0 {
+			model.cursorRow--
 		}
 		model.markRenderDirty()
 		return nil
 	case "down":
-		currentRow := model.messageTable.GetHighlightedRowIndex()
-		pageSize := model.messageTable.PageSize()
 		visibleCount := len(model.pagination.GetVisibleMessages(model.filteredMessages))
 		if visibleCount == 0 {
-			visibleCount = pageSize
+			visibleCount = model.messageTable.PageSize()
 		}
-		if currentRow < visibleCount-1 {
-			model.messageTable = model.messageTable.WithHighlightedRow(currentRow + 1)
+		if model.cursorRow < visibleCount-1 {
+			model.cursorRow++
 		}
 		model.markRenderDirty()
 		return nil
-	case "pageup":
-		if model.pagination.PrevPage() {
-			model.messageTable = model.messageTable.WithCurrentPage(model.pagination.Page + 1)
-			model.markRenderDirty()
-		}
-		return nil
 	case "pagedown":
 		if model.pagination.NextPage() {
-			model.messageTable = model.messageTable.WithCurrentPage(model.pagination.Page + 1)
+			model.pendingReset = true
+			model.updateMessageTable()
+			model.markRenderDirty()
+		} else if !model.loading {
+			// Already on the last page and not currently fetching — load more.
+			if flags := model.nextBatchFlags(); flags != nil {
+				return model.consumption.FetchNextBatch(*flags)
+			}
+		}
+		return nil
+	case "pageup":
+		if model.pagination.PrevPage() {
+			model.pendingReset = true
+			model.updateMessageTable()
 			model.markRenderDirty()
 		}
 		return nil
 	case "home":
 		model.pagination.FirstPage()
-		model.messageTable = model.messageTable.PageFirst()
+		model.pendingReset = true
+		model.updateMessageTable()
 		model.markRenderDirty()
 		return nil
 	case "end":
 		model.pagination.LastPage()
-		model.messageTable = model.messageTable.PageLast()
+		model.pendingReset = true
+		model.updateMessageTable()
 		model.markRenderDirty()
 		return nil
 	}
@@ -266,6 +380,7 @@ func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
 func (k *Keys) GetKeyBindings() []key.Binding {
 	return []key.Binding{
 		k.bindings.Search,
+		k.bindings.SwitchMode,
 		k.bindings.Back,
 		k.bindings.Quit,
 		k.bindings.Select,
@@ -278,6 +393,22 @@ func (k *Keys) GetKeyBindings() []key.Binding {
 		k.bindings.GotoEnd,
 		k.bindings.CopyKey,
 		k.bindings.CopyValue,
+		key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "overview")),
+		key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "settings")),
+		key.NewBinding(key.WithKeys("E"), key.WithHelp("E", "edit settings")),
+		key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "consumer groups")),
+		key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "statistics")),
+		key.NewBinding(key.WithKeys("+"), key.WithHelp("+", "add partitions")),
+		key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "replication factor")),
+		key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "clear messages")),
+		key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "recreate")),
+		key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "delete")),
+		key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "seek")),
+		key.NewBinding(key.WithKeys("#"), key.WithHelp("#", "partitions/serde")),
+		key.NewBinding(key.WithKeys("P"), key.WithHelp("P", "produce")),
+		key.NewBinding(key.WithKeys("Y"), key.WithHelp("Y", "reproduce")),
+		key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "saved filters")),
+		key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "projections")),
 	}
 }
 
@@ -301,6 +432,16 @@ func (k *Keys) GetShortcuts() []string {
 		"f     Toggle format",
 		"h     Toggle headers",
 		"m     Toggle metadata",
+		"o     Overview + partitions",
+		"s     Settings",
+		"E     Edit settings",
+		"C     Consumer groups",
+		"t     Statistics",
+		"+     Add partitions",
+		"F     Replication factor",
+		"^p    Clear messages",
+		"^r    Recreate topic",
+		"^d    Delete topic",
 		"Esc   Exit search",
 		"q/Esc Back to topics",
 	}

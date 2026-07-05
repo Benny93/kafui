@@ -399,6 +399,48 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 ---
 
+## ADR-013: Kafui-Owned Config File Layered Over Read-Only kaf Config
+
+**Date**: July 4, 2026
+**Status**: Accepted
+
+### Context
+
+kafui reuses `~/.kaf/config` (shared with the kaf CLI) for cluster connection
+details. That file MUST never be rewritten: the kaf library's YAML round-trip
+silently strips TLS cert paths (missing struct tags). But kafui needs settings
+the kaf schema cannot express — per-cluster read-only flag, refresh interval,
+optional-integration endpoints (Connect/ksqlDB/metrics), UI preferences,
+redaction rules, and the dynamic-config toggle.
+
+Two options were weighed:
+(a) a separate kafui-owned config file layered over the read-only kaf file;
+(b) fixing/replacing the kaf YAML serialization for a loss-free round-trip.
+
+### Decision
+
+Option (a). A kafui-owned YAML document at `$HOME/.config/kafui/config.yaml`
+(overridable) is loaded by the new `pkg/appconfig` package and layered over the
+kaf file. `~/.kaf/config` remains strictly read-only.
+
+**Precedence (highest wins):** CLI flags > kafui file > kaf file > defaults.
+
+**Invariant:** kafui never writes `~/.kaf/config`. New/edited clusters that
+cannot live in the kaf schema are stored entirely in the kafui file.
+
+### Consequences
+
+**Positive**:
+- Preserves compatibility with the kaf CLI; the shared file stays untouched.
+- Gives kafui a home for settings kaf cannot express.
+- A missing kafui file is tolerated (defaults), so existing users are unaffected.
+
+**Negative**:
+- Two config sources to merge and reason about.
+- Cluster identity is keyed by name across both files.
+
+---
+
 ## Related Documents
 
 - [BUBBLE_TEA_IMPROVEMENT_PLAN.md](./BUBBLE_TEA_IMPROVEMENT_PLAN.md) - Full improvement plan

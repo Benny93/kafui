@@ -8,23 +8,29 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 )
+
+// sidebarZoneID returns a stable, unique zone ID for a resource type sidebar item.
+func sidebarZoneID(rt ResourceType) string {
+	return "sidebar-resource-" + rt.String()
+}
 
 // SidebarSection defines the interface for sidebar sections
 // This should implement providers.SidebarSection
 type SidebarSection interface {
 	// GetTitle returns the section title
 	GetTitle() string
-	
+
 	// RenderItems returns the items to display in this section
 	RenderItems(maxItems, width int) []providers.SidebarItem
-	
+
 	// HandleSectionUpdate allows the section to handle messages and return commands
 	HandleSectionUpdate(msg tea.Msg) tea.Cmd
-	
+
 	// InitSection initializes the section
 	InitSection() tea.Cmd
-	
+
 	// RefreshSection refreshes the section data
 	RefreshSection() tea.Cmd
 }
@@ -32,6 +38,7 @@ type SidebarSection interface {
 // ResourcesSection shows available resource types
 type ResourcesSection struct {
 	dataSource      api.KafkaDataSource
+	common          *core.Common // optional; enables capability gating
 	currentResource ResourceType
 }
 
@@ -44,7 +51,27 @@ func NewResourcesSection(dataSource api.KafkaDataSource) *ResourcesSection {
 
 // NewResourcesSectionWithCommon creates a ResourcesSection using Common context
 func NewResourcesSectionWithCommon(common *core.Common) *ResourcesSection {
-	return NewResourcesSection(common.DataSource)
+	r := NewResourcesSection(common.DataSource)
+	r.common = common
+	return r
+}
+
+// enabled reports whether a resource type should be shown for the active cluster.
+// Optional integrations are gated on capabilities; core resources always show.
+func (r *ResourcesSection) enabled(rt ResourceType) bool {
+	if r.common == nil {
+		return true
+	}
+	switch rt {
+	case SchemaResourceType:
+		return r.common.HasCapability(api.CapSchemaRegistry)
+	case ACLResourceType:
+		return r.common.HasCapability(api.CapACLView)
+	case ConnectClusterResourceType, ConnectorResourceType:
+		return r.common.HasCapability(api.CapKafkaConnect)
+	default:
+		return true
+	}
 }
 
 func (r *ResourcesSection) GetTitle() string {
@@ -61,29 +88,38 @@ func (r *ResourcesSection) RenderItems(maxItems, width int) []providers.SidebarI
 		{"Consumer Groups", ConsumerGroupResourceType, "👥"},
 		{"Schemas", SchemaResourceType, "📄"},
 		{"Contexts", ContextResourceType, "🔧"},
+		{"ACLs", ACLResourceType, "🔒"},
+		{"Brokers", BrokerResourceType, "🖥️"},
+		{"Quotas", QuotaResourceType, "📊"},
+		{"Connect Clusters", ConnectClusterResourceType, "🔌"},
+		{"Connectors", ConnectorResourceType, "🔗"},
 	}
-	
+
 	items := make([]providers.SidebarItem, 0, len(resources))
 	for _, res := range resources {
+		if !r.enabled(res.resourceType) {
+			continue
+		}
 		status := "muted"
 		icon := "○"
 		if res.resourceType == r.currentResource {
 			status = "success"
 			icon = "●"
 		}
-		
+
 		items = append(items, providers.SidebarItem{
 			Icon:   icon,
 			Text:   res.name,
 			Value:  "",
 			Status: status,
+			ZoneID: sidebarZoneID(res.resourceType),
 		})
-		
+
 		if len(items) >= maxItems {
 			break
 		}
 	}
-	
+
 	return items
 }
 
@@ -93,6 +129,13 @@ func (r *ResourcesSection) HandleSectionUpdate(msg tea.Msg) tea.Cmd {
 		r.currentResource = ResourceType(msg)
 	case CurrentResourceListMsg:
 		r.currentResource = msg.ResourceType
+	case tea.MouseMsg:
+		// Check if any resource sidebar item was clicked.
+		for _, rt := range []ResourceType{TopicResourceType, ConsumerGroupResourceType, SchemaResourceType, ContextResourceType, ACLResourceType, BrokerResourceType, QuotaResourceType, ConnectClusterResourceType, ConnectorResourceType} {
+			if r.enabled(rt) && zone.Get(sidebarZoneID(rt)).InBounds(msg) {
+				return func() tea.Msg { return SwitchResourceMsg(rt) }
+			}
+		}
 	}
 	return nil
 }
@@ -107,31 +150,56 @@ func (r *ResourcesSection) RefreshSection() tea.Cmd {
 
 // ClusterInfoSection shows cluster information
 type ClusterInfoSection struct {
-	dataSource   api.KafkaDataSource
-	lastUpdate   time.Time
-	clusterInfo  map[string]interface{}
-	loading      bool
+	dataSource  api.KafkaDataSource
+	common      *core.Common // optional; enables health/read-only indicators
+	lastUpdate  time.Time
+	clusterInfo map[string]interface{}
+	loading     bool
 }
 
 func NewClusterInfoSection(dataSource api.KafkaDataSource) *ClusterInfoSection {
 	return &ClusterInfoSection{
-		dataSource:  dataSource,
-		lastUpdate:  time.Now(),
-		clusterInfo: make(map[string]interface{}),
+		dataSource: dataSource,
+		lastUpdate: time.Now(),
+		// clusterInfo starts nil; RenderItems shows "Loading..." only until the
+		// first fetch completes.
 	}
 }
 
 // NewClusterInfoSectionWithCommon creates a ClusterInfoSection using Common context
 func NewClusterInfoSectionWithCommon(common *core.Common) *ClusterInfoSection {
-	return NewClusterInfoSection(common.DataSource)
+	c := NewClusterInfoSection(common.DataSource)
+	c.common = common
+	return c
+}
+
+// activeOverview returns the collector's cached overview for the active cluster,
+// or (zero, false) if unavailable.
+func (c *ClusterInfoSection) activeOverview() (api.ClusterOverview, bool) {
+	if c.common == nil || c.common.Collector == nil {
+		return api.ClusterOverview{}, false
+	}
+	active := c.dataSource.GetContext()
+	for _, ov := range c.common.Collector.ListClusters() {
+		if ov.Name == active {
+			return ov, true
+		}
+	}
+	return api.ClusterOverview{}, false
 }
 
 func (c *ClusterInfoSection) GetTitle() string {
-	return "Cluster Info"
+	if c.dataSource != nil {
+		if ctx := c.dataSource.GetContext(); ctx != "" {
+			return ctx
+		}
+	}
+	return "kafui"
 }
 
 func (c *ClusterInfoSection) RenderItems(maxItems, width int) []providers.SidebarItem {
-	if c.loading {
+	// Show "Loading..." only on the initial fetch, not on background refreshes.
+	if c.loading && c.clusterInfo == nil {
 		return []providers.SidebarItem{
 			{
 				Icon:   "⏳",
@@ -141,7 +209,7 @@ func (c *ClusterInfoSection) RenderItems(maxItems, width int) []providers.Sideba
 			},
 		}
 	}
-	
+
 	items := []providers.SidebarItem{
 		{
 			Icon:   "🌐",
@@ -162,7 +230,7 @@ func (c *ClusterInfoSection) RenderItems(maxItems, width int) []providers.Sideba
 			Status: "muted",
 		},
 	}
-	
+
 	// Add cluster-specific info if available
 	if brokers, ok := c.clusterInfo["brokers"].(int); ok {
 		items = append(items, providers.SidebarItem{
@@ -172,21 +240,45 @@ func (c *ClusterInfoSection) RenderItems(maxItems, width int) []providers.Sideba
 			Status: "info",
 		})
 	}
-	
-	if topics, ok := c.clusterInfo["topics"].(int); ok {
+
+	// Health + read-only indicators from the background collector.
+	if ov, ok := c.activeOverview(); ok {
+		glyph, status := "●", "success"
+		switch ov.Status {
+		case api.ClusterOffline:
+			glyph, status = "○", "error"
+		case api.ClusterInitializing:
+			glyph, status = "◍", "info"
+		}
 		items = append(items, providers.SidebarItem{
-			Icon:   "📋",
-			Text:   "Topics",
-			Value:  strconv.Itoa(topics),
-			Status: "info",
+			Icon:   glyph,
+			Text:   "Status",
+			Value:  string(ov.Status),
+			Status: status,
 		})
+		if ov.ReadOnly {
+			items = append(items, providers.SidebarItem{
+				Icon:   "🔒",
+				Text:   "Mode",
+				Value:  "read-only",
+				Status: "warning",
+			})
+		}
+		if ov.Status == api.ClusterOffline && ov.LastError != "" {
+			items = append(items, providers.SidebarItem{
+				Icon:   "⚠",
+				Text:   "Error",
+				Value:  core.TruncateString(ov.LastError, 24),
+				Status: "error",
+			})
+		}
 	}
-	
+
 	// Limit items to maxItems
 	if len(items) > maxItems {
 		items = items[:maxItems]
 	}
-	
+
 	return items
 }
 
@@ -207,23 +299,18 @@ func (c *ClusterInfoSection) InitSection() tea.Cmd {
 }
 
 func (c *ClusterInfoSection) RefreshSection() tea.Cmd {
-	c.loading = true
+	if c.clusterInfo == nil {
+		c.loading = true
+	}
+	ds := c.dataSource
 	return func() tea.Msg {
-		// Get cluster information
 		info := make(map[string]interface{})
-		
-		// Get topics count
-		if topics, err := c.dataSource.GetTopics(); err == nil {
-			info["topics"] = len(topics)
+		// GetBrokers() enumerates brokers from cluster metadata (matching the
+		// Clusters dashboard), not the configured bootstrap address list, which
+		// is typically a single entry regardless of the cluster's real size (BUG-5).
+		if brokers, err := ds.GetBrokers(); err == nil {
+			info["brokers"] = len(brokers)
 		}
-		
-		// Get consumer groups count (if available)
-		// This would depend on your API having this method
-		// info["consumer_groups"] = len(consumerGroups)
-		
-		// Mock broker count for now
-		info["brokers"] = 3
-		
 		return ClusterInfoMsg{Info: info}
 	}
 }
@@ -241,43 +328,20 @@ func (s *ShortcutsSection) GetTitle() string {
 
 func (s *ShortcutsSection) RenderItems(maxItems, width int) []providers.SidebarItem {
 	shortcuts := []providers.SidebarItem{
-		{
-			Icon:   "🔍",
-			Text:   "Search",
-			Value:  "/",
-			Status: "info",
-		},
-		{
-			Icon:   "🔄",
-			Text:   "Switch Resource",
-			Value:  ":",
-			Status: "info",
-		},
-		{
-			Icon:   "↵",
-			Text:   "Select",
-			Value:  "Enter",
-			Status: "info",
-		},
-		{
-			Icon:   "⎋",
-			Text:   "Back/Cancel",
-			Value:  "Esc",
-			Status: "info",
-		},
-		{
-			Icon:   "🚪",
-			Text:   "Quit",
-			Value:  "q",
-			Status: "warning",
-		},
+		{Icon: "↑↓", Text: "Navigate", Value: "↑ / ↓", Status: "info"},
+		{Icon: "↵", Text: "Select", Value: "Enter", Status: "info"},
+		{Icon: "◁▷", Text: "Prev/Next page", Value: "h / l", Status: "info"},
+		{Icon: "⇤⇥", Text: "First/Last page", Value: "g / G", Status: "info"},
+		{Icon: "🔍", Text: "Search", Value: "/", Status: "info"},
+		{Icon: "🔄", Text: "Switch resource", Value: ":", Status: "info"},
+		{Icon: "⎋", Text: "Back/Cancel", Value: "Esc", Status: "info"},
+		{Icon: "🚪", Text: "Quit", Value: "q", Status: "warning"},
 	}
-	
-	// Limit items to maxItems
+
 	if len(shortcuts) > maxItems {
 		shortcuts = shortcuts[:maxItems]
 	}
-	
+
 	return shortcuts
 }
 

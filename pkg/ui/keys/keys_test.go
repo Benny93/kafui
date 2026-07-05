@@ -45,6 +45,28 @@ func TestDefaultGlobalKeyMap(t *testing.T) {
 	assert.NotEmpty(t, km.ToggleTheme.Help().Desc)
 }
 
+// TestGlobalKeysCanonicalSet asserts the unified global registry (UI-17) carries
+// all 13 shell bindings, each with WithHelp, and matches the expected keys.
+func TestGlobalKeysCanonicalSet(t *testing.T) {
+	g := GlobalKeys
+
+	bindings := g.GetAllBindings()
+	assert.Len(t, bindings, 13, "expected 13 global bindings")
+	for _, b := range bindings {
+		assert.NotEmpty(t, b.Keys(), "binding must define keys")
+		assert.NotEmpty(t, b.Help().Key, "binding must carry WithHelp key")
+		assert.NotEmpty(t, b.Help().Desc, "binding must carry WithHelp desc")
+	}
+
+	// Spot-check the runtime-critical bindings behave as before.
+	assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyEsc}, g.Back))
+	assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyTab}, g.NextPage))
+	assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyShiftTab}, g.PrevPage))
+	assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")}, g.ToggleTheme))
+	assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("C")}, g.Clusters))
+	assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("K")}, g.Ksql))
+}
+
 func TestDefaultMainKeyMap(t *testing.T) {
 	km := DefaultMainKeyMap()
 

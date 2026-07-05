@@ -7,9 +7,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/masking"
+	"github.com/Benny93/kafui/pkg/serde"
+	"github.com/Benny93/kafui/pkg/messagefilter"
+	"github.com/Benny93/kafui/pkg/ui/components"
+	formpkg "github.com/Benny93/kafui/pkg/ui/components/form"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/shared"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
@@ -30,8 +37,6 @@ const (
 	UpdateThrottle = 100 * time.Millisecond
 	// BatchSize for message processing
 	BatchSize = 20
-	// UseCustomRenderer threshold - use custom renderer for large datasets
-	UseCustomRenderer = 100
 )
 
 // Model represents the topic page state (original business logic model)
@@ -63,11 +68,13 @@ type Model struct {
 
 	// Consumption configuration
 	consumeFlags api.ConsumeFlags
+	consumeMode  ConsumeMode
 
 	// UI Components
-	messageTable table.Model
-	spinner      spinner.Model
-	searchInput  textinput.Model
+	messageTable    table.Model
+	spinner         spinner.Model
+	searchInput     textinput.Model
+	fetchProgressBar components.FetchProgressBar // animated progress bar during FetchLatestMessages
 
 	// Bubble-table configuration
 	tableColumns []table.Column
@@ -119,35 +126,127 @@ type Model struct {
 	mu sync.RWMutex
 
 	// Render caching (avoid re-rendering same content)
-	renderCache   string
-	renderCacheMu sync.RWMutex
+	// Render caching: renderVersion is incremented on every change that requires
+	// a new View() output. TopicPageModel caches the full rendered page and only
+	// rebuilds when this counter advances.
+	renderVersion uint64
 
-	// Dirty flag for render invalidation
-	dirtyRender bool
+	// pendingReset signals that the next updateMessageTable call should reset
+	// the highlighted row to 0 (used on fresh data loads, filter changes, page nav).
+	pendingReset bool
+
+	// appendNextFetch tracks how many in-flight batch fetches are pending.
+	// Any MessagesFetchedMsg that arrives while this is > 0 is treated as an
+	// append rather than a fresh replace.
+	appendNextFetch int
+
+	// cursorRow is the index of the highlighted row in the currently displayed page.
+	cursorRow int
+
+	// Row string cache: holds the unstyled row strings for the current page.
+	// Rebuilt only when visible rows change (data, page nav, resize, sort).
+	// On cursor-only changes the rows are reused — only the highlight is reapplied.
+	rowStringCache      []string
+	rowStringCacheWidth int  // width at which cache was built (invalidate on resize)
+	rowStringsDirty     bool // true when row content must be rebuilt
+
+	// Consumer-groups overlay (CG-21). Fetched on demand (explicit keypress)
+	// because GetConsumerGroupsForTopic fans out across group coordinators.
+	showGroups    bool
+	groups        []api.ConsumerGroup
+	groupsCursor  int
+	groupsLoading bool
+
+	// Overview + partition table overlay (TP-23). Data fetched on open.
+	showOverview    bool
+	overviewLoading bool
+	overview        *api.TopicDetails
+	overviewSize    int64
+	overviewErr     error
+	partitionCursor int
+
+	// Settings/config overlay (TP-24).
+	showSettings    bool
+	settingsLoading bool
+	settingsConfig  []api.TopicConfigEntry
+	settingsErr     error
+
+	// Edit-settings form overlay (TP-25).
+	showSettingsEdit bool
+	settingsForm     *formpkg.Form
+	loadedConfig     []api.TopicConfigEntry // config snapshot at form-open, for diffing
+
+	// Mutation dialog overlay (partition increase / replication factor, TP-26).
+	showMutationForm bool
+	mutationForm     *formpkg.Form
+	mutationKind     mutationKind
+
+	// Statistics/analysis overlay (TP-31).
+	showAnalysis    bool
+	analysisLoading bool
+	analysis        *api.TopicAnalysis
+
+	// --- Message browsing/producing overlays (MSG-21..32) ---
+
+	// Seek dialog (MSG-21).
+	showSeek bool
+	seekForm *formpkg.Form
+
+	// Partition filter + serde selector (MSG-22).
+	showPartitions bool
+	partitionForm  *formpkg.Form
+
+	// Produce / reproduce form (MSG-31/MSG-32).
+	showProduce bool
+	produceForm *formpkg.Form
+
+	// Saved-filters picker (MSG-25).
+	showSavedFilters  bool
+	savedFilterCursor int
+
+	// Field-projection dialog (MSG-26). Reuses seekForm as the input form.
+	showProjections bool
+
+	// Display serde preference (MSG-22): "auto" or an explicit serde name from
+	// serdeReg. Applied to displayed key/value cells via the serde registry.
+	keySerde   string
+	valueSerde string
+	// serdeReg is the serde registry backing the display selector (MSG-11..18).
+	serdeReg *serde.Registry
+
+	// Field-preview projections (MSG-26): JSON dotted paths for the key/value columns.
+	keyProjection   string
+	valueProjection string
+
+	// Smart filter (MSG-24/25). When smartFilter != nil, filtering evaluates the
+	// compiled expression instead of substring matching; smartFilterErrs counts
+	// per-message evaluation errors (skipped rows).
+	smartFilter     *messagefilter.Filter
+	smartFilterErrs int
+
+	// Data masking applied at display time (MSG-28). Nil when no rules configured.
+	masker *masking.Masker
+
+	// Browse statistics (MSG-27): elapsed + byte/message counters for the last fetch.
+	browseStart time.Time
+	browseStats api.BrowseStats
 }
 
-// markRenderDirty marks the render cache as invalid
+// anyModalOverlayOpen reports whether a form-style overlay currently owns input.
+func (m *Model) anyOverlayOpen() bool {
+	return m.showGroups || m.showOverview || m.showSettings ||
+		m.showSettingsEdit || m.showMutationForm || m.showAnalysis ||
+		m.showSeek || m.showPartitions || m.showProduce || m.showSavedFilters ||
+		m.showProjections
+}
+
+// markRenderDirty increments the render version, signalling that the cached
+// full-page View() output is stale and must be rebuilt.
 func (m *Model) markRenderDirty() {
-	m.dirtyRender = true
+	m.renderVersion++
 }
 
-// getRenderCache returns cached render if valid
-func (m *Model) getRenderCache() (string, bool) {
-	m.renderCacheMu.RLock()
-	defer m.renderCacheMu.RUnlock()
-	if !m.dirtyRender && m.renderCache != "" {
-		return m.renderCache, true
-	}
-	return "", false
-}
-
-// setRenderCache updates the render cache
-func (m *Model) setRenderCache(render string) {
-	m.renderCacheMu.Lock()
-	defer m.renderCacheMu.Unlock()
-	m.renderCache = render
-	m.dirtyRender = false
-}
+// getRenderCache and setRenderCache are unused — kept as stubs to avoid breaking tests.
 
 // NewModel creates a new topic page model (original business logic)
 func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api.Topic) *Model {
@@ -187,8 +286,11 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 				Foreground(stylesPkg.BgBase).
 				Bold(true),
 		).
-		Focused(true).
-		SortByDesc(colOffset) // Sort by newest first
+		Focused(true)
+		// Note: do NOT call SortByDesc here — that uses lexicographic string
+		// comparison which breaks numeric offset ordering (e.g. "99" > "145").
+		// Messages are sorted numerically in updateMessageTable() before the
+		// rows are passed to the table.
 
 	// Initialize search input
 	searchInput := textinput.New()
@@ -206,12 +308,14 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 		dataSource:       dataSource,
 		topicName:        topicName,
 		topicDetails:     topicDetails,
-		consumeFlags:     api.DefaultConsumeFlags(),
+		consumeMode:      ModeNewest,
+		consumeFlags:     consumeFlagsForMode(ModeNewest),
 		messages:         []api.Message{},
 		consumedMessages: make(map[string]api.Message),
 		messageTable:     messageTable,
 		tableColumns:     columns,
 		spinner:          sp,
+		fetchProgressBar: components.NewFetchProgressBar(),
 		lastUpdate:       time.Now(),
 		statusMessage:    "Topic page initialized",
 		searchInput:      searchInput,
@@ -230,6 +334,19 @@ func NewModel(dataSource api.KafkaDataSource, topicName string, topicDetails api
 		updateThrottle: UpdateThrottle,
 		batchSize:      BatchSize,
 		batchInterval:  50 * time.Millisecond,
+
+		// Serde display preference defaults to auto (current decode behaviour).
+		keySerde:   serde.Auto,
+		valueSerde: serde.Auto,
+	}
+	// Built-in serde registry for display transforms (schema-registry Avro is
+	// handled by the datasource's DecodeMessage, so a nil decoder is fine here).
+	m.serdeReg, _ = serde.BuildRegistry(nil, nil)
+
+	// Restore per-topic projections persisted from a previous session (MSG-26).
+	if proj, ok := shared.LoadPrefs().Projections[topicName]; ok {
+		m.keyProjection = proj.Key
+		m.valueProjection = proj.Value
 	}
 
 	// Initialize components with dependencies
@@ -270,18 +387,181 @@ func (m *Model) sortMessages() {
 
 // Business logic methods for the original Model
 
+// consumeFlagsForMode returns the appropriate ConsumeFlags for the given mode.
+func consumeFlagsForMode(mode ConsumeMode) api.ConsumeFlags {
+	switch mode {
+	case ModeNewest:
+		return api.ConsumeFlags{
+			Follow:     false,
+			Tail:       60,
+			OffsetFlag: "latest",
+		}
+	case ModeOldest:
+		return api.ConsumeFlags{
+			Follow:     false,
+			Tail:       0,
+			OffsetFlag: "oldest",
+		}
+	case ModeLive:
+		return api.ConsumeFlags{
+			Follow:     true,
+			Tail:       0,
+			OffsetFlag: "latest",
+		}
+	}
+	return api.DefaultConsumeFlags()
+}
+
+const batchSize int64 = 60 // messages per fetch batch
+
+// minLoadedOffset returns the lowest offset across all loaded messages, or -1 if none.
+func (m *Model) minLoadedOffset() int64 {
+	if len(m.messages) == 0 {
+		return -1
+	}
+	min := m.messages[0].Offset
+	for _, msg := range m.messages[1:] {
+		if msg.Offset < min {
+			min = msg.Offset
+		}
+	}
+	return min
+}
+
+// maxLoadedOffset returns the highest offset across all loaded messages, or -1 if none.
+func (m *Model) maxLoadedOffset() int64 {
+	if len(m.messages) == 0 {
+		return -1
+	}
+	max := m.messages[0].Offset
+	for _, msg := range m.messages[1:] {
+		if msg.Offset > max {
+			max = msg.Offset
+		}
+	}
+	return max
+}
+
+// nextBatchFlags returns ConsumeFlags that fetch the next batch beyond the
+// currently loaded messages, in the direction appropriate for the current mode.
+// Returns nil when there is nowhere to go (already at the start of the topic).
+func (m *Model) nextBatchFlags() *api.ConsumeFlags {
+	switch m.consumeMode {
+	case ModeNewest:
+		// Go to older messages: start batchSize offsets before the current minimum.
+		min := m.minLoadedOffset()
+		if min <= 0 {
+			return nil // already at the beginning
+		}
+		start := min - batchSize
+		if start < 0 {
+			start = 0
+		}
+		f := api.ConsumeFlags{
+			Follow:        false,
+			Tail:          0, // must be 0 so OffsetFlag numeric value is used
+			OffsetFlag:    fmt.Sprintf("%d", start),
+			LimitMessages: batchSize,
+		}
+		return &f
+	case ModeOldest:
+		// Go to newer messages: start right after the current maximum.
+		max := m.maxLoadedOffset()
+		if max < 0 {
+			return nil
+		}
+		f := api.ConsumeFlags{
+			Follow:        false,
+			Tail:          0,
+			OffsetFlag:    fmt.Sprintf("%d", max+1),
+			LimitMessages: batchSize,
+		}
+		return &f
+	}
+	return nil
+}
+
+// startForMode clears buffered messages and starts consumption for the
+// current consumeMode. Returns the initial command(s) to run.
+func (m *Model) startForMode() tea.Cmd {
+	// Clear existing messages
+	m.mu.Lock()
+	m.messages = []api.Message{}
+	m.consumedMessages = make(map[string]api.Message)
+	m.filteredMessages = []api.Message{}
+	m.mu.Unlock()
+	m.pagination.SetTotalMessages(0)
+	m.pagination.FirstPage()
+	m.pendingReset = true
+	m.markRenderDirty()
+
+	m.consumeFlags = consumeFlagsForMode(m.consumeMode)
+
+	// Sort order: Oldest mode shows lowest offset first; all others show newest first.
+	if m.consumeMode == ModeOldest {
+		m.pagination.SortOrder = "oldest_first"
+	} else {
+		m.pagination.SortOrder = "newest_first"
+	}
+
+	switch m.consumeMode {
+	case ModeNewest, ModeOldest:
+		m.loading = true
+		m.consuming = false
+		return m.consumption.FetchLatestMessages(60)
+	case ModeLive:
+		m.loading = false
+		m.consuming = false
+		return m.consumption.StartConsuming()
+	}
+	return nil
+}
+
+// startForFlags clears buffered messages and (re)starts browsing with an
+// explicit set of ConsumeFlags chosen by the seek/partition dialogs (MSG-21/22).
+func (m *Model) startForFlags(flags api.ConsumeFlags) tea.Cmd {
+	m.mu.Lock()
+	m.messages = []api.Message{}
+	m.consumedMessages = make(map[string]api.Message)
+	m.filteredMessages = []api.Message{}
+	m.mu.Unlock()
+	m.pagination.SetTotalMessages(0)
+	m.pagination.FirstPage()
+	m.pendingReset = true
+	m.rowStringsDirty = true
+	m.markRenderDirty()
+
+	m.consumeFlags = flags
+	m.browseStart = time.Now()
+	m.browseStats = api.BrowseStats{}
+
+	if flags.Seek.Backward() {
+		m.pagination.SortOrder = "newest_first"
+	} else {
+		m.pagination.SortOrder = "oldest_first"
+	}
+
+	// Live seek tails in real time; everything else is a bounded fetch.
+	if flags.Seek == api.SeekLive {
+		m.consumeMode = ModeLive
+		m.loading = false
+		m.consuming = false
+		return m.consumption.StartConsuming()
+	}
+
+	m.loading = true
+	m.consuming = false
+	count := int(flags.LimitMessages)
+	if count <= 0 {
+		count = seekPageSize
+	}
+	return m.consumption.FetchWithFlags(flags, count)
+}
+
 // Init implements the Page interface for the original model
 func (m *Model) Init() tea.Cmd {
-	// Set initial loading state
 	m.loading = true
-
-	// Fetch latest 60 messages (3 pages of 20)
-	const fetchCount = 60
-	cmds := []tea.Cmd{
-		m.consumption.FetchLatestMessages(fetchCount),
-		m.spinner.Tick,
-	}
-	return tea.Batch(cmds...)
+	return tea.Batch(m.startForMode(), m.spinner.Tick)
 }
 
 // Update implements the Page interface for the original model
@@ -315,33 +595,23 @@ func (m *Model) updateTableDimensions(width, height int) {
 
 	m.markRenderDirty()
 
-	// Height passed is from content component, but actual usable height is less:
-	// - Content component has border (2) + padding (2) = 4 lines overhead
-	// So actual inner height = height - 4
-	innerHeight := height - 4
-
-	// Account for table elements within the inner area:
-	// - Table header: 1 line
-	// - Header separator: 1 line
-	// - Table footer (from WithPageSize pagination): 1 line
-	// Total reserved: 3 lines (4 when search mode is active)
+	// height is the inner content area height (border + padding already excluded by
+	// the content component before calling RenderContent).
+	// We just need to reserve lines for the table's own chrome: header(1) + separator(1) + footer(1) = 3.
 	reservedLines := 3
 	if m.searchMode {
 		reservedLines += 4 // Search bar lines (prompt + help + spacing)
 	}
 
-	// Update table height (number of visible rows) based on available height
-	// This is the STRICT limit - table must never exceed this
-	tableHeight := innerHeight - reservedLines
+	tableHeight := height - reservedLines
 
-	// Enforce minimum and maximum bounds
+	// Enforce minimum
 	if tableHeight < 2 {
 		tableHeight = 2
 	}
-	// Absolute clamp to prevent overflow
-	if tableHeight > innerHeight-reservedLines {
-		tableHeight = innerHeight - reservedLines
-	}
+
+	shared.Log.Info("table dimensions", "topic", m.topicName,
+		"contentW", width, "contentH", height, "pageSize", tableHeight)
 
 	m.pagination.SetPerPage(tableHeight)
 	// Note: We use WithPageSize to enable pagination footer and row limiting
@@ -399,6 +669,10 @@ func (m *Model) updateTableDimensions(width, height int) {
 	}
 	m.messageTable = m.messageTable.WithColumns(columns)
 	m.tableColumns = columns
+
+	// Rebuild table rows for the new page size / column widths.
+	m.updateMessageTable()
+	m.rowStringsDirty = true // column widths changed — force row string rebuild
 }
 
 // GetID implements the Page interface for the original model
@@ -451,22 +725,24 @@ func (m *Model) GetTopicName() string {
 	return m.topicName
 }
 
-// GetSelectedMessage returns the currently selected message
+// GetSelectedMessage returns the message at the current cursor position.
+// Pure query — no side effects, safe to call from the render path.
 func (m *Model) GetSelectedMessage() *api.Message {
-	// Get messages for current page
 	paginatedMessages := m.pagination.GetVisibleMessages(m.filteredMessages)
 	if len(paginatedMessages) == 0 {
 		return nil
 	}
 
-	highlightedIndex := m.messageTable.GetHighlightedRowIndex()
-	if highlightedIndex >= 0 && highlightedIndex < len(paginatedMessages) {
-		selectedMsg := &paginatedMessages[highlightedIndex]
-		// Load schema information when message is selected
-		m.loadSchemaInfoForMessage(selectedMsg)
-		return selectedMsg
+	// cursorRow is the row position in the DISPLAYED table (may be reversed for
+	// newest_first). Map it back to the ascending storage index.
+	highlightedIndex := m.cursorRow
+	if m.pagination.SortOrder == "newest_first" {
+		highlightedIndex = len(paginatedMessages) - 1 - highlightedIndex
 	}
 
+	if highlightedIndex >= 0 && highlightedIndex < len(paginatedMessages) {
+		return &paginatedMessages[highlightedIndex]
+	}
 	return nil
 }
 
@@ -488,227 +764,116 @@ func (m *Model) loadSchemaInfoForMessage(msg *api.Message) {
 	m.selectedMessageSchema = schemaInfo
 }
 
-// FilterMessages filters messages based on search input
+// FilterMessages recomputes the filtered view from the current search input or
+// active smart filter (MSG-23/24), then refreshes pagination and the table.
 func (m *Model) FilterMessages() {
-	if !m.searchMode || m.searchInput.Value() == "" {
-		m.filteredMessages = m.messages
-		m.pagination.SetTotalMessages(len(m.messages))
-		m.updateMessageTable()
-		m.markRenderDirty()
-		return
-	}
-
-	query := m.searchInput.Value()
-	filtered := []api.Message{}
-
-	for _, msg := range m.messages {
-		// Search in key and value
-		if msg.Key != "" && contains(msg.Key, query) {
-			filtered = append(filtered, msg)
-			continue
-		}
-		if msg.Value != "" && contains(msg.Value, query) {
-			filtered = append(filtered, msg)
-			continue
-		}
-	}
-
-	m.filteredMessages = filtered
-	m.pagination.SetTotalMessages(len(filtered))
+	m.applyFilter()
+	m.pagination.SetTotalMessages(len(m.filteredMessages))
+	m.pendingReset = true
 	m.updateMessageTable()
 	m.markRenderDirty()
 }
 
 // updateMessageTable updates the table with paginated messages
-// STATELESS: Only passes current page's messages to the table
+// updateMessageTable updates pagination state and preserves/resets the
+// highlighted row. Row content is rendered on demand by renderTableCustom —
+// no table.Row objects are built here.
 func (m *Model) updateMessageTable() {
-	// Ensure messages are sorted for pagination (ascending offset order)
-	m.sortMessages()
+	visibleCount := len(m.pagination.GetVisibleMessages(m.filteredMessages))
 
-	// Get ONLY the current page's messages from pagination
-	paginatedMessages := m.pagination.GetVisibleMessages(m.filteredMessages)
-
-	// Sort messages for display based on current sort order
-	// Create a copy to avoid modifying the original slice
-	sortedMessages := make([]api.Message, len(paginatedMessages))
-	copy(sortedMessages, paginatedMessages)
-	sort.Slice(sortedMessages, func(i, j int) bool {
-		if m.pagination.SortOrder == "newest_first" {
-			return sortedMessages[i].Offset > sortedMessages[j].Offset
-		}
-		return sortedMessages[i].Offset < sortedMessages[j].Offset
-	})
-
-	// For large datasets, use fast rendering (bypass table component overhead)
-	if len(m.filteredMessages) > UseCustomRenderer {
-		m.renderTableFast(sortedMessages)
-		return
+	if m.pendingReset || m.cursorRow >= visibleCount {
+		m.cursorRow = 0
 	}
-
-	// For small datasets, use standard table rendering
-	rows := make([]table.Row, len(sortedMessages))
-
-	searchQuery := ""
-	if m.searchMode {
-		searchQuery = m.searchInput.Value()
-	}
-
-	// Get current column widths for proper truncation
-	var keyMaxLen, valueMaxLen int
-	for _, col := range m.tableColumns {
-		if col.Title() == "Key" {
-			keyMaxLen = col.Width() - 1 // allow 1 padding
-		} else if col.Title() == "Value" {
-			valueMaxLen = col.Width() - 1
-		}
-	}
-	if keyMaxLen < 1 {
-		keyMaxLen = 20
-	}
-	if valueMaxLen < 1 {
-		valueMaxLen = 40
-	}
-
-	for i, msg := range sortedMessages {
-		offset := "N/A"
-		if msg.Offset >= 0 {
-			offset = fmt.Sprintf("%d", msg.Offset)
-		}
-
-		partition := fmt.Sprintf("%d", msg.Partition)
-		timestamp := "N/A" // API doesn't have timestamp field
-
-		key := "<null>"
-		if msg.Key != "" {
-			key = msg.Key
-			if searchQuery != "" {
-				key = highlightMatchingText(key, searchQuery)
-			}
-			// Truncate AFTER highlighting to ensure it fits
-			key = truncateString(key, keyMaxLen)
-		}
-
-		value := "<null>"
-		if msg.Value != "" {
-			value = msg.Value
-			if searchQuery != "" {
-				value = highlightMatchingText(value, searchQuery)
-			}
-			// Truncate AFTER highlighting to ensure it fits
-			value = truncateString(value, valueMaxLen)
-		}
-
-		rows[i] = table.NewRow(table.RowData{
-			"offset":    offset,
-			"partition": partition,
-			"timestamp": timestamp,
-			"key":       key,
-			"value":     value,
-		})
-	}
-
-	// STATELESS: Only pass current page's rows to the table
-	// Reset highlighted row to 0 to maintain consistent selection
-	m.messageTable = m.messageTable.WithRows(rows).WithHighlightedRow(0)
+	m.pendingReset = false
+	m.rowStringsDirty = true // visible rows changed — rebuild on next render
 }
 
-// renderTableFast renders table rows with minimal overhead for large datasets
-// STATELESS: Only renders current page's messages
-func (m *Model) renderTableFast(messages []api.Message) {
-	rows := make([]table.Row, len(messages))
-	for i, msg := range messages {
-		rows[i] = table.NewRow(table.RowData{
-			"offset":    fmt.Sprintf("%d", msg.Offset),
-			"partition": fmt.Sprintf("%d", msg.Partition),
-			"timestamp": "N/A",
-			"key":       truncateString(msg.Key, 18),
-			"value":     truncateString(msg.Value, 38),
-		})
-	}
-	// STATELESS: Only pass current page's rows, reset highlight to 0
-	m.messageTable = m.messageTable.WithRows(rows).WithHighlightedRow(0)
-}
-
-// renderTableCustom renders a custom table view for large datasets with pagination
-// This bypasses the bubbles table component overhead entirely
+// renderTableCustom renders the message table as plain text with direct string
+// building. Row strings are cached and only rebuilt when data/layout changes;
+// on cursor-only moves the cached rows are reused with just the highlight
+// reapplied — making scrolling essentially free.
 func (m *Model) renderTableCustom(width, height int) string {
-	// Ensure messages are sorted for pagination
-	m.sortMessages()
-
 	messages := m.pagination.GetVisibleMessages(m.filteredMessages)
 	if len(messages) == 0 {
-		return "No messages"
+		// Empty state distinguishes an empty topic from a filter with no matches (MSG-27).
+		if len(m.messages) > 0 {
+			return lipgloss.NewStyle().Foreground(stylesPkg.FgMuted).Padding(1).
+				Render("No messages match the current filter.")
+		}
+		return lipgloss.NewStyle().Foreground(stylesPkg.FgMuted).Padding(1).
+			Render("No messages found.")
 	}
 
-	// Sort messages for display based on current sort order
+	// Apply display sort order (storage is always ascending; newest_first reverses it).
 	sortedMessages := make([]api.Message, len(messages))
 	copy(sortedMessages, messages)
-	sort.Slice(sortedMessages, func(i, j int) bool {
-		if m.pagination.SortOrder == "newest_first" {
+	if m.pagination.SortOrder == "newest_first" {
+		sort.Slice(sortedMessages, func(i, j int) bool {
 			return sortedMessages[i].Offset > sortedMessages[j].Offset
-		}
-		return sortedMessages[i].Offset < sortedMessages[j].Offset
-	})
+		})
+	}
 	messages = sortedMessages
 
-	// Calculate column widths based on available width
-	// Account for spaces before each of the 4 columns
+	// Column width calculation
 	availableWidth := width - 4
 	if availableWidth < 60 {
 		availableWidth = 60
 	}
-
-	// Define minimum column widths
 	const (
 		minOffsetWidth    = 10
-		minPartitionWidth = 10
-		minKeyWidth       = 20
+		minPartitionWidth = 8
+		minTimeWidth      = 19
+		minKeyWidth       = 18
 		minValueWidth     = 15
 	)
-
-	// Calculate total minimum width required
-	minTotalWidth := minOffsetWidth + minPartitionWidth + minKeyWidth + minValueWidth
-
-	// Ensure available width is at least the minimum total
+	minTotalWidth := minOffsetWidth + minPartitionWidth + minTimeWidth + minKeyWidth + minValueWidth
 	if availableWidth < minTotalWidth {
 		availableWidth = minTotalWidth
 	}
-
-	// Calculate remaining width after allocating minimums
 	remainingWidth := availableWidth - minTotalWidth
-
-	// Distribute remaining width: Value column gets most (60%), others share the rest
 	offsetWidth := minOffsetWidth + remainingWidth*10/100
-	partitionWidth := minPartitionWidth + remainingWidth*10/100
-	keyWidth := minKeyWidth + remainingWidth*20/100
-	// Value gets the remainder to ensure exact fit
-	valueWidth := availableWidth - offsetWidth - partitionWidth - keyWidth
-
-	// Ensure value column gets at least its minimum
+	partitionWidth := minPartitionWidth
+	timeWidth := minTimeWidth
+	keyWidth := minKeyWidth + remainingWidth*30/100
+	valueWidth := availableWidth - offsetWidth - partitionWidth - timeWidth - keyWidth
 	if valueWidth < minValueWidth {
 		valueWidth = minValueWidth
 	}
 
-	// Calculate available rows based on height
-	// Height passed is from content component:
-	// - Content component has border (2) + padding (2) = 4 lines overhead
-	// So actual inner height = height - 4
+	// Limit to available screen rows
 	innerHeight := height - 4
-
-	// Reserve lines for: header (1), separator (1), column headers (1), separator (1), footer (1)
-	reservedLines := 5
-	availableRows := innerHeight - reservedLines
+	availableRows := innerHeight - 5 // header(1)+sep(1)+colhdr(1)+sep(1)+footer(1)
 	if availableRows < 5 {
 		availableRows = 5
 	}
-	// Limit messages to available rows
 	if len(messages) > availableRows {
 		messages = messages[:availableRows]
 	}
 
+	// Rebuild unstyled row strings only when content changed or width changed.
+	if m.rowStringsDirty || m.rowStringCacheWidth != width || len(m.rowStringCache) != len(messages) {
+		rowFmt := fmt.Sprintf(" %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds", offsetWidth, partitionWidth, timeWidth, keyWidth, valueWidth)
+		m.rowStringCache = make([]string, len(messages))
+		for i, msg := range messages {
+			ts := ""
+			if !msg.Timestamp.IsZero() {
+				ts = shared.FormatTimestamp(msg.Timestamp)
+			}
+			m.rowStringCache[i] = fmt.Sprintf(rowFmt,
+				fmt.Sprintf("%d", msg.Offset),
+				fmt.Sprintf("%d", msg.Partition),
+				truncateString(ts, timeWidth),
+				truncateString(m.displayKey(msg), keyWidth),
+				truncateString(m.displayValue(msg), valueWidth),
+			)
+		}
+		m.rowStringCacheWidth = width
+		m.rowStringsDirty = false
+	}
+
 	var sb strings.Builder
 
-	// Header with pagination info
+	// Header
 	header := fmt.Sprintf(" %s | Page %d/%d | %d msgs",
 		m.topicName, m.pagination.Page+1, m.pagination.TotalPages, m.pagination.TotalMessages)
 	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(stylesPkg.Primary).Render(header))
@@ -716,44 +881,38 @@ func (m *Model) renderTableCustom(width, height int) string {
 	sb.WriteString(strings.Repeat("─", width))
 	sb.WriteString("\n")
 
-	// Column headers with dynamic widths
-	colHeaderFmt := fmt.Sprintf(" %%-%ds %%-%ds %%-%ds %%-%ds", offsetWidth, partitionWidth, keyWidth, valueWidth)
+	// Column headers
+	colHeaderFmt := fmt.Sprintf(" %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds", offsetWidth, partitionWidth, timeWidth, keyWidth, valueWidth)
 	sb.WriteString(lipgloss.NewStyle().Bold(true).Render(
-		fmt.Sprintf(colHeaderFmt, "Offset", "Partition", "Key", "Value"),
+		fmt.Sprintf(colHeaderFmt, "Offset", "Partition", "Timestamp", "Key", "Value"),
 	))
 	sb.WriteString("\n")
 	sb.WriteString(strings.Repeat("─", width))
 	sb.WriteString("\n")
 
-	// Get current cursor position for highlighting
-	cursorRow := m.messageTable.GetHighlightedRowIndex()
-
-	// Rows with dynamic widths
-	rowFmt := fmt.Sprintf(" %%-%ds %%-%ds %%-%ds %%-%ds", offsetWidth, partitionWidth, keyWidth, valueWidth)
-	for i, msg := range messages {
-		offset := fmt.Sprintf("%d", msg.Offset)
-		partition := fmt.Sprintf("%d", msg.Partition)
-		key := truncateString(msg.Key, keyWidth)
-		value := truncateString(msg.Value, valueWidth)
-
-		line := fmt.Sprintf(rowFmt, offset, partition, key, value)
-
-		// Highlight selected row
-		if i == cursorRow {
-			line = lipgloss.NewStyle().Background(stylesPkg.Primary).Foreground(stylesPkg.BgBase).Render(line)
+	// Rows — highlight only the cursor row, everything else is plain text
+	highlightStyle := lipgloss.NewStyle().Background(stylesPkg.Primary).Foreground(stylesPkg.BgBase)
+	for i, rowStr := range m.rowStringCache {
+		if i == m.cursorRow {
+			sb.WriteString(highlightStyle.Render(rowStr))
+		} else {
+			sb.WriteString(rowStr)
 		}
-
-		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
 
-	// Footer with pagination controls
+	// Footer with browse statistics (MSG-27): message/byte counts, elapsed, filter errors.
+	stats := fmt.Sprintf(" %d msgs • %s • %dms",
+		m.browseStats.MessagesConsumed, shared.FormatBytes2dp(m.browseStats.BytesConsumed), m.browseStats.ElapsedMs)
+	if m.smartFilterErrs > 0 {
+		stats += fmt.Sprintf(" • %d filter errors", m.smartFilterErrs)
+	}
 	var footer string
 	if m.pagination.TotalPages > 1 {
-		footer = fmt.Sprintf(" [←/→] Page %d/%d | [R] refresh | [/] search | [space] pause",
-			m.pagination.Page+1, m.pagination.TotalPages)
+		footer = fmt.Sprintf(" [←/→] Page %d/%d |%s | [S] seek [#] parts [P] produce",
+			m.pagination.Page+1, m.pagination.TotalPages, stats)
 	} else {
-		footer = fmt.Sprintf(" %d message(s) | [R] refresh | [/] search | [space] pause", m.pagination.TotalMessages)
+		footer = fmt.Sprintf("%s | [S] seek [#] parts [P] produce [/] search", stats)
 	}
 	sb.WriteString(lipgloss.NewStyle().Foreground(stylesPkg.FgMuted).Render(footer))
 
@@ -930,18 +1089,35 @@ func contains(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
-// truncateString truncates a string to fit within maxLen visual characters
-// It properly handles ANSI escape codes and multi-byte characters
-// It also strips newlines to prevent layout corruption in tables
+// sanitizeForDisplay removes control characters from raw Kafka message content.
+// Binary payloads (Avro, Protobuf, etc.) can contain bytes like ESC (0x1b),
+// VT (0x0b), cursor-up (0x1b 0x5b 0x41) and similar terminal control sequences
+// that cause the TUI to drift or break when rendered. Tabs are replaced with a
+// single space; all other C0/C1 control characters are dropped.
+func sanitizeForDisplay(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '\t' {
+			b.WriteByte(' ')
+		} else if unicode.IsControl(r) {
+			// Drop: C0 (0x00-0x1f) and C1 (0x7f-0x9f) control characters.
+			// This includes \n, \r, ESC (0x1b), VT (0x0b), FF (0x0c), etc.
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// truncateString sanitizes and truncates a string to fit within maxLen visual
+// characters.  It handles ANSI escape codes, multi-byte characters, and strips
+// all terminal control bytes that could corrupt the table layout.
 func truncateString(s string, maxLen int) string {
 	if maxLen <= 0 {
 		return ""
 	}
-	// Strip newlines and carriage returns to prevent layout breaking
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.ReplaceAll(s, "\r", " ")
-	
-	// Use the styles utility which properly handles ANSI codes
+	s = sanitizeForDisplay(s)
 	return styles.TruncateWithEllipsis(s, maxLen)
 }
 
@@ -978,6 +1154,11 @@ type TopicPageModel struct {
 	// Template system
 	reusableApp     *templateui.ReusableApp
 	contentProvider *TopicContentProvider
+
+	// Full-page view cache. The template system (JoinHorizontal/Vertical, border
+	// rendering) is expensive. We rebuild it only when renderVersion advances.
+	viewCache        string
+	viewCacheVersion uint64
 }
 
 // GetCommon returns the shared context
@@ -999,6 +1180,11 @@ func NewTopicPageModelWithCommon(common *core.Common, topicName string, topicDet
 	topicModel := NewModel(common.DataSource, topicName, topicDetails)
 	// Set common context for layout system access
 	topicModel.common = common
+	// Build the display-time masker from per-cluster masking rules (MSG-28).
+	topicModel.masker = buildMaskerFromConfig(common)
+	// Apply per-cluster serde config: rebuild the registry with configured
+	// serdes and pre-select any topic-bound serde (MSG-17).
+	topicModel.applySerdeConfig(common)
 
 	// Create topic-specific providers
 	contentProvider := NewTopicContentProvider(topicModel)
@@ -1049,9 +1235,16 @@ func (t *TopicPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return t, cmd
 }
 
-// View implements the Page interface
+// View implements the Page interface — caches the full rendered page and only
+// rebuilds when the model's renderVersion has advanced.
 func (t *TopicPageModel) View() string {
-	return t.reusableApp.View()
+	v := t.topicModel.renderVersion
+	if t.viewCache != "" && t.viewCacheVersion == v {
+		return t.viewCache
+	}
+	t.viewCache = t.reusableApp.View()
+	t.viewCacheVersion = v
+	return t.viewCache
 }
 
 // SetDimensions implements the Page interface

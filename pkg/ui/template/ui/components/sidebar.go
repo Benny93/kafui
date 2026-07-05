@@ -6,6 +6,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
+	zone "github.com/lrstanley/bubblezone"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -148,7 +149,8 @@ func (s *sidebar) renderSidebarContent() string {
 
 func (s *sidebar) renderLogo(width int) string {
 	t := styles.CurrentTheme()
-	logo := styles.ApplyBoldForegroundGrad("CRUSH", t.Primary, t.Secondary)
+	name := s.getContextName()
+	logo := styles.ApplyBoldForegroundGrad(name, t.Primary, t.Secondary)
 	version := t.S().Muted.Render("v1.0.0")
 
 	// Center the logo
@@ -159,6 +161,19 @@ func (s *sidebar) renderLogo(width int) string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, logo, version)
+}
+
+// getContextName returns the current Kafka context name from whichever section
+// implements a GetTitle() string method (e.g. ClusterInfoSection).
+func (s *sidebar) getContextName() string {
+	for _, section := range s.sections {
+		if tp, ok := section.(interface{ GetTitle() string }); ok {
+			if name := tp.GetTitle(); name != "" {
+				return name
+			}
+		}
+	}
+	return "kafui"
 }
 
 func (s *sidebar) calculateMaxItems(availableHeight, numSections int) []int {
@@ -245,6 +260,11 @@ func (s *sidebar) renderSection(section providers.SidebarSection, maxItems, widt
 		}
 
 		lines = append(lines, line)
+		// Wrap with a mouse zone when the item requests one. The zone.Mark call
+		// uses zero-width ANSI sequences so lipgloss.Width() is unaffected.
+		if item.ZoneID != "" {
+			lines[len(lines)-1] = zone.Mark(item.ZoneID, line)
+		}
 	}
 
 	return strings.Join(lines, "\n")

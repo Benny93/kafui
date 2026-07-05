@@ -7,6 +7,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
+	"github.com/Benny93/kafui/pkg/version"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -131,6 +132,22 @@ func (h *header) renderDetails(status map[string]interface{}, availWidth int) st
 	if timeStr, ok := status["time"].(string); ok {
 		parts = append(parts, t.S().Subtle.Render(timeStr))
 	}
+
+	// Acting identity and active permission profile (AA-11).
+	if identity, ok := status["identity"].(string); ok && identity != "" {
+		parts = append(parts, t.S().Muted.Render("@"+identity))
+	}
+	if profile, ok := status["profile"].(string); ok && profile != "" {
+		parts = append(parts, t.S().Info.Render("profile:"+profile))
+	}
+
+	// Read-only badge (CM-14): providers set status["readonly"]=true.
+	if ro, ok := status["readonly"].(bool); ok && ro {
+		parts = append(parts, t.S().Warning.Render("read-only"))
+	}
+
+	// Version display (UI-13), always shown on the right.
+	parts = append(parts, t.S().Subtle.Render(version.Version))
 
 	dot := t.S().Subtle.Render(" • ")
 	metadata := strings.Join(parts, dot)

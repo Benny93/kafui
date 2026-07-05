@@ -7,7 +7,15 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/datasource/mock"
 	"github.com/stretchr/testify/assert"
+	zone "github.com/lrstanley/bubblezone"
 )
+
+// TestMain initializes the bubblezone global manager (required by zone.Mark calls
+// in renderTabs) before any test in this package runs.
+func TestMain(m *testing.M) {
+	zone.NewGlobal()
+	m.Run()
+}
 
 func TestNewModel(t *testing.T) {
 	// Create mock data source

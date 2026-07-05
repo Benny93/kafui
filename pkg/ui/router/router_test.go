@@ -46,6 +46,10 @@ func (m *mockDataSource) ConsumeTopic(ctx context.Context, topicName string, fla
 	return nil
 }
 
+func (m *mockDataSource) ProduceMessage(ctx context.Context, topic string, rec api.ProduceRecord) error {
+	return nil
+}
+
 func (m *mockDataSource) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 	return []api.ConsumerGroup{}, nil
 }
@@ -64,12 +68,200 @@ func (m *mockDataSource) SetContext(contextName string) error {
 	return nil
 }
 
+func (m *mockDataSource) GetClusterDetails(clusterName string) (api.ClusterInfo, error) {
+	return api.ClusterInfo{Name: clusterName}, nil
+}
 
 func (m *mockDataSource) GetMessageSchemaInfo(keySchemaID, valueSchemaID string) (*api.MessageSchemaInfo, error) {
 	return nil, nil
 }
 
-// mockResourceItem implements shared.ResourceItem for testing
+func (m *mockDataSource) GetTopicMessageCounts(topics map[string]int32) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
+
+func (m *mockDataSource) GetSchemas() ([]api.Schema, error) {
+	return []api.Schema{}, nil
+}
+
+func (m *mockDataSource) GetSchemaDetails(subjects []string) ([]api.Schema, error) {
+	return []api.Schema{}, nil
+}
+
+func (m *mockDataSource) GetSchemaContent(subject string, version int) (string, error) {
+	return `{"type":"record","name":"Mock","fields":[]}`, nil
+}
+
+func (m *mockDataSource) GetSchemaVersions(subject string) ([]api.SchemaVersion, error) {
+	return nil, nil
+}
+func (m *mockDataSource) GetGlobalCompatibility() (api.CompatibilityLevel, error) { return "", nil }
+func (m *mockDataSource) GetSubjectCompatibility(subject string) (api.CompatibilityLevel, bool, error) {
+	return "", false, nil
+}
+func (m *mockDataSource) RegisterSchema(subject, schemaText, schemaType string) (api.Schema, error) {
+	return api.Schema{}, nil
+}
+func (m *mockDataSource) CheckSchemaCompatibility(subject, schemaText, schemaType string) (bool, []string, error) {
+	return true, nil, nil
+}
+func (m *mockDataSource) DeleteSubject(subject string, permanent bool) ([]int, error) {
+	return nil, nil
+}
+func (m *mockDataSource) DeleteSchemaVersion(subject string, version int, permanent bool) error {
+	return nil
+}
+func (m *mockDataSource) SetGlobalCompatibility(level api.CompatibilityLevel) error { return nil }
+func (m *mockDataSource) SetSubjectCompatibility(subject string, level api.CompatibilityLevel) error {
+	return nil
+}
+
+func (m *mockDataSource) GetACLs() ([]api.ACLEntry, error) {
+	return []api.ACLEntry{}, nil
+}
+
+func (m *mockDataSource) GetACLsFiltered(filter api.ACLFilter) ([]api.ACLEntry, error) {
+	return []api.ACLEntry{}, nil
+}
+
+func (m *mockDataSource) CreateACL(entry api.ACLEntry) error { return nil }
+
+func (m *mockDataSource) DeleteACL(entry api.ACLEntry) error { return nil }
+
+func (m *mockDataSource) GetClientQuotas() ([]api.ClientQuotaEntry, error) {
+	return []api.ClientQuotaEntry{}, nil
+}
+
+func (m *mockDataSource) AlterClientQuotas(entity api.ClientQuotaEntity, quotas map[string]float64) error {
+	return nil
+}
+
+func (m *mockDataSource) GetTopicNames() ([]string, error) {
+	topics, err := m.GetTopics()
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(topics))
+	for name := range topics {
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+func (m *mockDataSource) DecodeMessage(_ context.Context, msg api.Message) (api.Message, error) {
+	return msg, nil
+}
+
+func (m *mockDataSource) ListSerdes() []string { return []string{"string", "hex", "json"} }
+
+func (m *mockDataSource) GetClusterStatistics(_ context.Context, _ string) (api.ClusterStatistics, error) {
+	return api.ClusterStatistics{}, nil
+}
+
+func (m *mockDataSource) GetClusterCapabilities(_ context.Context, _ string) ([]api.Capability, error) {
+	return nil, nil
+}
+
+func (m *mockDataSource) ValidateClusterConnection(_ context.Context, _ string) ([]api.ValidationResult, error) {
+	return nil, nil
+}
+func (m *mockDataSource) GetBrokers() ([]api.BrokerInfo, error) { return nil, nil }
+func (m *mockDataSource) GetBrokerStats() (map[int32]api.BrokerStats, api.BrokerSummary, error) {
+	return nil, api.BrokerSummary{}, nil
+}
+func (m *mockDataSource) GetBrokerLogDirs(brokerIDs []int32) (map[int32][]api.BrokerLogDir, error) {
+	return nil, nil
+}
+func (m *mockDataSource) GetBrokerConfig(brokerID int32) ([]api.BrokerConfigEntry, error) {
+	return nil, nil
+}
+func (m *mockDataSource) AlterBrokerConfig(brokerID int32, key, value string) error { return nil }
+func (m *mockDataSource) AlterReplicaLogDir(brokerID int32, topic string, partition int32, logDir string) error {
+	return nil
+}
+func (m *mockDataSource) GetBrokerMetrics(brokerID int32) (string, error) { return "", nil }
+
+// Topic-administration + analysis stubs (TP-1..TP-11, TP-29/TP-30).
+func (m *mockDataSource) GetTopicConfig(topicName string) ([]api.TopicConfigEntry, error) {
+	return nil, nil
+}
+func (m *mockDataSource) GetTopicDetails(topicName string) (api.TopicDetails, error) {
+	return api.TopicDetails{}, nil
+}
+func (m *mockDataSource) GetTopicSizes(topicNames []string) (map[string]int64, error) {
+	return nil, nil
+}
+func (m *mockDataSource) CreateTopic(name string, numPartitions int32, replicationFactor int16, configs map[string]*string) error {
+	return nil
+}
+func (m *mockDataSource) DeleteTopic(name string) error         { return nil }
+func (m *mockDataSource) IsTopicDeletionEnabled() (bool, error) { return true, nil }
+func (m *mockDataSource) UpdateTopicConfig(name string, entries map[string]*string) error {
+	return nil
+}
+func (m *mockDataSource) IncreasePartitions(name string, totalCount int32) error { return nil }
+func (m *mockDataSource) PurgeTopicMessages(name string, partition int32) error  { return nil }
+func (m *mockDataSource) RecreateTopic(name string) error                        { return nil }
+func (m *mockDataSource) ChangeReplicationFactor(name string, newFactor int16) error {
+	return nil
+}
+func (m *mockDataSource) StartTopicAnalysis(ctx context.Context, topicName string) error {
+	return nil
+}
+func (m *mockDataSource) GetTopicAnalysis(topicName string) (*api.TopicAnalysis, error) {
+	return nil, nil
+}
+func (m *mockDataSource) CancelTopicAnalysis(topicName string) error { return nil }
+
+func (m *mockDataSource) GetConnectClusters(withStats bool) ([]api.ConnectCluster, error) {
+	return nil, nil
+}
+func (m *mockDataSource) GetConnectorNames(connect string) ([]string, error) { return nil, nil }
+func (m *mockDataSource) GetConnectors() ([]api.Connector, error)            { return nil, nil }
+func (m *mockDataSource) GetConnectorDetails(connect, name string) (api.ConnectorDetails, error) {
+	return api.ConnectorDetails{}, nil
+}
+func (m *mockDataSource) CreateConnector(connect, name string, config map[string]string) (api.Connector, error) {
+	return api.Connector{}, nil
+}
+func (m *mockDataSource) UpdateConnectorConfig(connect, name string, config map[string]string) (api.Connector, error) {
+	return api.Connector{}, nil
+}
+func (m *mockDataSource) DeleteConnector(connect, name string) error            { return nil }
+func (m *mockDataSource) PauseConnector(connect, name string) error             { return nil }
+func (m *mockDataSource) ResumeConnector(connect, name string) error            { return nil }
+func (m *mockDataSource) StopConnector(connect, name string) error              { return nil }
+func (m *mockDataSource) RestartConnector(connect, name string) error           { return nil }
+func (m *mockDataSource) RestartConnectorTask(connect, name string, taskID int) error {
+	return nil
+}
+func (m *mockDataSource) ResetConnectorOffsets(connect, name string) error { return nil }
+func (m *mockDataSource) GetConnectorPlugins(connect string) ([]api.ConnectorPlugin, error) {
+	return nil, nil
+}
+func (m *mockDataSource) ValidateConnectorConfig(connect, pluginClass string, config map[string]string) (api.ConnectorValidationResult, error) {
+	return api.ConnectorValidationResult{}, nil
+}
+func (m *mockDataSource) ListKsqlStreams() ([]api.KsqlStream, error) { return nil, nil }
+func (m *mockDataSource) ListKsqlTables() ([]api.KsqlTable, error)   { return nil, nil }
+func (m *mockDataSource) ExecuteKsql(ctx context.Context, sql string, props map[string]string) (<-chan api.KsqlResultTable, error) {
+	return nil, nil
+}
+func (m *mockDataSource) GetConsumerGroupDetail(groupID string) (api.ConsumerGroupDetail, error) {
+	return api.ConsumerGroupDetail{}, nil
+}
+func (m *mockDataSource) GetConsumerGroupDetails(groupIDs []string) ([]api.ConsumerGroup, error) {
+	return nil, nil
+}
+func (m *mockDataSource) GetConsumerGroupsForTopic(topic string) ([]api.ConsumerGroup, error) {
+	return nil, nil
+}
+func (m *mockDataSource) DeleteConsumerGroup(groupID string) error               { return nil }
+func (m *mockDataSource) DeleteConsumerGroupOffsets(groupID, topic string) error { return nil }
+func (m *mockDataSource) ResetConsumerGroupOffsets(ctx context.Context, req api.OffsetResetRequest) error {
+	return nil
+}
+
 type mockResourceItem struct {
 	id      string
 	details map[string]string
@@ -236,6 +428,29 @@ func TestNavigationHistory(t *testing.T) {
 	}
 }
 
+func TestBreadcrumbsUpdateOnBack(t *testing.T) {
+	dataSource := &mockDataSource{}
+	router := NewRouter(core.NewCommon(dataSource))
+
+	router.NavigateTo("main", nil)
+	router.NavigateTo("topic", &NavigationData{TopicName: "test-topic"})
+	router.NavigateTo("message_detail", &NavigationData{TopicName: "test-topic"})
+
+	if got := len(router.getBreadcrumbs()); got != 3 {
+		t.Fatalf("expected 3 breadcrumbs after deep navigation, got %d", got)
+	}
+
+	// Back() must batch a breadcrumb update and shrink the trail.
+	cmd := router.Back()
+	if cmd == nil {
+		t.Fatal("Back() returned nil command")
+	}
+	router.Update(cmd())
+	if got := len(router.getBreadcrumbs()); got != 2 {
+		t.Fatalf("expected 2 breadcrumbs after Back(), got %d", got)
+	}
+}
+
 func TestSetDimensions(t *testing.T) {
 	dataSource := &mockDataSource{}
 	router := NewRouter(core.NewCommon(dataSource))
@@ -380,6 +595,26 @@ func TestCreatePageFallbacks(t *testing.T) {
 	}
 }
 
+// TestPageChangeMsgWithNilDataDoesNotPanic guards against a nil-pointer-
+// dereference crash: PageChangeMsg with nil Data used to make Router.Update
+// box a typed-nil *NavigationData into the interface{} passed to NavigateTo.
+// createPage's `data, ok := data.(*NavigationData)` assertions succeed on
+// that (the dynamic type matches *NavigationData even though the pointer is
+// nil), so every case dereferencing a field on it (e.g. "ksql_query"'s
+// navData.TopicName) panicked. Reproduced live via `K` then `e` (open the
+// ksqlDB query editor with no topic seed).
+func TestPageChangeMsgWithNilDataDoesNotPanic(t *testing.T) {
+	dataSource := &mockDataSource{}
+	router := NewRouter(core.NewCommon(dataSource))
+	router.NavigateTo("main", nil)
+
+	for _, pageID := range []string{"topic", "message_detail", "resource_detail", "schema_detail", "ksql_query", "broker:1"} {
+		assert.NotPanics(t, func() {
+			router.Update(core.NewPageChangeMsg(pageID, nil)())
+		}, "PageChangeMsg(%q, nil) should not panic", pageID)
+	}
+}
+
 // TestBackMsgHandling verifies that BackMsg doesn't add to history
 func TestBackMsgHandling(t *testing.T) {
 	dataSource := &mockDataSource{}
@@ -474,6 +709,33 @@ func TestHistoryDoesNotGrow(t *testing.T) {
 	}
 }
 
+// TestHistoryDoesNotGrowOnForwardReturnNavigation guards against bug #8
+// regressing: a page that returns to its caller via forward navigation
+// (PageChangeMsg) instead of Router.Back() — e.g. the Clusters dashboard
+// switching context and sending the user back to "main" — must not leave a
+// dangling history entry. Repeating that round trip used to grow history (and
+// the breadcrumb bar) without bound.
+func TestHistoryDoesNotGrowOnForwardReturnNavigation(t *testing.T) {
+	dataSource := &mockDataSource{}
+	router := NewRouter(core.NewCommon(dataSource))
+	router.NavigateTo("main", nil)
+
+	for i := 0; i < 5; i++ {
+		router.NavigateTo("clusters", nil)
+		// Simulate clusters_page.go's openSelected(): return to main via a
+		// PageChangeMsg (forward navigation), not router.Back().
+		router.Update(core.NewPageChangeMsg("main", nil)())
+	}
+
+	history := router.GetHistory()
+	if len(history) > 1 {
+		t.Errorf("history grew to %v after 5 open/return cycles, want length <= 1", history)
+	}
+	if got := len(router.getBreadcrumbs()); got > 2 {
+		t.Errorf("breadcrumb has %d items after 5 open/return cycles, want <= 2", got)
+	}
+}
+
 // TestRouter_DynamicPageIDs tests that the router correctly handles dynamic page IDs
 func TestRouter_DynamicPageIDs(t *testing.T) {
 	dataSource := &mockDataSource{}
@@ -521,10 +783,10 @@ func TestRouter_BaseIDExtraction(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.dynamicID, func(t *testing.T) {
 			router.NavigateTo(tc.dynamicID, nil)
-			
+
 			// Verify current page ID is preserved (full dynamic ID)
 			assert.Equal(t, tc.dynamicID, router.GetCurrentPageID())
-			
+
 			// Verify page was created (not nil)
 			currentPage := router.GetCurrentPage()
 			assert.NotNil(t, currentPage)
@@ -545,7 +807,7 @@ func TestRouter_DifferentMessageIDs(t *testing.T) {
 			Offset:    100,
 		},
 	})
-	
+
 	page1 := router.GetCurrentPage()
 	page1ID := router.GetCurrentPageID()
 
@@ -557,7 +819,7 @@ func TestRouter_DifferentMessageIDs(t *testing.T) {
 			Offset:    200,
 		},
 	})
-	
+
 	page2 := router.GetCurrentPage()
 	page2ID := router.GetCurrentPageID()
 
@@ -565,7 +827,7 @@ func TestRouter_DifferentMessageIDs(t *testing.T) {
 	assert.NotEqual(t, page1ID, page2ID)
 	assert.Contains(t, page1ID, "100")
 	assert.Contains(t, page2ID, "200")
-	
+
 	// Both should be message detail pages (same type, different instances)
 	assert.NotNil(t, page1)
 	assert.NotNil(t, page2)

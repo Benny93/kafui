@@ -30,6 +30,10 @@ func (m *MockDataSource) GetConsumerGroups() ([]api.ConsumerGroup, error) {
 	return args.Get(0).([]api.ConsumerGroup), args.Error(1)
 }
 
+func (m *MockDataSource) GetClusterDetails(clusterName string) (api.ClusterInfo, error) {
+	return api.ClusterInfo{Name: clusterName}, nil
+}
+
 func (m *MockDataSource) GetContexts() ([]string, error) {
 	args := m.Called()
 	return args.Get(0).([]string), args.Error(1)
@@ -50,12 +54,202 @@ func (m *MockDataSource) ConsumeTopic(ctx context.Context, topicName string, fla
 	return args.Error(0)
 }
 
+func (m *MockDataSource) ProduceMessage(ctx context.Context, topic string, rec api.ProduceRecord) error {
+	return nil
+}
+
 func (m *MockDataSource) GetMessageSchemaInfo(keySchemaID, valueSchemaID string) (*api.MessageSchemaInfo, error) {
 	args := m.Called(keySchemaID, valueSchemaID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*api.MessageSchemaInfo), args.Error(1)
+}
+
+func (m *MockDataSource) GetTopicMessageCounts(topics map[string]int32) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
+
+func (m *MockDataSource) GetSchemas() ([]api.Schema, error) {
+	return []api.Schema{}, nil
+}
+
+func (m *MockDataSource) GetSchemaDetails(subjects []string) ([]api.Schema, error) {
+	return []api.Schema{}, nil
+}
+
+func (m *MockDataSource) GetSchemaContent(subject string, version int) (string, error) {
+	return `{"type":"record","name":"Mock","fields":[]}`, nil
+}
+
+func (m *MockDataSource) GetSchemaVersions(subject string) ([]api.SchemaVersion, error) {
+	return nil, nil
+}
+func (m *MockDataSource) GetGlobalCompatibility() (api.CompatibilityLevel, error) { return "", nil }
+func (m *MockDataSource) GetSubjectCompatibility(subject string) (api.CompatibilityLevel, bool, error) {
+	return "", false, nil
+}
+func (m *MockDataSource) RegisterSchema(subject, schemaText, schemaType string) (api.Schema, error) {
+	return api.Schema{}, nil
+}
+func (m *MockDataSource) CheckSchemaCompatibility(subject, schemaText, schemaType string) (bool, []string, error) {
+	return true, nil, nil
+}
+func (m *MockDataSource) DeleteSubject(subject string, permanent bool) ([]int, error) {
+	return nil, nil
+}
+func (m *MockDataSource) DeleteSchemaVersion(subject string, version int, permanent bool) error {
+	return nil
+}
+func (m *MockDataSource) SetGlobalCompatibility(level api.CompatibilityLevel) error { return nil }
+func (m *MockDataSource) SetSubjectCompatibility(subject string, level api.CompatibilityLevel) error {
+	return nil
+}
+
+func (m *MockDataSource) GetACLs() ([]api.ACLEntry, error) {
+	return []api.ACLEntry{}, nil
+}
+
+func (m *MockDataSource) GetACLsFiltered(filter api.ACLFilter) ([]api.ACLEntry, error) {
+	return []api.ACLEntry{}, nil
+}
+
+func (m *MockDataSource) CreateACL(entry api.ACLEntry) error { return nil }
+
+func (m *MockDataSource) DeleteACL(entry api.ACLEntry) error { return nil }
+
+func (m *MockDataSource) GetClientQuotas() ([]api.ClientQuotaEntry, error) {
+	return []api.ClientQuotaEntry{}, nil
+}
+
+func (m *MockDataSource) AlterClientQuotas(entity api.ClientQuotaEntity, quotas map[string]float64) error {
+	return nil
+}
+
+func (m *MockDataSource) GetTopicNames() ([]string, error) {
+	topics, err := m.GetTopics()
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(topics))
+	for name := range topics {
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+func (m *MockDataSource) DecodeMessage(_ context.Context, msg api.Message) (api.Message, error) {
+	return msg, nil
+}
+
+func (m *MockDataSource) ListSerdes() []string { return []string{"auto", "string", "hex", "json"} }
+
+func (m *MockDataSource) GetClusterStatistics(_ context.Context, _ string) (api.ClusterStatistics, error) {
+	return api.ClusterStatistics{}, nil
+}
+
+func (m *MockDataSource) GetClusterCapabilities(_ context.Context, _ string) ([]api.Capability, error) {
+	return nil, nil
+}
+
+func (m *MockDataSource) ValidateClusterConnection(_ context.Context, _ string) ([]api.ValidationResult, error) {
+	return nil, nil
+}
+func (m *MockDataSource) GetBrokers() ([]api.BrokerInfo, error) { return nil, nil }
+func (m *MockDataSource) GetBrokerStats() (map[int32]api.BrokerStats, api.BrokerSummary, error) {
+	return nil, api.BrokerSummary{}, nil
+}
+func (m *MockDataSource) GetBrokerLogDirs(brokerIDs []int32) (map[int32][]api.BrokerLogDir, error) {
+	return nil, nil
+}
+func (m *MockDataSource) GetBrokerConfig(brokerID int32) ([]api.BrokerConfigEntry, error) {
+	return nil, nil
+}
+func (m *MockDataSource) AlterBrokerConfig(brokerID int32, key, value string) error { return nil }
+func (m *MockDataSource) AlterReplicaLogDir(brokerID int32, topic string, partition int32, logDir string) error {
+	return nil
+}
+func (m *MockDataSource) GetBrokerMetrics(brokerID int32) (string, error) { return "", nil }
+
+// Topic-administration + analysis stubs (TP-1..TP-11, TP-29/TP-30).
+func (m *MockDataSource) GetTopicConfig(topicName string) ([]api.TopicConfigEntry, error) {
+	return nil, nil
+}
+func (m *MockDataSource) GetTopicDetails(topicName string) (api.TopicDetails, error) {
+	return api.TopicDetails{}, nil
+}
+func (m *MockDataSource) GetTopicSizes(topicNames []string) (map[string]int64, error) {
+	return nil, nil
+}
+func (m *MockDataSource) CreateTopic(name string, numPartitions int32, replicationFactor int16, configs map[string]*string) error {
+	return nil
+}
+func (m *MockDataSource) DeleteTopic(name string) error         { return nil }
+func (m *MockDataSource) IsTopicDeletionEnabled() (bool, error) { return true, nil }
+func (m *MockDataSource) UpdateTopicConfig(name string, entries map[string]*string) error {
+	return nil
+}
+func (m *MockDataSource) IncreasePartitions(name string, totalCount int32) error { return nil }
+func (m *MockDataSource) PurgeTopicMessages(name string, partition int32) error  { return nil }
+func (m *MockDataSource) RecreateTopic(name string) error                        { return nil }
+func (m *MockDataSource) ChangeReplicationFactor(name string, newFactor int16) error {
+	return nil
+}
+func (m *MockDataSource) StartTopicAnalysis(ctx context.Context, topicName string) error {
+	return nil
+}
+func (m *MockDataSource) GetTopicAnalysis(topicName string) (*api.TopicAnalysis, error) {
+	return nil, nil
+}
+func (m *MockDataSource) CancelTopicAnalysis(topicName string) error { return nil }
+
+func (m *MockDataSource) GetConnectClusters(withStats bool) ([]api.ConnectCluster, error) {
+	return nil, nil
+}
+func (m *MockDataSource) GetConnectorNames(connect string) ([]string, error) { return nil, nil }
+func (m *MockDataSource) GetConnectors() ([]api.Connector, error)            { return nil, nil }
+func (m *MockDataSource) GetConnectorDetails(connect, name string) (api.ConnectorDetails, error) {
+	return api.ConnectorDetails{}, nil
+}
+func (m *MockDataSource) CreateConnector(connect, name string, config map[string]string) (api.Connector, error) {
+	return api.Connector{}, nil
+}
+func (m *MockDataSource) UpdateConnectorConfig(connect, name string, config map[string]string) (api.Connector, error) {
+	return api.Connector{}, nil
+}
+func (m *MockDataSource) DeleteConnector(connect, name string) error            { return nil }
+func (m *MockDataSource) PauseConnector(connect, name string) error             { return nil }
+func (m *MockDataSource) ResumeConnector(connect, name string) error            { return nil }
+func (m *MockDataSource) StopConnector(connect, name string) error              { return nil }
+func (m *MockDataSource) RestartConnector(connect, name string) error           { return nil }
+func (m *MockDataSource) RestartConnectorTask(connect, name string, taskID int) error {
+	return nil
+}
+func (m *MockDataSource) ResetConnectorOffsets(connect, name string) error { return nil }
+func (m *MockDataSource) GetConnectorPlugins(connect string) ([]api.ConnectorPlugin, error) {
+	return nil, nil
+}
+func (m *MockDataSource) ValidateConnectorConfig(connect, pluginClass string, config map[string]string) (api.ConnectorValidationResult, error) {
+	return api.ConnectorValidationResult{}, nil
+}
+func (m *MockDataSource) ListKsqlStreams() ([]api.KsqlStream, error) { return nil, nil }
+func (m *MockDataSource) ListKsqlTables() ([]api.KsqlTable, error)   { return nil, nil }
+func (m *MockDataSource) ExecuteKsql(ctx context.Context, sql string, props map[string]string) (<-chan api.KsqlResultTable, error) {
+	return nil, nil
+}
+func (m *MockDataSource) GetConsumerGroupDetail(groupID string) (api.ConsumerGroupDetail, error) {
+	return api.ConsumerGroupDetail{}, nil
+}
+func (m *MockDataSource) GetConsumerGroupDetails(groupIDs []string) ([]api.ConsumerGroup, error) {
+	return nil, nil
+}
+func (m *MockDataSource) GetConsumerGroupsForTopic(topic string) ([]api.ConsumerGroup, error) {
+	return nil, nil
+}
+func (m *MockDataSource) DeleteConsumerGroup(groupID string) error               { return nil }
+func (m *MockDataSource) DeleteConsumerGroupOffsets(groupID, topic string) error { return nil }
+func (m *MockDataSource) ResetConsumerGroupOffsets(ctx context.Context, req api.OffsetResetRequest) error {
+	return nil
 }
 
 func TestNewModel(t *testing.T) {
@@ -383,8 +577,8 @@ func TestTopicPageModel_GetID(t *testing.T) {
 
 	// Test with different topic names
 	testCases := []struct {
-		topicName     string
-		expectedInID  string
+		topicName    string
+		expectedInID string
 	}{
 		{"topic-with-dashes", "topic-with-dashes"},
 		{"topic_with_underscores", "topic_with_underscores"},

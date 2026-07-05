@@ -43,7 +43,7 @@ dist/
 
 .qoder/
 .axon/
-kafui
+/kafui
 
 crush
 ui_debug/topic_page/topic_page

@@ -206,6 +206,7 @@ func TestDefaultConsumeFlags(t *testing.T) {
 		Follow:     true,
 		Tail:       50,
 		OffsetFlag: "latest",
+		Seek:       SeekNewest,
 	}
 
 	result := DefaultConsumeFlags()

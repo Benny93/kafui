@@ -122,15 +122,15 @@ currentCluster: test-cluster
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create temporary config file
+			// Create temporary config file and load it into the package-level cfg.
 			tmpFile := "tmp_rovodev_test_config.yaml"
 			err := createTempConfigFile(tmpFile, tempConfig)
 			assert.NoError(t, err)
 			defer deleteFile(tmpFile)
 
 			cfgFile = tmpFile
+			onInit() // populate the package-level cfg from the temp file
 
-			// Use the new constructor with real config manager for this integration test
 			kds := NewKafkaDataSourceKaf()
 			err = kds.SetContext(tt.contextName)
 
@@ -344,63 +344,55 @@ func TestKafkaDataSourceKaf_GetContext_NoActiveCluster(t *testing.T) {
 
 // TestKafkaDataSourceKaf_SetContext_Success tests successful context setting
 func TestKafkaDataSourceKaf_SetContext_Success(t *testing.T) {
-	mockConfig := config.Config{
+	// SetContext reads from the package-level cfg, so populate it directly.
+	cfg = config.Config{
 		Clusters: []*config.Cluster{
 			{Name: "cluster1"},
 			{Name: "cluster2"},
 		},
 	}
 
-	mockConfigManager := &MockConfigManager{
-		MockConfig: mockConfig,
-	}
-
-	mockClientFactory := &MockKafkaClientFactory{}
-
-	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-
+	kds := NewKafkaDataSourceKaf()
 	err := kds.SetContext("cluster1")
 
 	assert.NoError(t, err)
+	assert.Equal(t, "cluster1", cfg.CurrentCluster)
 }
 
 // TestKafkaDataSourceKaf_SetContext_ClusterNotFound tests setting non-existent context
 func TestKafkaDataSourceKaf_SetContext_ClusterNotFound(t *testing.T) {
-	mockConfig := config.Config{
+	cfg = config.Config{
 		Clusters: []*config.Cluster{
 			{Name: "cluster1"},
 			{Name: "cluster2"},
 		},
 	}
 
-	mockConfigManager := &MockConfigManager{
-		MockConfig: mockConfig,
-	}
-
-	mockClientFactory := &MockKafkaClientFactory{}
-
-	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-
+	kds := NewKafkaDataSourceKaf()
 	err := kds.SetContext("nonexistent")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
 
-// TestKafkaDataSourceKaf_SetContext_ConfigReadError tests config read error
-func TestKafkaDataSourceKaf_SetContext_ConfigReadError(t *testing.T) {
-	mockConfigManager := &MockConfigManager{
-		ShouldFailReadConfig: true,
+// TestKafkaDataSourceKaf_SetContext_NoWrite verifies that SetContext never writes to disk.
+// The previous implementation called cfg.SetCurrentCluster() which truncated ~/.kaf/config
+// and re-serialized it, stripping TLS cert paths due to missing YAML tags in the kaf library.
+func TestKafkaDataSourceKaf_SetContext_NoWrite(t *testing.T) {
+	mockConfigManager := &MockConfigManager{}
+	kds := NewKafkaDataSourceKafWithDeps(&MockKafkaClientFactory{}, mockConfigManager)
+
+	cfg = config.Config{
+		Clusters: []*config.Cluster{
+			{Name: "safe-cluster", Brokers: []string{"localhost:9092"}},
+		},
 	}
 
-	mockClientFactory := &MockKafkaClientFactory{}
+	err := kds.SetContext("safe-cluster")
+	assert.NoError(t, err)
 
-	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-
-	err := kds.SetContext("any-cluster")
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "mock config read failed")
+	// configManager.ReadConfig must never be called — no disk I/O.
+	assert.Equal(t, 0, mockConfigManager.ReadConfigCallCount, "SetContext must not read config from disk")
 }
 
 // TestKafkaDataSourceKaf_GetConsumerGroups_Success tests successful consumer group retrieval
@@ -410,24 +402,8 @@ func TestKafkaDataSourceKaf_GetConsumerGroups_Success(t *testing.T) {
 		"group2": "consumer",
 	}
 
-	mockGroupDescs := []*sarama.GroupDescription{
-		{
-			GroupId: "group1",
-			State:   "Stable",
-			Members: map[string]*sarama.GroupMemberDescription{
-				"member1": {MemberId: "member1"},
-			},
-		},
-		{
-			GroupId: "group2",
-			State:   "Empty",
-			Members: map[string]*sarama.GroupMemberDescription{},
-		},
-	}
-
 	mockAdmin := &MockClusterAdmin{
-		MockConsumerGroups:    mockGroups,
-		MockGroupDescriptions: mockGroupDescs,
+		MockConsumerGroups: mockGroups,
 	}
 
 	mockClientFactory := &MockKafkaClientFactory{
@@ -448,10 +424,10 @@ func TestKafkaDataSourceKaf_GetConsumerGroups_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, groups, 2)
 	assert.Equal(t, "group1", groups[0].Name)
-	assert.Equal(t, "Stable", groups[0].State)
-	assert.Equal(t, 1, groups[0].Consumers)
+	assert.Equal(t, "consumer", groups[0].State) // protocol type from ListConsumerGroups
+	assert.Equal(t, 0, groups[0].Consumers)       // not populated without DescribeConsumerGroups
 	assert.Equal(t, "group2", groups[1].Name)
-	assert.Equal(t, "Empty", groups[1].State)
+	assert.Equal(t, "consumer", groups[1].State)
 	assert.Equal(t, 0, groups[1].Consumers)
 }
 
@@ -501,35 +477,31 @@ func TestKafkaDataSourceKaf_GetConsumerGroups_ListGroupsError(t *testing.T) {
 	assert.Nil(t, groups)
 }
 
-// TestKafkaDataSourceKaf_GetConsumerGroups_DescribeGroupsError tests error in describing consumer groups
+// TestKafkaDataSourceKaf_GetConsumerGroups_DescribeGroupsError was testing the removed
+// DescribeConsumerGroups call. We now only use ListConsumerGroups, so verify that a
+// ListConsumerGroups failure propagates as an error.
 func TestKafkaDataSourceKaf_GetConsumerGroups_DescribeGroupsError(t *testing.T) {
-	mockGroups := map[string]string{
-		"group1": "consumer",
-	}
-	
 	mockAdmin := &MockClusterAdmin{
-		MockConsumerGroups:   mockGroups,
-		ShouldFailDescribeGroups: true,
+		ShouldFailListConsumerGroups: true,
 	}
-	
+
 	mockClientFactory := &MockKafkaClientFactory{
 		MockClusterAdmin: mockAdmin,
 	}
-	
+
 	mockConfigManager := &MockConfigManager{}
-	
+
 	// Set up global state for getClusterAdmin
 	originalFactory := kafkaClientFactory
 	defer func() { kafkaClientFactory = originalFactory }()
 	kafkaClientFactory = mockClientFactory
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	groups, err := kds.GetConsumerGroups()
-	
+
 	assert.Error(t, err)
 	assert.Nil(t, groups)
-	assert.Contains(t, err.Error(), "Unable to describe consumer groups")
 }
 
 // TestKafkaDataSourceKaf_ConsumeTopic tests the ConsumeTopic method
@@ -581,31 +553,28 @@ func TestKafkaDataSourceKaf_ConsumeTopic(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestKafkaDataSourceKaf_ConsumeTopic_AdminError tests ConsumeTopic with admin error
+// TestKafkaDataSourceKaf_ConsumeTopic_AdminError tests ConsumeTopic no longer
+// requires a cluster admin client — errors surface via onError callback.
 func TestKafkaDataSourceKaf_ConsumeTopic_AdminError(t *testing.T) {
 	mockClientFactory := &MockKafkaClientFactory{
 		ShouldFailClusterAdmin: true,
 	}
-	
+
 	mockConfigManager := &MockConfigManager{}
-	
-	// Set up global state for getClusterAdmin
-	originalFactory := kafkaClientFactory
-	defer func() { kafkaClientFactory = originalFactory }()
-	kafkaClientFactory = mockClientFactory
-	
+
 	kds := NewKafkaDataSourceKafWithDeps(mockClientFactory, mockConfigManager)
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	
+
 	flags := api.ConsumeFlags{}
 	messageHandler := func(msg api.Message) {}
 	errorHandler := func(err any) {}
-	
+
 	err := kds.ConsumeTopic(ctx, "test-topic", flags, messageHandler, errorHandler)
-	
-	assert.Error(t, err)
+
+	// ConsumeTopic itself never returns an error; Sarama errors go via onError.
+	assert.NoError(t, err)
 }
 
 // TestKafkaDataSourceKaf_GetContexts_EmptyConfig tests GetContexts with empty config

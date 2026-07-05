@@ -82,7 +82,7 @@ func (d *DefaultContentProvider) RenderContent(width, height int) string {
 	for _, line := range description {
 		// Truncate line to fit available width (account for padding)
 		truncatedLine := styles.TruncateWithEllipsis(line, availableWidth-4)
-		
+
 		if strings.HasPrefix(truncatedLine, "✓") {
 			sections = append(sections, t.S().Success.Render(truncatedLine))
 		} else if truncatedLine == "" {
@@ -157,7 +157,7 @@ func (d *DefaultContentProvider) GetContentSize(width int) int {
 	// This is a simplified estimation - in production you might want to
 	// actually render and count lines
 	sizeMode := styles.GetSizeMode(width, 100) // Height doesn't matter for line count
-	
+
 	switch sizeMode {
 	case styles.SizeModeMinimum:
 		return 5 // Minimal content
@@ -178,9 +178,15 @@ func (d *DefaultContentProvider) InitContent() tea.Cmd {
 	return nil
 }
 
+func (d *DefaultContentProvider) IsInputMode() bool {
+	return false
+}
+
 // DefaultHeaderDataProvider provides the original header data
 type DefaultHeaderDataProvider struct {
 	lastUpdate time.Time
+	// ReadOnly, when true, makes the header render a "read-only" badge (CM-14).
+	ReadOnly bool
 }
 
 func NewDefaultHeaderDataProvider() *DefaultHeaderDataProvider {
@@ -190,19 +196,18 @@ func NewDefaultHeaderDataProvider() *DefaultHeaderDataProvider {
 }
 
 func (d *DefaultHeaderDataProvider) GetBrandName() string {
-	return "Example™"
+	return "Kafui™"
 }
 
 func (d *DefaultHeaderDataProvider) GetAppName() string {
-	return "CRUSH UI"
+	return "Kafka TUI"
 }
 
 func (d *DefaultHeaderDataProvider) GetStatusData() map[string]interface{} {
+	// Only real, meaningful indicators — no placeholder connection/memory gauges.
 	return map[string]interface{}{
-		"time":        d.lastUpdate.Format("15:04:05"),
-		"status":      "online",
-		"connections": 3,
-		"memory":      "45%",
+		"time":     d.lastUpdate.Format("15:04:05"),
+		"readonly": d.ReadOnly,
 	}
 }
 

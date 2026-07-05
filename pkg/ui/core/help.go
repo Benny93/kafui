@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	keys "github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
@@ -212,18 +213,21 @@ func (h *HelpSystem) renderCompactHelp() string {
 	return content.String()
 }
 
-// collectHelpSections collects help sections from global and page-specific bindings
+// collectHelpSections collects help sections. Both the overlay and the template
+// footer render from the same key.Binding registries (UI-16): global bindings
+// come from keys.GlobalKeys and page bindings from the page's GetHelp(), so the
+// metadata is declared exactly once.
 func (h *HelpSystem) collectHelpSections() []HelpSection {
 	sections := make([]HelpSection, 0)
-	
-	// Global bindings section
+
+	// Global bindings section (from the unified keys.GlobalKeys registry).
 	globalSection := HelpSection{
 		Title:    "Global Keys",
 		Bindings: h.getGlobalBindings(),
 	}
 	sections = append(sections, globalSection)
-	
-	// Page-specific bindings section
+
+	// Page-specific bindings section (from the page's GetHelp()).
 	if h.currentPage != nil {
 		pageBindings := h.getPageBindings()
 		if len(pageBindings) > 0 {
@@ -234,31 +238,26 @@ func (h *HelpSystem) collectHelpSections() []HelpSection {
 			sections = append(sections, pageSection)
 		}
 	}
-	
-	// Navigation section
-	navSection := HelpSection{
-		Title:    "Navigation",
-		Bindings: h.getNavigationBindings(),
-	}
-	sections = append(sections, navSection)
-	
-	// Focus management section
-	focusSection := HelpSection{
-		Title:    "Focus Management",
-		Bindings: h.getFocusBindings(),
-	}
-	sections = append(sections, focusSection)
-	
+
 	return sections
 }
 
-// getGlobalBindings returns global key bindings
+// getGlobalBindings returns global key bindings derived from the single unified
+// keys.GlobalKeys registry (UI-16/UI-17).
 func (h *HelpSystem) getGlobalBindings() []HelpBinding {
-	return []HelpBinding{
-		{"?", "toggle help", true},
-		{"q", "quit application", true},
-		{"ctrl+c", "quit application", true},
+	bindings := make([]HelpBinding, 0)
+	for _, b := range keys.GlobalKeys.GetAllBindings() {
+		help := b.Help()
+		if help.Key == "" {
+			continue
+		}
+		bindings = append(bindings, HelpBinding{
+			Key:         help.Key,
+			Description: help.Desc,
+			Important:   help.Key == "?" || help.Key == "esc",
+		})
 	}
+	return bindings
 }
 
 // getPageBindings returns page-specific key bindings
@@ -280,26 +279,6 @@ func (h *HelpSystem) getPageBindings() []HelpBinding {
 	}
 	
 	return bindings
-}
-
-// getNavigationBindings returns navigation key bindings
-func (h *HelpSystem) getNavigationBindings() []HelpBinding {
-	return []HelpBinding{
-		{"esc", "go back / exit mode", true},
-		{"enter", "select / confirm", false},
-		{"↑/k", "move up", false},
-		{"↓/j", "move down", false},
-		{"←/h", "move left", false},
-		{"→/l", "move right", false},
-	}
-}
-
-// getFocusBindings returns focus management key bindings
-func (h *HelpSystem) getFocusBindings() []HelpBinding {
-	return []HelpBinding{
-		{"tab", "next component", false},
-		{"shift+tab", "previous component", false},
-	}
 }
 
 // getPageTypeName returns a friendly name for the current page type

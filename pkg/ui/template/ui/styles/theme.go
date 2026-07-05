@@ -120,6 +120,45 @@ func NewDarkTheme() *Theme {
 	}
 }
 
+// NewLightTheme returns the light-background palette. It mirrors NewDarkTheme's
+// shape so the whole template renders consistently in light mode (UI-3).
+func NewLightTheme() *Theme {
+	return &Theme{
+		Name:   "light",
+		IsDark: false,
+
+		Primary:   lipgloss.Color("#5B3FC4"), // Slate Blue (darker for light bg)
+		Secondary: lipgloss.Color("#B8860B"), // Dark Goldenrod
+		Tertiary:  lipgloss.Color("#2C6FA6"), // Steel Blue (darker)
+		Accent:    lipgloss.Color("#C2410C"), // Burnt Orange
+
+		// Backgrounds - light
+		BgBase:        lipgloss.Color("#FFFFFF"),
+		BgBaseLighter: lipgloss.Color("#F3F4F6"),
+		BgSubtle:      lipgloss.Color("#E5E7EB"),
+		BgOverlay:     lipgloss.Color("#D1D5DB"),
+
+		// Foregrounds - dark for contrast on light bg
+		FgBase:      lipgloss.Color("#1F2937"),
+		FgMuted:     lipgloss.Color("#6B7280"),
+		FgHalfMuted: lipgloss.Color("#4B5563"),
+		FgSubtle:    lipgloss.Color("#9CA3AF"),
+		FgSelected:  lipgloss.Color("#FFFFFF"),
+
+		// Borders
+		Border:      lipgloss.Color("#D1D5DB"),
+		BorderFocus: lipgloss.Color("#5B3FC4"),
+
+		// Status
+		Success: lipgloss.Color("#059669"),
+		Error:   lipgloss.Color("#DC2626"),
+		Warning: lipgloss.Color("#D97706"),
+		Info:    lipgloss.Color("#2563EB"),
+
+		White: lipgloss.Color("#FFFFFF"),
+	}
+}
+
 var defaultTheme *Theme
 
 func CurrentTheme() *Theme {
@@ -127,4 +166,25 @@ func CurrentTheme() *Theme {
 		defaultTheme = NewDarkTheme()
 	}
 	return defaultTheme
+}
+
+// ponytail: UI-3 residual — this template Theme and pkg/ui/styles.Theme remain
+// two separate types (approach (b): the shell keeps them in sync via SetTheme on
+// toggle rather than merging them into one). Full unification into a single Theme
+// type + removal of pkg/ui/styles.go's package-level color vars is deferred.
+//
+// SetTheme swaps the active template theme so page chrome follows the user's
+// selection (UI-3). Passing isDark chooses the dark or light palette; the style
+// cache is rebuilt lazily on the next S() call.
+func SetTheme(isDark bool) {
+	if isDark {
+		defaultTheme = NewDarkTheme()
+	} else {
+		defaultTheme = NewLightTheme()
+	}
+}
+
+// IsDark reports whether the active template theme is the dark palette.
+func IsDark() bool {
+	return CurrentTheme().IsDark
 }
