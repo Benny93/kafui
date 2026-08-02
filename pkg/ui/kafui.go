@@ -191,7 +191,7 @@ func OpenUI(dataSource api.KafkaDataSource, appCfg appconfig.Config, gate *authz
 	var watchDone chan struct{}
 	if appCfg.AutoReload.Enabled {
 		watchDone = make(chan struct{})
-		go watchConfigFile(p, appconfig.DefaultPath(), appCfg.AutoReload.Interval, watchDone)
+		go watchConfigFile(p, appconfig.DefaultPath(), appCfg.AutoReload.Interval, watchDone, nil)
 	}
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running program: %v\n", err)

@@ -21,11 +21,18 @@ type programSender interface {
 // dependency — and debounces by only acting on an mtime that differs from the
 // last observed one. It runs until done is closed; on process exit the leaked
 // goroutine dies with the process.
-func watchConfigFile(p programSender, path string, interval time.Duration, done <-chan struct{}) {
+//
+// ready, when non-nil, is closed once the baseline mtime has been captured.
+// Tests use it to synchronize with goroutine startup so a change written right
+// after launching can't race the baseline read. Production passes nil.
+func watchConfigFile(p programSender, path string, interval time.Duration, done <-chan struct{}, ready chan<- struct{}) {
 	if interval <= 0 {
 		interval = 3 * time.Second
 	}
 	last := configModTime(path)
+	if ready != nil {
+		close(ready)
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {

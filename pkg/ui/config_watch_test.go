@@ -35,7 +35,13 @@ func TestWatchConfigFile_ReloadsOnChange(t *testing.T) {
 	sender := &fakeSender{ch: make(chan tea.Msg, 4)}
 	done := make(chan struct{})
 	defer close(done)
-	go watchConfigFile(sender, path, 20*time.Millisecond, done)
+	ready := make(chan struct{})
+	go watchConfigFile(sender, path, 20*time.Millisecond, done, ready)
+
+	// Wait until the watcher has captured the baseline mtime before writing the
+	// change, so the change can't race goroutine startup (which would bake the
+	// new mtime into the baseline and never be detected).
+	<-ready
 
 	// Change the file with a newer mtime to trigger a reload.
 	writeConfig(t, path, "ui:\n  theme: light\n", base.Add(time.Minute))
@@ -60,7 +66,12 @@ func TestWatchConfigFile_ParseErrorSurfacesUIError(t *testing.T) {
 	sender := &fakeSender{ch: make(chan tea.Msg, 4)}
 	done := make(chan struct{})
 	defer close(done)
-	go watchConfigFile(sender, path, 20*time.Millisecond, done)
+	ready := make(chan struct{})
+	go watchConfigFile(sender, path, 20*time.Millisecond, done, ready)
+
+	// Wait until the watcher has captured the baseline mtime before writing the
+	// change, so the change can't race goroutine startup.
+	<-ready
 
 	// Write invalid YAML with a newer mtime.
 	writeConfig(t, path, "ui: [ this is: not valid", base.Add(time.Minute))
