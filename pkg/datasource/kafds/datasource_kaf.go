@@ -343,6 +343,10 @@ func getConfig() (saramaConfig *sarama.Config, e error) {
 	saramaConfig.Version = sarama.V1_1_0_0
 	saramaConfig.Producer.Return.Successes = true
 
+	if currentCluster == nil {
+		return nil, fmt.Errorf("no Kafka cluster configured")
+	}
+
 	cluster := currentCluster
 	if cluster.Version != "" {
 		parsedVersion, err := sarama.ParseKafkaVersion(cluster.Version)

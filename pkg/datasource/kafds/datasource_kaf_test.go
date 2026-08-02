@@ -3,6 +3,7 @@ package kafds
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -153,14 +154,32 @@ func TestKafkaDataSourceKaf_GetConsumerGroups_Integration(t *testing.T) {
 }
 
 func TestKafkaDataSourceKaf_ConsumeTopic_Integration(t *testing.T) {
-	// Integration test - will fail without real Kafka but tests method signature
+	// ConsumeTopic never returns an error itself — consumer startup/connection
+	// failures are delivered through the onError callback. With no cluster
+	// configured, the error is reported synchronously via onError.
 	kds := &KafkaDataSourceKaf{}
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	err := kds.ConsumeTopic(ctx, "test-topic", api.DefaultConsumeFlags(), func(msg api.Message) {}, func(err any) {})
-	// We expect an error since there's no real Kafka cluster
-	assert.Error(t, err)
+	var (
+		mu   sync.Mutex
+		errs []error
+	)
+
+	err := kds.ConsumeTopic(ctx, "test-topic", api.DefaultConsumeFlags(), func(msg api.Message) {}, func(e any) {
+		mu.Lock()
+		defer mu.Unlock()
+		if errVal, ok := e.(error); ok {
+			errs = append(errs, errVal)
+		}
+	})
+
+	// ConsumeTopic itself never returns an error; Sarama errors go via onError.
+	assert.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.NotEmpty(t, errs, "expected a consumer startup error via onError with no cluster configured")
 }
 
 // Helper functions for testing

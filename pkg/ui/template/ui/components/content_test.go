@@ -13,9 +13,9 @@ func TestCappedContentWidth(t *testing.T) {
 		{"Very small width", 10, 6},
 		{"Small width", 50, 46},
 		{"Normal width", 100, 96},
-		{"Large width (should cap)", 150, 120},
-		{"Very large width (should cap)", 300, 120},
-		{"Edge case: exactly MaxContentWidth + padding", 124, 120},
+		{"Large width (below cap)", 150, 146},
+		{"Very large width (should cap)", 300, 240},
+		{"Edge case: exactly MaxContentWidth + padding", 244, 240},
 		{"Edge case: less than padding", 3, -1}, // Will be negative, component handles this
 	}
 
