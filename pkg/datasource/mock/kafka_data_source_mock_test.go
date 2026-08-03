@@ -507,12 +507,19 @@ func TestKafkaDataSourceMock_ConsumeTopic_RealisticOffsets(t *testing.T) {
 				}
 			}
 
-			// Verify offsets are increasing
-			for i := 1; i < len(messages); i++ {
-				if messages[i].Offset <= messages[i-1].Offset {
-					t.Errorf("Message %d offset (%d) should be > message %d offset (%d)",
-						i, messages[i].Offset, i-1, messages[i-1].Offset)
+			// Verify offsets are increasing per partition. Real Kafka only
+			// guarantees monotonic offsets *within* a partition; the mock assigns
+			// messages to a random partition per message (offset = counter +
+			// partition*1e6), so offsets are not ordered across partitions. The
+			// earlier cross-partition check was flaky (~1 in 6) and is replaced by
+			// this partition-aware assertion.
+			lastOffsetByPartition := make(map[int32]int64)
+			for _, msg := range messages {
+				if prev, ok := lastOffsetByPartition[msg.Partition]; ok && msg.Offset <= prev {
+					t.Errorf("partition %d offset (%d) should be > previous offset (%d)",
+						msg.Partition, msg.Offset, prev)
 				}
+				lastOffsetByPartition[msg.Partition] = msg.Offset
 			}
 		})
 	}
