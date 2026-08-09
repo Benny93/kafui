@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/components/menu"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/shared"
@@ -62,9 +63,8 @@ func NewModelWithCommon(common *core.Common) *MainPageModel {
 	// Create the reusable app with our Kafui providers
 	reusableApp := templateui.NewReusableApp(config)
 
-	// Use centralized key bindings
-	centralizedKeys := keys.DefaultKeyMap()
-	reusableApp.SetKeyMap(centralizedKeys.Main)
+	// The hint bar renders from the single binding registry.
+	reusableApp.SetKeyMap(keys.Hints(keys.ScopeList))
 
 	return &MainPageModel{
 		common:           common,
@@ -133,22 +133,7 @@ func (m *MainPageModel) IsInputMode() bool {
 
 // GetHelp implements the Page interface
 func (m *MainPageModel) GetHelp() []key.Binding {
-	// Return key bindings for help using centralized keys
-	km := keys.DefaultKeyMap()
-	return []key.Binding{
-		km.Main.Search,
-		km.Main.SwitchResource,
-		km.Main.Select,
-		km.Main.ScrollUp,
-		km.Main.ScrollDown,
-		km.Main.PageUp,
-		km.Main.PageDown,
-		km.Main.GotoStart,
-		km.Main.GotoEnd,
-		km.Main.Back,
-		km.Main.Quit,
-		km.Main.Help,
-	}
+	return keys.Help(keys.ScopeList)
 }
 
 // HandleNavigation implements the Page interface
@@ -295,3 +280,25 @@ func topicDetailsFromItem(item interface{}) api.Topic {
 	}
 	return fallback
 }
+
+// The page delegates the controls-spec interfaces to its content provider,
+// which is what actually owns the selection and the resource state.
+
+// ContextActions implements core.ActionProvider.
+func (m *MainPageModel) ContextActions() []menu.Entry {
+	if m.contentProvider == nil {
+		return nil
+	}
+	return m.contentProvider.ContextActions()
+}
+
+// Unwind implements core.Unwinder.
+func (m *MainPageModel) Unwind() (tea.Cmd, bool) {
+	if m.contentProvider == nil {
+		return nil, false
+	}
+	return m.contentProvider.Unwind()
+}
+
+// KeyScope implements core.KeyScoper.
+func (m *MainPageModel) KeyScope() keys.Scope { return keys.ScopeList }

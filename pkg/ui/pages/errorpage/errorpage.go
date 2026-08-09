@@ -34,15 +34,15 @@ func New(common *core.Common, variant Variant, title, detail string) *Model {
 	return &Model{common: common, variant: variant, title: title, detail: detail}
 }
 
-func (m *Model) Init() tea.Cmd                            { return nil }
-func (m *Model) Update(tea.Msg) (tea.Model, tea.Cmd)      { return m, nil }
-func (m *Model) SetDimensions(w, h int)                   { m.width, m.height = w, h }
-func (m *Model) GetID() string                            { return "error" }
-func (m *Model) GetTitle() string                         { return "Error" }
-func (m *Model) GetHelp() []key.Binding                   { return nil }
+func (m *Model) Init() tea.Cmd                                 { return nil }
+func (m *Model) Update(tea.Msg) (tea.Model, tea.Cmd)           { return m, nil }
+func (m *Model) SetDimensions(w, h int)                        { m.width, m.height = w, h }
+func (m *Model) GetID() string                                 { return "error" }
+func (m *Model) GetTitle() string                              { return "Error" }
+func (m *Model) GetHelp() []key.Binding                        { return nil }
 func (m *Model) HandleNavigation(tea.Msg) (core.Page, tea.Cmd) { return m, nil }
-func (m *Model) OnFocus() tea.Cmd                         { return nil }
-func (m *Model) OnBlur() tea.Cmd                          { return nil }
+func (m *Model) OnFocus() tea.Cmd                              { return nil }
+func (m *Model) OnBlur() tea.Cmd                               { return nil }
 
 func (m *Model) icon() string {
 	switch m.variant {

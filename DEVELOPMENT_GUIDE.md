@@ -523,3 +523,19 @@ m.error = err
 ---
 
 **End of Guide**
+
+
+## Debug builds
+
+`make build-debug` produces `./kafui-debug` with the `debug` build tag. It adds:
+
+- `F3` / `Shift+F3` — save a screenshot of the current screen, optionally redacted.
+- `F12` — toggle the debug overlay.
+- **The keycast strip** — a line below the hint bar showing the last six key
+  presses with the action each resolved to, or `unbound` when the active scope
+  has no binding for it. Useful when working on controls (an unbound key and a
+  bound key whose action did nothing look the same on screen) and when recording
+  demos (otherwise the GIF shows results with no visible cause).
+
+All three are compiled out of release builds by the tag; the production
+package provides no-op stubs.

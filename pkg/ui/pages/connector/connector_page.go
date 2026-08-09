@@ -14,7 +14,9 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/components/editor"
+	"github.com/Benny93/kafui/pkg/ui/components/tabstrip"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
@@ -28,7 +30,6 @@ import (
 // Model is the connector detail page.
 type Model struct {
 	common      *core.Common
-	keys        pageKeys
 	reusableApp *templateui.ReusableApp
 	dims        core.Dimensions
 
@@ -41,6 +42,8 @@ type Model struct {
 	loadErr       error
 
 	active tab
+	// tabStrip owns the tab bar's click and hover zones.
+	tabStrip *tabstrip.Model
 
 	// Tasks tab
 	tasksTable   table.Model
@@ -62,7 +65,6 @@ func NewModelWithCommon(common *core.Common, connectCluster, connectorName strin
 func newModel(common *core.Common, connect, name string) *Model {
 	m := &Model{
 		common:       common,
-		keys:         defaultKeys(),
 		connect:      connect,
 		name:         name,
 		expandedTask: -1,
@@ -76,7 +78,7 @@ func newModel(common *core.Common, connect, name string) *Model {
 		ShowSidebarByDefault: false,
 	}
 	m.reusableApp = templateui.NewReusableApp(config)
-	m.reusableApp.SetKeyMap(helpKeyMap{keys: m.keys})
+	m.reusableApp.SetKeyMap(keys.Hints(pageScope()))
 	return m
 }
 
@@ -119,7 +121,7 @@ func (m *Model) GetID() string    { return fmt.Sprintf("connector:%s:%s", m.conn
 func (m *Model) GetTitle() string { return m.name }
 
 func (m *Model) GetHelp() []key.Binding {
-	return []key.Binding{m.keys.NextTab, m.keys.Pause, m.keys.Resume, m.keys.Stop, m.keys.Restart, m.keys.Delete, m.keys.Edit, m.keys.Retry, m.keys.Back}
+	return keys.Help(pageScope())
 }
 
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) { return m, nil }
@@ -149,6 +151,15 @@ func (m *Model) loadDetails() tea.Cmd {
 // --- message handling (via the content provider) ---
 
 func (m *Model) handle(msg tea.Msg) tea.Cmd {
+	// Tab strip mouse handling: hovering a tab highlights it, clicking one
+	// activates it. Handled before anything else so a click on the bar never
+	// reaches the pane behind it.
+	if mouse, ok := msg.(tea.MouseMsg); ok {
+		if clicked, hit := m.tabs().HandleMouse(mouse); hit {
+			return m.switchTab(tab(clicked))
+		}
+	}
+
 	switch v := msg.(type) {
 	case detailsLoadedMsg:
 		if v.connect != m.connect || v.name != m.name {
@@ -200,42 +211,47 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		case "esc":
 			m.editing = false
 			return nil
-		case "ctrl+s":
+		case "f2":
+			// ctrl+s used to save here. It is XOFF and can freeze the terminal,
+			// so the registry forbids it.
 			return m.commitConfigEdit()
 		}
 		_, cmd := m.configEditor.Update(msg)
 		return cmd
 	}
 
-	switch msg.String() {
-	case "tab":
-		return m.switchTab((m.active + 1) % tab(len(tabTitles)))
-	case "1":
-		return m.switchTab(tabOverview)
-	case "2":
-		return m.switchTab(tabTasks)
-	case "3":
-		return m.switchTab(tabConfig)
-	case "4":
-		return m.switchTab(tabTopics)
-	case "r":
-		return m.retry()
-	}
-
-	// Lifecycle actions available on any tab (state-aware).
-	switch msg.String() {
-	case "p":
-		return m.lifecycle("pause", m.common.DataSource.PauseConnector)
-	case "u":
-		return m.lifecycle("resume", m.common.DataSource.ResumeConnector)
-	case "s":
-		return m.lifecycle("stop", m.common.DataSource.StopConnector)
-	case "R":
-		return m.lifecycle("restart", m.common.DataSource.RestartConnector)
-	case "ctrl+d":
-		return m.deleteConnector()
-	case "z":
-		return m.resetOffsets()
+	// Every key resolves through the single binding registry. The nine bare
+	// letters this screen used to claim (r p u s R z t T f) appeared in no
+	// help text; the lifecycle ones now live in the actions menu.
+	action, bound := keys.Default.Resolve(keys.ScopeConnector, msg.String())
+	if bound {
+		switch action {
+		case keys.ActionSelectTab:
+			if n := tab(msg.String()[0] - '1'); int(n) < len(tabTitles) {
+				return m.switchTab(n)
+			}
+			return nil
+		case keys.ActionFocusNext:
+			return m.switchTab((m.active + 1) % tab(len(tabTitles)))
+		case keys.ActionFocusPrev:
+			return m.switchTab((m.active + tab(len(tabTitles)) - 1) % tab(len(tabTitles)))
+		case keys.ActionRefresh:
+			return m.retry()
+		case keys.ActionPause:
+			// One key for the pause/resume pair, chosen by current state, in
+			// place of p for pause and u for resume.
+			if strings.EqualFold(m.details.State, api.ConnectorStatePaused) {
+				return m.lifecycle("resume", m.common.DataSource.ResumeConnector)
+			}
+			return m.lifecycle("pause", m.common.DataSource.PauseConnector)
+		case keys.ActionDelete:
+			return m.deleteConnector()
+		case keys.ActionEdit:
+			if m.active == tabConfig {
+				return m.beginConfigEdit()
+			}
+			return nil
+		}
 	}
 
 	// Tab-specific keys.
@@ -244,10 +260,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleTasksKey(msg)
 	case tabTopics:
 		return m.handleTopicsKey(msg)
-	case tabConfig:
-		if msg.String() == "e" {
-			return m.beginConfigEdit()
-		}
 	}
 	return m.forwardToActive(msg)
 }
@@ -355,14 +367,6 @@ func (m *Model) handleTasksKey(msg tea.KeyMsg) tea.Cmd {
 			m.expandedTask = -1
 			return nil
 		}
-	case "t":
-		return m.restartSelectedTask()
-	case "T":
-		return m.restartTasks("all", func(api.ConnectorTask) bool { return true })
-	case "f":
-		return m.restartTasks("failed", func(tk api.ConnectorTask) bool {
-			return strings.EqualFold(tk.State, api.ConnectorStateFailed)
-		})
 	}
 	return m.forwardToActive(msg)
 }
@@ -613,19 +617,23 @@ func (m *Model) summaryStrip() string {
 	return strings.Join(parts, "   ")
 }
 
+// tabBar renders the shared, click-and-hover-aware tab strip.
 func (m *Model) tabBar() string {
-	active := lipgloss.NewStyle().Foreground(stylesPkg.BgBase).Background(stylesPkg.Primary).Bold(true).Padding(0, 1)
-	inactive := lipgloss.NewStyle().Foreground(stylesPkg.FgMuted).Padding(0, 1)
-	var cells []string
-	for i, t := range tabTitles {
-		label := fmt.Sprintf("%d %s", i+1, t.String())
-		if t == m.active {
-			cells = append(cells, active.Render(label))
-		} else {
-			cells = append(cells, inactive.Render(label))
+	m.tabs().SetActive(int(m.active))
+	return m.tabs().View()
+}
+
+// tabs lazily builds this screen's tab strip. Its zone ids must stay stable
+// across renders, so the strip is created once and reused.
+func (m *Model) tabs() *tabstrip.Model {
+	if m.tabStrip == nil {
+		titles := make([]string, 0, len(tabTitles))
+		for _, t := range tabTitles {
+			titles = append(titles, t.String())
 		}
+		m.tabStrip = tabstrip.New("connector", titles)
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, cells...)
+	return m.tabStrip
 }
 
 func (m *Model) renderOverview() string {
@@ -640,7 +648,7 @@ func (m *Model) renderOverview() string {
 		b.WriteString(m.common.Styles.Error.Render("Error trace (worker "+m.details.WorkerID+")") + "\n")
 		b.WriteString(m.details.Trace + "\n")
 	}
-	b.WriteString("\n" + m.common.Styles.Muted.Render("p pause • u resume • s stop • R restart • z reset offsets • ctrl+d delete"))
+	b.WriteString("\n" + m.common.Styles.Muted.Render(keys.Hint(keys.ScopeConnector, keys.ActionPause, "pause/resume", keys.ActionDelete, "delete")+"  (restart, stop and offset reset are in the actions menu)"))
 	return b.String()
 }
 
@@ -661,7 +669,7 @@ func (m *Model) renderTasks() string {
 		}
 		b.WriteString(m.common.Styles.Muted.Render("enter/esc: collapse"))
 	} else {
-		b.WriteString(m.common.Styles.Muted.Render("enter: expand trace • t: restart task • T: restart all • f: restart failed"))
+		b.WriteString(m.common.Styles.Muted.Render(keys.Hint(keys.ScopeConnector, keys.ActionActivate, "expand trace") + "  (task restarts are in the actions menu)"))
 	}
 	return b.String()
 }
@@ -674,7 +682,7 @@ func (m *Model) renderConfig() string {
 		}
 		b.WriteString(m.configEditor.View())
 		b.WriteString("\n")
-		b.WriteString(m.common.Styles.Muted.Render("ctrl+s: save • esc: cancel"))
+		b.WriteString(m.common.Styles.Muted.Render(keys.Hint(keys.ScopeTextEntry, keys.ActionCommitSave, "save", keys.ActionCancel, "cancel")))
 		return b.String()
 	}
 	if m.configHasMasked() {
@@ -682,7 +690,7 @@ func (m *Model) renderConfig() string {
 	}
 	b.WriteString(m.configJSON())
 	b.WriteString("\n\n")
-	b.WriteString(m.common.Styles.Muted.Render("e: edit config"))
+	b.WriteString(m.common.Styles.Muted.Render(keys.Default.KeyFor(keys.ActionEdit) + ": edit config"))
 	return b.String()
 }
 

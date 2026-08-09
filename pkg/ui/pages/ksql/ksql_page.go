@@ -16,6 +16,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
@@ -23,12 +24,12 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // Model is the ksqlDB overview page.
 type Model struct {
 	common      *core.Common
-	keys        overviewKeys
 	reusableApp *templateui.ReusableApp
 	dims        core.Dimensions
 
@@ -56,7 +57,6 @@ type Model struct {
 func NewModelWithCommon(common *core.Common) core.Page {
 	m := &Model{
 		common:  common,
-		keys:    defaultOverviewKeys(),
 		active:  tabTables,
 		sortAsc: true,
 	}
@@ -68,7 +68,7 @@ func NewModelWithCommon(common *core.Common) core.Page {
 		ShowSidebarByDefault: false,
 	}
 	m.reusableApp = templateui.NewReusableApp(config)
-	m.reusableApp.SetKeyMap(overviewHelpKeyMap{keys: m.keys})
+	m.reusableApp.SetKeyMap(keys.Hints(overviewScope()))
 	return m
 }
 
@@ -122,7 +122,7 @@ func (m *Model) GetID() string    { return "ksql" }
 func (m *Model) GetTitle() string { return "ksqlDB" }
 
 func (m *Model) GetHelp() []key.Binding {
-	return []key.Binding{m.keys.NextTab, m.keys.Sort, m.keys.Query, m.keys.Seed, m.keys.Retry, m.keys.Back}
+	return keys.Help(overviewScope())
 }
 
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) { return m, nil }
@@ -153,7 +153,46 @@ func (m *Model) loadTables() tea.Cmd {
 
 // --- message handling ---
 
+// Click zones for the two overview tables, so their headers can sort.
+const (
+	streamTableZone = "ksql-streams"
+	tableTableZone  = "ksql-tables"
+)
+
+// markZone is zone.Mark guarded against there being no global manager.
+func markZone(id, s string) (out string) {
+	defer func() {
+		if recover() != nil {
+			out = s
+		}
+	}()
+	return zone.Mark(id, s)
+}
+
+// clickedTableHeader reports a click on a framed table's header row. These
+// tables cycle their sort key rather than offering per-column sorts, so a
+// header click advances the sort.
+func clickedTableHeader(id string, msg tea.MouseMsg) bool {
+	if !core.IsLeftRelease(msg) {
+		return false
+	}
+	z := zone.Get(id)
+	if z == nil || !z.InBounds(msg) {
+		return false
+	}
+	_, relY := z.Pos(msg)
+	return relY == 1
+}
+
 func (m *Model) handle(msg tea.Msg) tea.Cmd {
+	if mouse, ok := msg.(tea.MouseMsg); ok {
+		if clickedTableHeader(streamTableZone, mouse) || clickedTableHeader(tableTableZone, mouse) {
+			m.advanceSort()
+			m.rebuild()
+			return nil
+		}
+	}
+
 	switch v := msg.(type) {
 	case streamsLoadedMsg:
 		m.streams = v.streams
@@ -184,8 +223,12 @@ func (m *Model) forwardToActive(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	switch {
-	case key.Matches(msg, m.keys.NextTab):
+	action, bound := keys.Default.Resolve(overviewScope(), msg.String())
+	if !bound {
+		return m.forwardToActive(msg)
+	}
+	switch action {
+	case keys.ActionFocusNext, keys.ActionFocusPrev, keys.ActionSelectTab:
 		if m.active == tabTables {
 			m.active = tabStreams
 		} else {
@@ -194,16 +237,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.sortCol, m.sortAsc = 0, true
 		m.rebuild()
 		return nil
-	case key.Matches(msg, m.keys.Sort):
+	case keys.ActionSort:
 		m.advanceSort()
 		m.rebuild()
 		return nil
-	case key.Matches(msg, m.keys.Retry):
+	case keys.ActionRefresh:
 		m.streamsLoaded, m.tablesLoaded = false, false
 		return tea.Batch(m.loadStreams(), m.loadTables())
-	case key.Matches(msg, m.keys.Query):
+	case keys.ActionEdit:
 		return core.NewPageChangeMsg("ksql_query", nil)
-	case key.Matches(msg, m.keys.Seed):
+	case keys.ActionActivate:
 		return m.seedQuery()
 	}
 	return m.forwardToActive(msg)
@@ -354,13 +397,13 @@ func (m *Model) renderContent(width, height int) string {
 		if len(m.streams) == 0 {
 			b.WriteString(m.common.Styles.Muted.Render("No streams."))
 		} else {
-			b.WriteString(stylesPkg.FrameTable(m.streamTable.View()))
+			b.WriteString(markZone(streamTableZone, stylesPkg.FrameTable(m.streamTable.View())))
 		}
 	} else {
 		if len(m.tables) == 0 {
 			b.WriteString(m.common.Styles.Muted.Render("No tables."))
 		} else {
-			b.WriteString(stylesPkg.FrameTable(m.tblTable.View()))
+			b.WriteString(markZone(tableTableZone, stylesPkg.FrameTable(m.tblTable.View())))
 		}
 	}
 	b.WriteString("\n")
@@ -405,7 +448,8 @@ func (m *Model) footer() string {
 		sortName = cols[m.sortCol]
 	}
 	return m.common.Styles.Muted.Render(fmt.Sprintf(
-		"tab: switch • s: sort (%s %s) • enter: query selected • e: query editor", sortName, dir))
+		keys.Hint(keys.ScopeList, keys.ActionFocusNext, "switch", keys.ActionSort, "sort", keys.ActionActivate,
+			"query selected", keys.ActionEdit, "query editor")+"  sorted by %s %s", sortName, dir))
 }
 
 func (m *Model) activeColumnTitles() []string {

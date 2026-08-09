@@ -14,7 +14,9 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/components/editor"
 	"github.com/Benny93/kafui/pkg/ui/components/form"
+	"github.com/Benny93/kafui/pkg/ui/components/tabstrip"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
@@ -23,13 +25,11 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // Model is the broker detail page.
 type Model struct {
 	common      *core.Common
-	keys        pageKeys
 	reusableApp *templateui.ReusableApp
 	dims        core.Dimensions
 
@@ -41,6 +41,8 @@ type Model struct {
 	statsOK    bool
 
 	active tab
+	// tabStrip owns the tab bar's click and hover zones.
+	tabStrip *tabstrip.Model
 
 	// Log Dirs tab
 	logDirs       []api.BrokerLogDir
@@ -88,7 +90,6 @@ func NewModelWithInfo(common *core.Common, brokerID int32, info api.BrokerInfo) 
 func newModel(common *core.Common, brokerID int32, info api.BrokerInfo, haveInfo bool) *Model {
 	m := &Model{
 		common:   common,
-		keys:     defaultKeys(),
 		brokerID: brokerID,
 		expanded: -1,
 	}
@@ -114,7 +115,7 @@ func newModel(common *core.Common, brokerID int32, info api.BrokerInfo, haveInfo
 		ShowSidebarByDefault: false,
 	}
 	m.reusableApp = templateui.NewReusableApp(config)
-	m.reusableApp.SetKeyMap(helpKeyMap{keys: m.keys})
+	m.reusableApp.SetKeyMap(keys.Hints(pageScope()))
 	return m
 }
 
@@ -180,7 +181,7 @@ func (m *Model) GetID() string    { return fmt.Sprintf("broker:%d", m.brokerID) 
 func (m *Model) GetTitle() string { return fmt.Sprintf("Broker %d", m.brokerID) }
 
 func (m *Model) GetHelp() []key.Binding {
-	return []key.Binding{m.keys.NextTab, m.keys.Expand, m.keys.Edit, m.keys.Move, m.keys.Search, m.keys.Retry, m.keys.Back}
+	return keys.Help(pageScope())
 }
 
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) { return m, nil }
@@ -277,6 +278,15 @@ func (m *Model) loadMetrics() tea.Cmd {
 // --- message handling (via the content provider) ---
 
 func (m *Model) handle(msg tea.Msg) tea.Cmd {
+	// Tab strip mouse handling: hovering a tab highlights it, clicking one
+	// activates it. Handled before anything else so a click on the bar never
+	// reaches the pane behind it.
+	if mouse, ok := msg.(tea.MouseMsg); ok {
+		if clicked, hit := m.tabs().HandleMouse(mouse); hit {
+			return m.switchTab(tab(clicked))
+		}
+	}
+
 	switch v := msg.(type) {
 	case brokerInfoLoadedMsg:
 		if v.brokerID != m.brokerID {
@@ -372,18 +382,34 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleSearchKey(msg)
 	}
 
-	// Tab switching: tab key + number keys 1/2/3.
-	switch msg.String() {
-	case "tab":
-		return m.switchTab((m.active + 1) % tab(len(tabTitles)))
-	case "1":
-		return m.switchTab(tabLogDirs)
-	case "2":
-		return m.switchTab(tabConfigs)
-	case "3":
-		return m.switchTab(tabMetrics)
-	case "r":
-		return m.retry()
+	// Resolved through the single binding registry: tab cycles focus, 1..9
+	// select a tab directly, r refreshes.
+	if action, bound := keys.Default.Resolve(keys.ScopeListContent, msg.String()); bound {
+		switch action {
+		case keys.ActionSelectTab:
+			if n := tab(msg.String()[0] - '1'); int(n) < len(tabTitles) {
+				return m.switchTab(n)
+			}
+			return nil
+		case keys.ActionFocusNext:
+			return m.switchTab((m.active + 1) % tab(len(tabTitles)))
+		case keys.ActionFocusPrev:
+			return m.switchTab((m.active + tab(len(tabTitles)) - 1) % tab(len(tabTitles)))
+		case keys.ActionRefresh:
+			return m.retry()
+		case keys.ActionSearch:
+			if m.active == tabConfigs {
+				m.searching = true
+				m.searchInput.SetValue(m.cfgFilter)
+				return m.searchInput.Focus()
+			}
+			return nil
+		case keys.ActionEdit:
+			if m.active == tabConfigs {
+				return m.beginEdit()
+			}
+			return nil
+		}
 	}
 
 	switch m.active {
@@ -437,10 +463,6 @@ func (m *Model) handleLogDirsKey(msg tea.KeyMsg) tea.Cmd {
 		if m.expanded >= 0 {
 			m.expanded = -1
 			return nil
-		}
-	case "m":
-		if m.expanded >= 0 {
-			return m.openMoveForm()
 		}
 	}
 	return m.forwardToActive(msg)
@@ -558,14 +580,8 @@ func (m *Model) handleReplicaMoved(v replicaMovedMsg) tea.Cmd {
 // --- Configs tab (BR-15/BR-16) ---
 
 func (m *Model) handleConfigsKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "/":
-		m.searching = true
-		m.searchInput.SetValue(m.cfgFilter)
-		return m.searchInput.Focus()
-	case "e":
-		return m.beginEdit()
-	}
+	// Search and edit are registry actions handled in handleKey; this tab has
+	// nothing of its own left.
 	return m.forwardToActive(msg)
 }
 
@@ -772,19 +788,23 @@ func (m *Model) summaryStrip() string {
 	return strings.Join(parts, "   ")
 }
 
+// tabBar renders the shared, click-and-hover-aware tab strip.
 func (m *Model) tabBar() string {
-	active := lipgloss.NewStyle().Foreground(stylesPkg.BgBase).Background(stylesPkg.Primary).Bold(true).Padding(0, 1)
-	inactive := lipgloss.NewStyle().Foreground(stylesPkg.FgMuted).Padding(0, 1)
-	var cells []string
-	for i, t := range tabTitles {
-		label := fmt.Sprintf("%d %s", i+1, t.String())
-		if t == m.active {
-			cells = append(cells, active.Render(label))
-		} else {
-			cells = append(cells, inactive.Render(label))
+	m.tabs().SetActive(int(m.active))
+	return m.tabs().View()
+}
+
+// tabs lazily builds this screen's tab strip. Its zone ids must stay stable
+// across renders, so the strip is created once and reused.
+func (m *Model) tabs() *tabstrip.Model {
+	if m.tabStrip == nil {
+		titles := make([]string, 0, len(tabTitles))
+		for _, t := range tabTitles {
+			titles = append(titles, t.String())
 		}
+		m.tabStrip = tabstrip.New("broker", titles)
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, cells...)
+	return m.tabStrip
 }
 
 func (m *Model) renderLogDirs() string {
@@ -805,10 +825,10 @@ func (m *Model) renderLogDirs() string {
 		b.WriteString("\n")
 		b.WriteString(stylesPkg.FrameTable(m.partTable.View()))
 		b.WriteString("\n")
-		b.WriteString(m.common.Styles.Muted.Render("m: move replica • enter/esc: collapse"))
+		b.WriteString(m.common.Styles.Muted.Render(keys.Hint(keys.ScopeListContent, keys.ActionActivate, "collapse") + "  (move a replica from the actions menu)"))
 	} else {
 		b.WriteString("\n")
-		b.WriteString(m.common.Styles.Muted.Render("enter: expand directory"))
+		b.WriteString(m.common.Styles.Muted.Render(keys.Hint(keys.ScopeListContent, keys.ActionActivate, "expand directory")))
 	}
 	return b.String()
 }
@@ -831,7 +851,7 @@ func (m *Model) renderConfigs() string {
 		b.WriteString(m.common.Styles.Header.Render("Edit " + m.editKey + ": "))
 		b.WriteString(m.editInput.View())
 		b.WriteString("\n")
-		b.WriteString(m.common.Styles.Muted.Render("enter: save • esc: cancel"))
+		b.WriteString(m.common.Styles.Muted.Render(keys.Hint(keys.ScopeListContent, keys.ActionActivate, "save", keys.ActionCancel, "cancel")))
 		return b.String()
 	}
 	b.WriteString(m.configFooter())
@@ -843,7 +863,7 @@ func (m *Model) renderConfigs() string {
 func (m *Model) configFooter() string {
 	entry, ok := m.selectedConfig()
 	if !ok {
-		return m.common.Styles.Muted.Render("e: edit • /: search")
+		return m.common.Styles.Muted.Render(keys.Default.KeyFor(keys.ActionEdit) + ": edit • " + keys.Default.KeyFor(keys.ActionSearch) + ": search")
 	}
 	hint := m.common.Styles.Muted.Render(sourceExplanation(entry.Source))
 	extra := ""
@@ -852,7 +872,7 @@ func (m *Model) configFooter() string {
 	} else if n, err := strconv.ParseInt(entry.Value, 10, 64); err == nil && n > 0 && strings.HasSuffix(entry.Name, ".bytes") {
 		extra = fmt.Sprintf("  •  %d bytes", n)
 	}
-	return hint + m.common.Styles.Muted.Render(extra) + "\n" + m.common.Styles.Muted.Render("e: edit • /: search")
+	return hint + m.common.Styles.Muted.Render(extra) + "\n" + m.common.Styles.Muted.Render(keys.Default.KeyFor(keys.ActionEdit)+": edit • "+keys.Default.KeyFor(keys.ActionSearch)+": search")
 }
 
 func (m *Model) renderMetrics() string {

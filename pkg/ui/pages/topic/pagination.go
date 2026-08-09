@@ -31,10 +31,10 @@ type PaginationModel struct {
 // NewPaginationModel creates a new pagination model with defaults
 func NewPaginationModel() *PaginationModel {
 	return &PaginationModel{
-		Page:        0,
-		PerPage:     DefaultPerPage,
-		TotalPages:  1,
-		SortOrder:   "newest_first",
+		Page:       0,
+		PerPage:    DefaultPerPage,
+		TotalPages: 1,
+		SortOrder:  "newest_first",
 	}
 }
 

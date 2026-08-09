@@ -3,8 +3,8 @@ package resource_detail
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/stretchr/testify/assert"
 )
 
 // MockResourceItem is a mock implementation for testing
@@ -29,18 +29,18 @@ func (m *MockResourceItem) GetDetails() map[string]string {
 func TestNewModel(t *testing.T) {
 	// Create mock resource item
 	mockItem := &MockResourceItem{
-		id:      "test-resource",
-		values:  []string{"test-resource", "active", "2"},
+		id:     "test-resource",
+		values: []string{"test-resource", "active", "2"},
 		details: map[string]string{
 			"Name":   "test-resource",
 			"Status": "active",
 			"Count":  "2",
 		},
 	}
-	
+
 	// Create new model
 	model := NewModel(mockItem, "consumer-group")
-	
+
 	// Verify model is properly initialized
 	assert.NotNil(t, model)
 	assert.Equal(t, mockItem, model.resourceItem)
@@ -54,8 +54,8 @@ func TestNewModel(t *testing.T) {
 func TestModelImplementsPageInterface(t *testing.T) {
 	// Create mock resource item
 	mockItem := &MockResourceItem{
-		id:      "test-resource",
-		values:  []string{"test-resource", "active"},
+		id:     "test-resource",
+		values: []string{"test-resource", "active"},
 		details: map[string]string{
 			"Name":   "test-resource",
 			"Status": "active",
@@ -92,8 +92,8 @@ func TestModelImplementsPageInterface(t *testing.T) {
 func TestGetResourceDetails(t *testing.T) {
 	// Test with valid resource item
 	mockItem := &MockResourceItem{
-		id:      "test-topic",
-		values:  []string{"test-topic", "3", "2", "100"},
+		id:     "test-topic",
+		values: []string{"test-topic", "3", "2", "100"},
 		details: map[string]string{
 			"Name":        "test-topic",
 			"Partitions":  "3",
@@ -101,16 +101,16 @@ func TestGetResourceDetails(t *testing.T) {
 			"Messages":    "100",
 		},
 	}
-	
+
 	model := NewModel(mockItem, "topic")
 	details := model.GetResourceDetails()
-	
+
 	assert.Equal(t, mockItem.details, details)
 	assert.Equal(t, "test-topic", details["Name"])
 	assert.Equal(t, "3", details["Partitions"])
 	assert.Equal(t, "2", details["Replication"])
 	assert.Equal(t, "100", details["Messages"])
-	
+
 	// Test with nil resource item
 	modelWithNil := &Model{resourceItem: nil}
 	details = modelWithNil.GetResourceDetails()
@@ -123,13 +123,13 @@ func TestGetResourceValues(t *testing.T) {
 		id:     "test-group",
 		values: []string{"test-group", "Stable", "3"},
 	}
-	
+
 	model := NewModel(mockItem, "consumer-group")
 	values := model.GetResourceValues()
-	
+
 	assert.Equal(t, mockItem.values, values)
 	assert.Equal(t, []string{"test-group", "Stable", "3"}, values)
-	
+
 	// Test with nil resource item
 	modelWithNil := &Model{resourceItem: nil}
 	values = modelWithNil.GetResourceValues()
@@ -141,12 +141,12 @@ func TestGetResourceID(t *testing.T) {
 	mockItem := &MockResourceItem{
 		id: "test-schema",
 	}
-	
+
 	model := NewModel(mockItem, "schema")
 	id := model.GetResourceID()
-	
+
 	assert.Equal(t, "test-schema", id)
-	
+
 	// Test with nil resource item
 	modelWithNil := &Model{resourceItem: nil}
 	id = modelWithNil.GetResourceID()
@@ -158,17 +158,17 @@ func TestWindowSizeUpdate(t *testing.T) {
 		id:     "test-resource",
 		values: []string{"test-resource", "active"},
 	}
-	
+
 	model := NewModel(mockItem, "context")
-	
+
 	// Test window size message
 	msg := tea.WindowSizeMsg{Width: 100, Height: 30}
 	updatedModel, cmd := model.Update(msg)
-	
+
 	// Should return the same model type
 	assert.IsType(t, &Model{}, updatedModel)
 	assert.Nil(t, cmd) // Window size updates don't return commands
-	
+
 	// Check dimensions were updated
 	updatedResourceModel := updatedModel.(*Model)
 	assert.Equal(t, 100, updatedResourceModel.dimensions.Width)
@@ -180,24 +180,24 @@ func TestKeyHandling(t *testing.T) {
 		id:     "test-resource",
 		values: []string{"test-resource", "active"},
 	}
-	
+
 	model := NewModel(mockItem, "context")
-	
-	// Test back key (should trigger page change)
+
+	// esc and ctrl+c are reserved globals the shell owns. The page must NOT
+	// also handle them — handling a key in two places is exactly the defect the
+	// controls spec forbids.
 	msg := tea.KeyMsg{Type: tea.KeyEsc}
 	updatedModel, cmd := model.Update(msg)
-	
-	// Should return the same model type
 	assert.IsType(t, &Model{}, updatedModel)
-	assert.NotNil(t, cmd) // Back navigation should return a command
-	
-	// Test quit key
+	assert.Nil(t, cmd, "esc is the shell's to handle")
+
+	// ctrl+c is the emergency exit and quits at whatever layer sees it first.
+	// Honouring it in more than one place is safe because the outcome is
+	// identical; what the spec forbids is one key meaning two different things.
 	msg = tea.KeyMsg{Type: tea.KeyCtrlC}
 	updatedModel, cmd = model.Update(msg)
-	
-	// Should return the same model type
 	assert.IsType(t, &Model{}, updatedModel)
-	assert.NotNil(t, cmd) // Quit should return tea.Quit command
+	assert.NotNil(t, cmd, "ctrl+c always quits")
 }
 
 func TestViewRendering(t *testing.T) {
@@ -240,17 +240,17 @@ func TestViewRendering(t *testing.T) {
 			expectedText: []string{"Loading"}, // Template shows "Loading..." with zero dimensions
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			model := NewModel(tc.resourceItem, tc.resourceType)
-			
+
 			if tc.name != "Zero dimensions" {
 				model.SetDimensions(80, 24) // Set proper dimensions
 			}
-			
+
 			view := model.View()
-			
+
 			for _, expected := range tc.expectedText {
 				assert.Contains(t, view, expected, "Expected text '%s' not found in view", expected)
 			}
@@ -265,13 +265,13 @@ func TestErrorHandling(t *testing.T) {
 		values:  []string{"test"},
 		details: map[string]string{"Name": "test"},
 	}
-	
+
 	model := NewModel(mockItem, "test")
 	model.SetDimensions(80, 24)
-	
+
 	// Set error state
 	model.error = assert.AnError
-	
+
 	// Test that methods handle resource gracefully
 	assert.Equal(t, "test-resource", model.GetResourceID())
 	assert.Equal(t, []string{"test"}, model.GetResourceValues())
@@ -328,14 +328,14 @@ func TestModel_GetID_WithNilResource(t *testing.T) {
 // TestModel_GetID_WithDifferentResources tests that different resources produce different IDs
 func TestModel_GetID_WithDifferentResources(t *testing.T) {
 	resource1 := &mockResourceItem{
-		id:     "resource-1",
-		values: []string{"value1"},
+		id:      "resource-1",
+		values:  []string{"value1"},
 		details: map[string]string{"Name": "Resource 1"},
 	}
 
 	resource2 := &mockResourceItem{
-		id:     "resource-2",
-		values: []string{"value2"},
+		id:      "resource-2",
+		values:  []string{"value2"},
 		details: map[string]string{"Name": "Resource 2"},
 	}
 

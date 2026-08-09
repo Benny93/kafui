@@ -6,6 +6,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
@@ -40,12 +41,16 @@ type ResourcesSection struct {
 	dataSource      api.KafkaDataSource
 	common          *core.Common // optional; enables capability gating
 	currentResource ResourceType
+	// hovered is the entry under the pointer, or -1.
+	hovered ResourceType
 }
 
 func NewResourcesSection(dataSource api.KafkaDataSource) *ResourcesSection {
 	return &ResourcesSection{
 		dataSource:      dataSource,
 		currentResource: TopicResourceType,
+		// -1 is "nothing hovered"; the zero value would highlight Topics.
+		hovered: ResourceType(-1),
 	}
 }
 
@@ -102,9 +107,15 @@ func (r *ResourcesSection) RenderItems(maxItems, width int) []providers.SidebarI
 		}
 		status := "muted"
 		icon := "○"
-		if res.resourceType == r.currentResource {
+		switch {
+		case res.resourceType == r.currentResource:
 			status = "success"
 			icon = "●"
+		case res.resourceType == r.hovered:
+			// Hover feedback: the entry under the pointer brightens, so the
+			// sidebar shows what is clickable without the user clicking.
+			status = "info"
+			icon = "▸"
 		}
 
 		items = append(items, providers.SidebarItem{
@@ -123,6 +134,14 @@ func (r *ResourcesSection) RenderItems(maxItems, width int) []providers.SidebarI
 	return items
 }
 
+// allSidebarResources is the order the sidebar lists resources in, shared by
+// rendering and hit-testing so the two cannot disagree.
+var allSidebarResources = []ResourceType{
+	TopicResourceType, ConsumerGroupResourceType, SchemaResourceType,
+	ContextResourceType, ACLResourceType, BrokerResourceType,
+	QuotaResourceType, ConnectClusterResourceType, ConnectorResourceType,
+}
+
 func (r *ResourcesSection) HandleSectionUpdate(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case SwitchResourceMsg:
@@ -130,11 +149,22 @@ func (r *ResourcesSection) HandleSectionUpdate(msg tea.Msg) tea.Cmd {
 	case CurrentResourceListMsg:
 		r.currentResource = msg.ResourceType
 	case tea.MouseMsg:
-		// Check if any resource sidebar item was clicked.
-		for _, rt := range []ResourceType{TopicResourceType, ConsumerGroupResourceType, SchemaResourceType, ContextResourceType, ACLResourceType, BrokerResourceType, QuotaResourceType, ConnectClusterResourceType, ConnectorResourceType} {
-			if r.enabled(rt) && zone.Get(sidebarZoneID(rt)).InBounds(msg) {
-				return func() tea.Msg { return SwitchResourceMsg(rt) }
+		over := ResourceType(-1)
+		for _, rt := range allSidebarResources {
+			if !r.enabled(rt) {
+				continue
 			}
+			if z := zone.Get(sidebarZoneID(rt)); z != nil && z.InBounds(msg) {
+				over = rt
+				break
+			}
+		}
+		if core.IsHover(msg) {
+			r.hovered = over
+			return nil
+		}
+		if over != ResourceType(-1) && core.IsLeftRelease(msg) {
+			return func() tea.Msg { return SwitchResourceMsg(over) }
 		}
 	}
 	return nil
@@ -327,15 +357,21 @@ func (s *ShortcutsSection) GetTitle() string {
 }
 
 func (s *ShortcutsSection) RenderItems(maxItems, width int) []providers.SidebarItem {
+	// Rendered from the single binding registry, so the panel cannot advertise
+	// a key the application does not handle — and it shows the advertised key,
+	// not an alias (it used to show h/l and g/G rather than the arrows).
+	keyOf := func(a keys.Action) string { return keys.Default.KeyFor(a) }
 	shortcuts := []providers.SidebarItem{
-		{Icon: "↑↓", Text: "Navigate", Value: "↑ / ↓", Status: "info"},
-		{Icon: "↵", Text: "Select", Value: "Enter", Status: "info"},
-		{Icon: "◁▷", Text: "Prev/Next page", Value: "h / l", Status: "info"},
-		{Icon: "⇤⇥", Text: "First/Last page", Value: "g / G", Status: "info"},
-		{Icon: "🔍", Text: "Search", Value: "/", Status: "info"},
-		{Icon: "🔄", Text: "Switch resource", Value: ":", Status: "info"},
-		{Icon: "⎋", Text: "Back/Cancel", Value: "Esc", Status: "info"},
-		{Icon: "🚪", Text: "Quit", Value: "q", Status: "warning"},
+		{Icon: "↑↓", Text: "Navigate", Value: keyOf(keys.ActionUp) + " / " + keyOf(keys.ActionDown), Status: "info"},
+		{Icon: "◁▷", Text: "Page", Value: keyOf(keys.ActionPageBack) + " / " + keyOf(keys.ActionPageForward), Status: "info"},
+		{Icon: "⇤⇥", Text: "First/Last", Value: keyOf(keys.ActionFirst) + " / " + keyOf(keys.ActionLast), Status: "info"},
+		{Icon: "↵", Text: "Open", Value: keyOf(keys.ActionActivate), Status: "info"},
+		{Icon: "★", Text: "Actions", Value: keyOf(keys.ActionActionsMenu), Status: "info"},
+		{Icon: "🔍", Text: "Search", Value: keyOf(keys.ActionSearch), Status: "info"},
+		{Icon: "🔄", Text: "Commands", Value: keyOf(keys.ActionPalette), Status: "info"},
+		{Icon: "?", Text: "Help", Value: keyOf(keys.ActionHelp), Status: "info"},
+		{Icon: "⎋", Text: "Back/Cancel", Value: keyOf(keys.ActionCancel), Status: "info"},
+		{Icon: "🚪", Text: "Quit", Value: keyOf(keys.ActionQuit), Status: "warning"},
 	}
 
 	if len(shortcuts) > maxItems {

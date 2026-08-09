@@ -2,6 +2,7 @@ package topic
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strconv"
 	"strings"
 
@@ -47,27 +48,31 @@ func (k *Keys) handleShowOverview(model *Model) tea.Cmd {
 
 // handleOverviewKey handles keys while the overview overlay is open.
 func (k *Keys) handleOverviewKey(model *Model, msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "esc", "q":
+	action, bound := keys.Default.Resolve(keys.ScopeOverlay, msg.String())
+	if !bound {
+		return nil
+	}
+	switch action {
+	case keys.ActionCancel:
 		model.showOverview = false
 		model.markRenderDirty()
 		return nil
-	case "r":
+	case keys.ActionRefresh:
 		// Retry / refresh the overview.
 		return k.handleShowOverview(model)
-	case "up", "k":
+	case keys.ActionUp:
 		if model.partitionCursor > 0 {
 			model.partitionCursor--
 			model.markRenderDirty()
 		}
 		return nil
-	case "down", "j":
+	case keys.ActionDown:
 		if model.overview != nil && model.partitionCursor < len(model.overview.Partitions)-1 {
 			model.partitionCursor++
 			model.markRenderDirty()
 		}
 		return nil
-	case "x":
+	case keys.ActionDelete:
 		// Per-partition purge (TP-27) on the highlighted partition row.
 		if model.overview == nil || model.partitionCursor >= len(model.overview.Partitions) {
 			return nil
@@ -134,7 +139,7 @@ func (m *Model) renderOverviewOverlay(width int) string {
 		errStyle := lipgloss.NewStyle().Foreground(stylesPkg.Error).Bold(true)
 		b.WriteString(errStyle.Render("Failed to load topic: " + m.overviewErr.Error()))
 		b.WriteString("\n\n")
-		b.WriteString(muted.Render("r: retry • esc: close"))
+		b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionRefresh, "retry", keys.ActionCancel, "close")))
 		return b.String()
 	}
 	if m.overview == nil {
@@ -172,7 +177,7 @@ func (m *Model) renderOverviewOverlay(width int) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(muted.Render("↑/↓: select partition • x: clear partition • r: refresh • esc: close"))
+	b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionUp, "select partition", keys.ActionDelete, "clear partition", keys.ActionRefresh, "refresh", keys.ActionCancel, "close")))
 	return b.String()
 }
 

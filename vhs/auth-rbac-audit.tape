@@ -18,7 +18,7 @@ Sleep 600ms
 Enter
 Sleep 2s
 # Attempt to produce — denied because the cluster is read-only.
-Type "P"
+Ctrl+N
 Sleep 3s
 
 Hide

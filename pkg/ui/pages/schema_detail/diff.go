@@ -2,6 +2,7 @@ package schemadetail
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/ui/components/editor"
@@ -98,15 +99,18 @@ func (m *Model) cycleDiffVersion(delta int) tea.Cmd {
 }
 
 func handleDiffKey(m *Model, msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "tab", "h", "l":
+	switch action, bound := keys.Default.Resolve(keys.ScopeOverlay, msg.String()); {
+	case bound && action == keys.ActionFocusNext,
+		bound && action == keys.ActionFocusPrev:
 		m.diffActive = 1 - m.diffActive
 		return nil
-	case "[":
+	case bound && action == keys.ActionUp:
+		// The two versions being compared step with the same keys that move a
+		// cursor; `[` and `]` were undiscoverable.
 		return m.cycleDiffVersion(-1)
-	case "]":
+	case bound && action == keys.ActionDown:
 		return m.cycleDiffVersion(1)
-	case "esc", "backspace":
+	case bound && action == keys.ActionCancel:
 		m.mode = modeContent
 		return nil
 	default:
@@ -142,6 +146,6 @@ func renderDiff(m *Model, width, height int) string {
 		m.diffView.SetDimensions(width, height-3)
 		body = m.diffView.View()
 	}
-	hint := mutedStyle.Render("tab switch pane · [ / ] change version · esc back")
+	hint := mutedStyle.Render(keys.Hint(keys.ScopeOverlay, keys.ActionFocusNext, "switch pane", keys.ActionUp, "change version", keys.ActionCancel, "back"))
 	return strings.Join([]string{header, body, hint}, "\n")
 }

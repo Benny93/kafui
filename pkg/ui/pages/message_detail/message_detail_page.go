@@ -180,19 +180,9 @@ func (m *Model) formatAsJSON(content string) string {
 		return content
 	}
 
-	// Apply syntax highlighting if enabled
-	if m.displayFormat.ValueFormat == "pretty" {
-		return m.highlightJSON(string(pretty))
-	}
-
+	// Colouring happens in the viewer (editor.HighlightJSON), which is
+	// line-based and so composes with wrapping, line numbers and search.
 	return string(pretty)
-}
-
-// highlightJSON applies syntax highlighting to JSON content
-func (m *Model) highlightJSON(jsonStr string) string {
-	// Return the JSON as-is since the template system handles styling
-	// Syntax highlighting can be added later through the template system's styling
-	return jsonStr
 }
 
 // ToggleDisplayFormat cycles through display formats
@@ -351,25 +341,10 @@ func (m *Model) OnBlur() tea.Cmd {
 	return nil
 }
 
-// GetKeyMap returns the centralized key bindings for the message detail page
-func GetKeyMap() keys.DetailKeyMap {
-	return keys.DefaultKeyMap().Detail
-}
-
-// GetHelpKeyBindings returns key bindings for the help view using centralized keys
+// GetHelpKeyBindings returns this page's bindings, read from the single
+// registry so help cannot disagree with behavior.
 func GetHelpKeyBindings() []key.Binding {
-	km := keys.DefaultKeyMap()
-	return []key.Binding{
-		km.Detail.Format,
-		km.Detail.Headers,
-		km.Detail.Metadata,
-		km.Detail.Copy,
-		km.Detail.ScrollUp,
-		km.Detail.ScrollDown,
-		km.Detail.Back,
-		km.Detail.Help,
-		km.Detail.Quit,
-	}
+	return keys.Help(keys.ScopeListContent)
 }
 
 // MessageDetailPageModel wraps the ReusableApp with message detail-specific providers
@@ -420,7 +395,7 @@ func NewMessageDetailPageModelWithCommon(common *core.Common, topicName string, 
 	reusableApp := templateui.NewReusableApp(config)
 
 	// Set the key map for the footer using centralized keys
-	reusableApp.SetKeyMap(GetKeyMap())
+	reusableApp.SetKeyMap(keys.Hints(keys.ScopeListContent))
 
 	return &MessageDetailPageModel{
 		common:          common,

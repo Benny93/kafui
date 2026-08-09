@@ -32,10 +32,10 @@ func TestSearchModeKeyHandling(t *testing.T) {
 	// Test that 'q' key is handled by search input, not as quit
 	qMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
 	updatedModel, _ := model.Update(qMsg)
-	
+
 	// Should stay in the same model
 	assert.IsType(t, &Model{}, updatedModel)
-	
+
 	// Search input should contain 'q'
 	updatedTopicModel := updatedModel.(*Model)
 	assert.Equal(t, "q", updatedTopicModel.searchInput.Value())
@@ -43,10 +43,10 @@ func TestSearchModeKeyHandling(t *testing.T) {
 	// Test that 'r' key is handled by search input, not as retry
 	rMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
 	updatedModel2, _ := updatedModel.Update(rMsg)
-	
+
 	// Should stay in the same model
 	assert.IsType(t, &Model{}, updatedModel2)
-	
+
 	// Search input should contain 'qr'
 	updatedTopicModel2 := updatedModel2.(*Model)
 	assert.Equal(t, "qr", updatedTopicModel2.searchInput.Value())
@@ -54,13 +54,13 @@ func TestSearchModeKeyHandling(t *testing.T) {
 	// Test that Enter key confirms search
 	enterMsg := tea.KeyMsg{Type: tea.KeyEnter}
 	updatedModel3, cmd3 := updatedModel2.Update(enterMsg)
-	
+
 	// Should stay in the same model
 	assert.IsType(t, &Model{}, updatedModel3)
-	
+
 	// Should not navigate to detail page
 	assert.Nil(t, cmd3)
-	
+
 	// Should exit search mode
 	updatedTopicModel3 := updatedModel3.(*Model)
 	assert.False(t, updatedTopicModel3.searchMode)
@@ -74,13 +74,13 @@ func TestSearchModeKeyHandling(t *testing.T) {
 
 	escMsg := tea.KeyMsg{Type: tea.KeyEscape}
 	updatedModel4, cmd4 := updatedModel3.Update(escMsg)
-	
+
 	// Should stay in the same model
 	assert.IsType(t, &Model{}, updatedModel4)
-	
+
 	// Should not navigate back
 	assert.Nil(t, cmd4)
-	
+
 	// Should exit search mode and clear input
 	updatedTopicModel4 := updatedModel4.(*Model)
 	assert.False(t, updatedTopicModel4.searchMode)

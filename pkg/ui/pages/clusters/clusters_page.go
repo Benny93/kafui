@@ -16,6 +16,7 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/cluster"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
@@ -48,33 +49,19 @@ type Model struct {
 	validationTarget string
 	validation       []api.ValidationResult
 	validationErr    error
-
-	keys        pageKeys
-	reusableApp *templateui.ReusableApp
+	reusableApp      *templateui.ReusableApp
 }
 
-type pageKeys struct {
-	Open     key.Binding
-	Offline  key.Binding
-	Refresh  key.Binding
-	Validate key.Binding
-}
-
-func defaultKeys() pageKeys {
-	return pageKeys{
-		Open:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "switch context")),
-		Offline:  key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "offline only")),
-		Refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-		Validate: key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "validate")),
-	}
-}
+// pageScope is the key scope this page resolves against. It used to carry its
+// own key map, with `o` for the offline filter and `v` for validate — two more
+// bare letters that appeared in no shared help.
+func pageScope() keys.Scope { return keys.ScopeList }
 
 // NewModelWithCommon builds the clusters dashboard page. The intended router
 // page ID is "clusters".
 func NewModelWithCommon(common *core.Common) *Model {
 	m := &Model{
 		common: common,
-		keys:   defaultKeys(),
 	}
 
 	m.table = table.New(
@@ -89,7 +76,7 @@ func NewModelWithCommon(common *core.Common) *Model {
 		ShowSidebarByDefault: false,
 	}
 	m.reusableApp = templateui.NewReusableApp(config)
-	m.reusableApp.SetKeyMap(helpKeyMap{keys: m.keys})
+	m.reusableApp.SetKeyMap(keys.Hints(pageScope()))
 
 	return m
 }
@@ -120,14 +107,6 @@ func (p *contentProvider) InitContent() tea.Cmd                    { return nil 
 func (p *contentProvider) IsInputMode() bool                       { return false }
 func (p *contentProvider) GetContentSize(width int) int            { return len(p.model.clusters) + 6 }
 
-// helpKeyMap adapts the page bindings to the footer help.KeyMap interface.
-type helpKeyMap struct{ keys pageKeys }
-
-func (h helpKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{h.keys.Open, h.keys.Offline, h.keys.Refresh, h.keys.Validate}
-}
-func (h helpKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{h.ShortHelp()} }
-
 // --- core.Page ---
 
 func (m *Model) Init() tea.Cmd { return m.reusableApp.Init() }
@@ -155,7 +134,7 @@ func (m *Model) GetID() string    { return "clusters" }
 func (m *Model) GetTitle() string { return "Clusters" }
 
 func (m *Model) GetHelp() []key.Binding {
-	return []key.Binding{m.keys.Open, m.keys.Offline, m.keys.Refresh, m.keys.Validate}
+	return keys.Help(pageScope())
 }
 
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) { return m, nil }
@@ -202,18 +181,20 @@ func (m *Model) handle(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	switch {
-	case key.Matches(msg, m.keys.Offline):
-		m.offlineOnly = !m.offlineOnly
-		m.table.SetCursor(0)
-		m.rebuildRows()
-		return nil
-	case key.Matches(msg, m.keys.Open):
-		return m.openSelected()
-	case key.Matches(msg, m.keys.Refresh):
-		return m.refreshSelected()
-	case key.Matches(msg, m.keys.Validate):
-		return m.validateSelected()
+	if action, bound := keys.Default.Resolve(pageScope(), msg.String()); bound {
+		switch action {
+		case keys.ActionToggleInternal:
+			// The offline-only filter is this list's "show a different subset"
+			// toggle, which is what `i` means on every other list.
+			m.offlineOnly = !m.offlineOnly
+			m.table.SetCursor(0)
+			m.rebuildRows()
+			return nil
+		case keys.ActionActivate:
+			return m.openSelected()
+		case keys.ActionRefresh:
+			return m.refreshSelected()
+		}
 	}
 	var cmd tea.Cmd
 	m.table, cmd = m.table.Update(msg)

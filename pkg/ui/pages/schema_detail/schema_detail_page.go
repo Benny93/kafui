@@ -7,6 +7,7 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/components/editor"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	mainpage "github.com/Benny93/kafui/pkg/ui/pages/main"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
@@ -277,7 +278,6 @@ func NewSchemaDetailPageModel(common *core.Common, item *mainpage.SchemaResource
 	m.common = common
 
 	contentProvider := NewSchemaDetailContentProvider(m)
-	km := NewSchemaDetailKeyMap()
 
 	config := &providers.AppConfig{
 		ContentProvider:             contentProvider,
@@ -289,7 +289,7 @@ func NewSchemaDetailPageModel(common *core.Common, item *mainpage.SchemaResource
 	}
 
 	app := templateui.NewReusableApp(config)
-	app.SetKeyMap(km)
+	app.SetKeyMap(keys.Hints(keys.ScopeContent))
 
 	return &SchemaDetailPageModel{
 		common:          common,
@@ -367,7 +367,10 @@ func (p *SchemaDetailPageModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 't' navigates to the associated topic (SR-14). Handle it at the page
 		// level so it overrides the framework's sidebar-toggle default, but only
 		// while viewing content and when a topic actually matched.
-		if msg.String() == "t" && m.mode == modeContent && m.topic != "" {
+		// `t` used to jump to the schema's topic — a bare letter in no help
+		// text. It is an actions-menu entry now, reached by the shared open key.
+		if action, bound := keys.Default.Resolve(keys.ScopeContent, msg.String()); bound &&
+			action == keys.ActionActivate && m.mode == modeContent && m.topic != "" {
 			return p, core.NewPageChangeMsg("topic:"+m.topic, map[string]interface{}{"name": m.topic})
 		}
 	}
@@ -393,12 +396,7 @@ func (p *SchemaDetailPageModel) GetTitle() string {
 }
 
 func (p *SchemaDetailPageModel) GetHelp() []key.Binding {
-	km := NewSchemaDetailKeyMap()
-	return []key.Binding{
-		km.Versions, km.Diff, km.Register, km.CheckCompat,
-		km.Compatibility, km.DeleteSubject, km.DeleteVersion,
-		km.Topic, km.Copy, km.Back, km.Quit,
-	}
+	return keys.Help(keys.ScopeContent)
 }
 
 func (p *SchemaDetailPageModel) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {

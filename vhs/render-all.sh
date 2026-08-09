@@ -36,7 +36,8 @@ else
   tapes=(
     cluster-management brokers topics messages consumer-groups
     schema-registry kafka-connect ksql acls-and-quotas
-    application-config metrics-and-monitoring auth-rbac-audit ui-shell
+    application-config metrics-and-monitoring auth-rbac-audit
+    ui-shell command-palette
   )
 fi
 

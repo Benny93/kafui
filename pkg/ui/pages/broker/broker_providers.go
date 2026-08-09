@@ -1,7 +1,6 @@
 package broker
 
 import (
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -28,11 +27,3 @@ func (p *contentProvider) GetContentSize(width int) int {
 		return len(p.model.logDirs) + 8
 	}
 }
-
-// helpKeyMap adapts the page bindings to the footer help.KeyMap interface.
-type helpKeyMap struct{ keys pageKeys }
-
-func (h helpKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{h.keys.NextTab, h.keys.Expand, h.keys.Edit, h.keys.Move, h.keys.Search, h.keys.Back}
-}
-func (h helpKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{h.ShortHelp()} }

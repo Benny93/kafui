@@ -1,7 +1,6 @@
 package connector
 
 import (
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -21,11 +20,3 @@ func (p *contentProvider) IsInputMode() bool { return p.model.editing }
 func (p *contentProvider) GetContentSize(width int) int {
 	return len(p.model.details.Tasks) + len(p.model.details.Config) + 10
 }
-
-// helpKeyMap adapts the page bindings to the footer help.KeyMap interface.
-type helpKeyMap struct{ keys pageKeys }
-
-func (h helpKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{h.keys.NextTab, h.keys.Pause, h.keys.Resume, h.keys.Stop, h.keys.Restart, h.keys.Delete, h.keys.Edit, h.keys.Back}
-}
-func (h helpKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{h.ShortHelp()} }

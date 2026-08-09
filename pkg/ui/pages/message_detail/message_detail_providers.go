@@ -1,6 +1,7 @@
 package messagedetail
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,11 +11,11 @@ import (
 	"github.com/evertras/bubble-table/table"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/components/editor"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
@@ -32,13 +33,18 @@ type MessageDetailContentProvider struct {
 	model         *Model
 	tabs          []string
 	activeTab     int
-	keyEditor     textarea.Model
-	valueEditor   textarea.Model
+	keyEditor     *editor.Viewer
+	valueEditor   *editor.Viewer
 	headersTable  table.Model
 	metadataTable table.Model
 	focusedEditor int // 0 = key, 1 = value (only for Content tab)
-	width         int
-	height        int
+	// Last content pushed into each viewer. RenderContent runs every frame, so
+	// re-setting identical content would reset the viewer's search and scroll
+	// position on every redraw.
+	keyContent   string
+	valueContent string
+	width        int
+	height       int
 }
 
 // NewMessageDetailContentProvider creates a new content provider for message detail
@@ -51,8 +57,8 @@ func NewMessageDetailContentProvider(model *Model) *MessageDetailContentProvider
 	}
 
 	// Initialize editors
-	provider.keyEditor = provider.newTextarea("Key", true)
-	provider.valueEditor = provider.newTextarea("Value", false)
+	provider.keyEditor = editor.NewViewer("")
+	provider.valueEditor = editor.NewViewer("")
 	provider.headersTable = createHeadersTable()
 	provider.metadataTable = createMetadataTable()
 
@@ -62,40 +68,38 @@ func NewMessageDetailContentProvider(model *Model) *MessageDetailContentProvider
 	return provider
 }
 
-// newTextarea creates a new textarea with consistent styling
-func (m *MessageDetailContentProvider) newTextarea(placeholder string, readOnly bool) textarea.Model {
-	t := textarea.New()
-	t.Prompt = ""
-	t.Placeholder = placeholder
-	t.ShowLineNumbers = true
-	t.Cursor.Style = cursorStyle
-	t.FocusedStyle.Placeholder = focusedPlaceholderStyle
-	t.BlurredStyle.Placeholder = placeholderStyle
-	t.FocusedStyle.CursorLine = cursorLineStyle
-	t.FocusedStyle.Base = focusedBorderStyle
-	t.BlurredStyle.Base = blurredBorderStyle
-	t.FocusedStyle.EndOfBuffer = endOfBufferStyle
-	t.BlurredStyle.EndOfBuffer = endOfBufferStyle
-	t.KeyMap.DeleteWordBackward.SetEnabled(false)
-	t.KeyMap.LineNext = key.NewBinding(key.WithKeys("down"))
-	t.KeyMap.LinePrevious = key.NewBinding(key.WithKeys("up"))
-
-	// Make editors read-only for viewing message content
-	if readOnly {
-		t.KeyMap.CharacterBackward.SetEnabled(false)
-		t.KeyMap.CharacterForward.SetEnabled(false)
-		t.KeyMap.DeleteAfterCursor.SetEnabled(false)
-		t.KeyMap.DeleteBeforeCursor.SetEnabled(false)
-		t.KeyMap.DeleteCharacterBackward.SetEnabled(false)
-		t.KeyMap.DeleteCharacterForward.SetEnabled(false)
-		t.KeyMap.DeleteWordBackward.SetEnabled(false)
-		t.KeyMap.DeleteWordForward.SetEnabled(false)
-		t.KeyMap.InsertNewline.SetEnabled(false)
-		t.KeyMap.Paste.SetEnabled(false)
+// setViewerContent loads content into a viewer when it differs from what the
+// viewer already shows, turning JSON highlighting on only when the content
+// actually parses as a JSON object or array.
+func setViewerContent(v *editor.Viewer, content string, last *string) {
+	if v != nil && content == *last {
+		return
 	}
+	*last = content
+	v.SetContent(content)
+	v.SetHighlight(looksLikeJSON(content))
+}
 
-	t.Blur()
-	return t
+// looksLikeJSON reports whether content is a JSON object or array. It checks
+// the delimiters first so the (expensive) parse is skipped for plain payloads.
+func looksLikeJSON(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if len(trimmed) < 2 {
+		return false
+	}
+	if (trimmed[0] != '{' || trimmed[len(trimmed)-1] != '}') &&
+		(trimmed[0] != '[' || trimmed[len(trimmed)-1] != ']') {
+		return false
+	}
+	return json.Valid([]byte(trimmed))
+}
+
+// activeViewer returns the viewer the Content tab currently has focused.
+func (m *MessageDetailContentProvider) activeViewer() *editor.Viewer {
+	if m.focusedEditor == 0 {
+		return m.keyEditor
+	}
+	return m.valueEditor
 }
 
 // updateEditorContent updates the content of all editors
@@ -104,11 +108,10 @@ func (m *MessageDetailContentProvider) updateEditorContent() {
 		return
 	}
 
-	// Update key editor
-	m.keyEditor.SetValue(m.model.GetFormattedKey())
-
-	// Update value editor
-	m.valueEditor.SetValue(m.model.GetFormattedValue())
+	// Update key and value viewers. JSON highlighting is enabled per pane so
+	// a plain-text key next to a JSON value still renders correctly.
+	setViewerContent(m.keyEditor, m.model.GetFormattedKey(), &m.keyContent)
+	setViewerContent(m.valueEditor, m.model.GetFormattedValue(), &m.valueContent)
 
 	// Update headers table
 	m.headersTable = m.headersTable.WithRows(buildHeadersRows(m.model.message.Headers))
@@ -125,7 +128,7 @@ func (m *MessageDetailContentProvider) RenderContent(width, height int) string {
 
 	// Use layout system for dimension calculations if available
 	var contentWidth, contentHeight int
-	
+
 	if m.model.common != nil && m.model.common.Layout != nil {
 		// Use layout system
 		layout := m.model.common.Layout
@@ -298,8 +301,13 @@ func (m *MessageDetailContentProvider) renderSplitContentTab() string {
 	valueSchemaHeader := schemaHeaderStyle.Render(valueSchemaName)
 
 	// Combine schema headers with editors
-	keySection := lipgloss.JoinVertical(lipgloss.Left, keySchemaHeader, m.keyEditor.View())
-	valueSection := lipgloss.JoinVertical(lipgloss.Left, valueSchemaHeader, m.valueEditor.View())
+	keyBorder, valueBorder := blurredBorderStyle, focusedBorderStyle
+	if m.focusedEditor == 0 {
+		keyBorder, valueBorder = focusedBorderStyle, blurredBorderStyle
+	}
+
+	keySection := lipgloss.JoinVertical(lipgloss.Left, keySchemaHeader, keyBorder.Render(m.keyEditor.View()))
+	valueSection := lipgloss.JoinVertical(lipgloss.Left, valueSchemaHeader, valueBorder.Render(m.valueEditor.View()))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, keySection, valueSection)
 }
@@ -482,30 +490,29 @@ func (m *MessageDetailContentProvider) sizeEditors() {
 		return
 	}
 
-	editorHeight := m.height - 15 // Reserve space for tabs and borders
+	// Reserve the tab strip (3), the schema label (1), each pane's border (2)
+	// and the viewer's search/status line (1). The status line is reserved even
+	// when no search is active so opening one doesn't shift the layout.
+	editorHeight := m.height - 7
 	if editorHeight < 5 {
 		editorHeight = 5
 	}
 
 	switch m.activeTab {
 	case 0: // Content tab - split view
-		editorWidth := (m.width - 6) / 2 // Split width between key and value
-		if editorWidth < 10 {
-			editorWidth = 10
+		// Keys are usually a short id and values carry the payload, so give the
+		// value pane twice the width instead of splitting down the middle.
+		avail := m.width - 4 // both pane borders
+		keyWidth := avail / 3
+		if keyWidth < 10 {
+			keyWidth = 10
 		}
-		m.keyEditor.SetWidth(editorWidth)
-		m.keyEditor.SetHeight(editorHeight)
-		m.valueEditor.SetWidth(editorWidth)
-		m.valueEditor.SetHeight(editorHeight)
-
-		// Set focus based on focusedEditor
-		if m.focusedEditor == 0 {
-			m.keyEditor.Focus()
-			m.valueEditor.Blur()
-		} else {
-			m.keyEditor.Blur()
-			m.valueEditor.Focus()
+		valueWidth := avail - keyWidth
+		if valueWidth < 10 {
+			valueWidth = 10
 		}
+		m.keyEditor.SetDimensions(keyWidth, editorHeight)
+		m.valueEditor.SetDimensions(valueWidth, editorHeight)
 
 	case 1: // Headers tab — resize the value column to fill available width
 		const hdrKeyWidth = 30
@@ -556,43 +563,65 @@ func (m *MessageDetailContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd 
 		}
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "shift+tab":
-			// Navigate to next tab (cycle through)
-			m.activeTab = (m.activeTab + 1) % len(m.tabs)
+		// While the viewer's `/` search prompt is open every keystroke belongs
+		// to it — otherwise typing "cef" would copy, export and reformat.
+		if m.activeTab == 0 && m.activeViewer().Searching() {
+			return m.updateActiveEditor(msg)
+		}
+		action, bound := keys.Default.Resolve(keys.ScopeListContent, msg.String())
+		if !bound {
+			return m.updateActiveEditor(msg)
+		}
+		switch action {
+		case keys.ActionSelectTab:
+			// 1..3 select the tab directly. `shift+tab` used to move to the
+			// NEXT tab here, the exact inverse of what it means everywhere else.
+			if n := int(msg.String()[0] - '1'); n >= 0 && n < len(m.tabs) {
+				m.activeTab = n
+			}
 			return nil
-		case "f":
-			// Toggle display format (only on Content tab)
+
+		case keys.ActionFocusNext:
+			// Tab cycles the panes of the Content tab, and the tab strip
+			// elsewhere — focus movement, never a data-mode change.
+			if m.activeTab == 0 {
+				m.focusedEditor = 1 - m.focusedEditor
+				m.model.SwitchFocus()
+				m.sizeEditors()
+			}
+			return nil
+		case keys.ActionFocusPrev:
+			if m.activeTab == 0 {
+				m.focusedEditor = 1 - m.focusedEditor
+				m.model.SwitchFocus()
+				m.sizeEditors()
+			}
+			return nil
+
+		case keys.ActionFormat:
 			if m.activeTab == 0 {
 				m.model.ToggleDisplayFormat()
 			}
 			return nil
-		case "tab":
-			// Switch focus between key and value (only on Content tab)
-			if m.activeTab == 0 {
-				m.focusedEditor = 1 - m.focusedEditor // Toggle between 0 and 1
-				m.model.SwitchFocus()
-				m.sizeEditors() // Update focus state
-			}
-			return nil
-		case "c":
-			if m.activeTab == 0 {
+
+		case keys.ActionCopy:
+			switch m.activeTab {
+			case 0:
 				m.model.CopyContentWithFeedback()
-			} else if m.activeTab == 1 {
+			case 1:
 				m.copyHeadersAsCSV()
-			} else if m.activeTab == 2 {
+			case 2:
 				m.copyMetadataAsCSV()
 			}
 			return nil
-		case "e":
-			// Export the whole message to a JSON file (MSG-29).
-			m.exportMessageToFile()
-			return nil
-		case "r":
-			// Refresh schema info
+
+		case keys.ActionRefresh:
 			return m.model.LoadSchemaInfoAsync()
-		case "up", "k", "down", "j":
-			// Handle scrolling in editors
+
+		case keys.ActionUp, keys.ActionDown, keys.ActionPageBack, keys.ActionPageForward,
+			keys.ActionFirst, keys.ActionLast, keys.ActionSearch, keys.ActionNextMatch,
+			keys.ActionPrevMatch, keys.ActionWrap:
+			// Scrolling, search and wrap belong to the focused viewer.
 			return m.updateActiveEditor(msg)
 		}
 	}
@@ -607,11 +636,7 @@ func (m *MessageDetailContentProvider) updateActiveEditor(msg tea.Msg) tea.Cmd {
 
 	switch m.activeTab {
 	case 0: // Content tab
-		if m.focusedEditor == 0 {
-			m.keyEditor, cmd = m.keyEditor.Update(msg)
-		} else {
-			m.valueEditor, cmd = m.valueEditor.Update(msg)
-		}
+		_, cmd = m.activeViewer().Update(msg)
 	case 1: // Headers tab
 		m.headersTable, cmd = m.headersTable.Update(msg)
 	case 2: // Metadata tab
@@ -630,7 +655,7 @@ func (m *MessageDetailContentProvider) InitContent() tea.Cmd {
 }
 
 func (m *MessageDetailContentProvider) IsInputMode() bool {
-	return false
+	return m.activeTab == 0 && m.activeViewer().Searching()
 }
 
 // GetContentSize returns the estimated content size for scrollbar calculation
@@ -904,17 +929,7 @@ var (
 	activeTabStyle    = inactiveTabStyle.Border(activeTabBorder, true)
 	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 1).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 
-	// Editor styles
-	cursorStyle     = lipgloss.NewStyle().Foreground(stylesPkg.Warning)
-	cursorLineStyle = lipgloss.NewStyle().
-			Background(stylesPkg.Info).
-			Foreground(stylesPkg.FgBase)
-	placeholderStyle = lipgloss.NewStyle().
-				Foreground(stylesPkg.FgSubtle)
-	endOfBufferStyle = lipgloss.NewStyle().
-				Foreground(stylesPkg.FgSubtle)
-	focusedPlaceholderStyle = lipgloss.NewStyle().
-				Foreground(stylesPkg.Primary)
+	// Pane border styles
 	focusedBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(highlightColor)

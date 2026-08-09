@@ -1,26 +1,10 @@
 package broker
 
-import "github.com/charmbracelet/bubbles/key"
+import "github.com/Benny93/kafui/pkg/ui/keys"
 
-// pageKeys are the broker detail page key bindings.
-type pageKeys struct {
-	NextTab key.Binding
-	Expand  key.Binding
-	Edit    key.Binding
-	Move    key.Binding
-	Retry   key.Binding
-	Search  key.Binding
-	Back    key.Binding
-}
+// This page used to carry its own key map — a second registry that could, and
+// did, disagree with the global one. The hint bar it fed still advertised keys
+// the page had stopped handling. Both now come from the single registry.
 
-func defaultKeys() pageKeys {
-	return pageKeys{
-		NextTab: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next tab")),
-		Expand:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "expand")),
-		Edit:    key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit config")),
-		Move:    key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move replica")),
-		Retry:   key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "retry")),
-		Search:  key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
-		Back:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-	}
-}
+// pageScope is the key scope this page resolves against.
+func pageScope() keys.Scope { return keys.ScopeListContent }

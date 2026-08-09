@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
@@ -62,7 +63,7 @@ func NewModelWithCommon(resourceItem shared.ResourceItem, resourceType string, c
 	m.reusableApp = templateui.NewReusableApp(config)
 
 	// Set key map for footer
-	m.reusableApp.SetKeyMap(m.keys.bindings)
+	m.reusableApp.SetKeyMap(keys.Hints(m.keys.KeyScope()))
 
 	return m
 }

@@ -176,8 +176,9 @@ func TestDiffVersionCycling(t *testing.T) {
 	m.cycleDiffVersion(-1)
 	assert.Equal(t, 1, m.diffLeft)
 
-	// Switch to the right pane and cycle it — right stays within bounds.
-	handleDiffKey(m, keyRunes("l"))
+	// Switch to the right pane and cycle it — right stays within bounds. Pane
+	// switching is tab now; `l` is the page-forward alias everywhere else.
+	handleDiffKey(m, tea.KeyMsg{Type: tea.KeyTab})
 	assert.Equal(t, 1, m.diffActive)
 	m.cycleDiffVersion(-1)
 	assert.Equal(t, 2, m.diffRight)
@@ -192,7 +193,7 @@ func TestRegisterChecksThenRegistersWhenCompatible(t *testing.T) {
 	m.enterRegister()
 	m.editor.SetValue(`{"new":true}`)
 
-	cmd := handleRegisterKey(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	cmd := handleRegisterKey(m, tea.KeyMsg{Type: tea.KeyF2})
 	msg, ok := run(cmd).(SchemaRegisterResultMsg)
 	require.True(t, ok)
 
@@ -209,7 +210,7 @@ func TestRegisterStopsAndReportsWhenIncompatible(t *testing.T) {
 	m.enterRegister()
 	m.editor.SetValue(`{"INCOMPATIBLE":true}`)
 
-	cmd := handleRegisterKey(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	cmd := handleRegisterKey(m, tea.KeyMsg{Type: tea.KeyF2})
 	msg, ok := run(cmd).(SchemaRegisterResultMsg)
 	require.True(t, ok)
 

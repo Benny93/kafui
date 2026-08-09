@@ -11,8 +11,8 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/masking"
-	"github.com/Benny93/kafui/pkg/serde"
 	"github.com/Benny93/kafui/pkg/messagefilter"
+	"github.com/Benny93/kafui/pkg/serde"
 	"github.com/Benny93/kafui/pkg/ui/components"
 	formpkg "github.com/Benny93/kafui/pkg/ui/components/form"
 	"github.com/Benny93/kafui/pkg/ui/core"
@@ -71,9 +71,9 @@ type Model struct {
 	consumeMode  ConsumeMode
 
 	// UI Components
-	messageTable    table.Model
-	spinner         spinner.Model
-	searchInput     textinput.Model
+	messageTable     table.Model
+	spinner          spinner.Model
+	searchInput      textinput.Model
 	fetchProgressBar components.FetchProgressBar // animated progress bar during FetchLatestMessages
 
 	// Bubble-table configuration
@@ -142,6 +142,8 @@ type Model struct {
 
 	// cursorRow is the index of the highlighted row in the currently displayed page.
 	cursorRow int
+	// clicks distinguishes a double click from two single clicks.
+	clicks core.ClickTracker
 
 	// Row string cache: holds the unstyled row strings for the current page.
 	// Rebuilt only when visible rows change (data, page nav, resize, sort).
@@ -1249,7 +1251,7 @@ func (t *TopicPageModel) View() string {
 
 // SetDimensions implements the Page interface
 func (t *TopicPageModel) SetDimensions(width, height int) {
-	// Only update the reusable app. The topic model's dimensions will be 
+	// Only update the reusable app. The topic model's dimensions will be
 	// updated by the ContentProvider with the correct inner content dimensions.
 	t.reusableApp.Update(tea.WindowSizeMsg{Width: width, Height: height})
 }

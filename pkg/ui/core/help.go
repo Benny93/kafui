@@ -129,49 +129,49 @@ func (h *HelpSystem) Render() string {
 	if !h.visible {
 		return ""
 	}
-	
+
 	// Calculate container dimensions
-	containerWidth := h.width - 4  // Account for margins
+	containerWidth := h.width - 4 // Account for margins
 	containerHeight := h.height - 4
-	
+
 	if containerWidth < 40 || containerHeight < 10 {
 		return h.renderCompactHelp()
 	}
-	
+
 	return h.renderFullHelp(containerWidth, containerHeight)
 }
 
 // renderFullHelp renders the full help display
 func (h *HelpSystem) renderFullHelp(width, height int) string {
 	var content strings.Builder
-	
+
 	// Title
 	title := "Kafui Help"
 	if h.currentPage != nil {
 		title = fmt.Sprintf("Kafui Help - %s", h.currentPage.GetTitle())
 	}
-	content.WriteString(h.styles.Title.Width(width-4).Render(title))
+	content.WriteString(h.styles.Title.Width(width - 4).Render(title))
 	content.WriteString("\n")
-	
+
 	// Collect help sections
 	sections := h.collectHelpSections()
-	
+
 	// Render sections
 	for i, section := range sections {
 		if i > 0 {
 			content.WriteString(h.styles.Separator.Render("─"))
 			content.WriteString("\n")
 		}
-		
+
 		content.WriteString(h.styles.SectionTitle.Render(section.Title))
 		content.WriteString("\n")
-		
+
 		for _, binding := range section.Bindings {
 			keyStyle := h.styles.KeyBinding
 			if binding.Important {
 				keyStyle = keyStyle.Background(lipgloss.Color("52"))
 			}
-			
+
 			line := fmt.Sprintf("  %s  %s",
 				keyStyle.Render(binding.Key),
 				h.styles.Description.Render(binding.Description))
@@ -179,10 +179,10 @@ func (h *HelpSystem) renderFullHelp(width, height int) string {
 			content.WriteString("\n")
 		}
 	}
-	
+
 	// Footer
-	content.WriteString(h.styles.Footer.Width(width-4).Render("Press '?' again to close help"))
-	
+	content.WriteString(h.styles.Footer.Width(width - 4).Render("Press '?' again to close help"))
+
 	// Apply container styling
 	return h.styles.Container.
 		Width(width).
@@ -193,23 +193,29 @@ func (h *HelpSystem) renderFullHelp(width, height int) string {
 // renderCompactHelp renders a compact help display for small screens
 func (h *HelpSystem) renderCompactHelp() string {
 	var content strings.Builder
-	
+
 	content.WriteString("Help (?):\n")
-	
+
 	// Show only essential bindings in compact mode
-	essentialBindings := []HelpBinding{
-		{"?", "toggle help", true},
-		{"q/ctrl+c", "quit", true},
-		{"esc", "back", true},
-		{"tab", "next component", false},
-		{"shift+tab", "prev component", false},
+	// Read from the registry so the compact list cannot name a key the
+	// application does not handle.
+	essential := func(a keys.Action, important bool) HelpBinding {
+		b, _ := keys.Default.Lookup(a)
+		return HelpBinding{Key: b.Primary(), Description: b.Label, Important: important}
 	}
-	
+	essentialBindings := []HelpBinding{
+		essential(keys.ActionHelp, true),
+		essential(keys.ActionQuit, true),
+		essential(keys.ActionCancel, true),
+		essential(keys.ActionFocusNext, false),
+		essential(keys.ActionFocusPrev, false),
+	}
+
 	for _, binding := range essentialBindings {
 		line := fmt.Sprintf("%s:%s ", binding.Key, binding.Description)
 		content.WriteString(line)
 	}
-	
+
 	return content.String()
 }
 
@@ -242,11 +248,11 @@ func (h *HelpSystem) collectHelpSections() []HelpSection {
 	return sections
 }
 
-// getGlobalBindings returns global key bindings derived from the single unified
-// keys.GlobalKeys registry (UI-16/UI-17).
+// getGlobalBindings returns global key bindings derived from the single binding
+// registry, so help can never disagree with behavior.
 func (h *HelpSystem) getGlobalBindings() []HelpBinding {
 	bindings := make([]HelpBinding, 0)
-	for _, b := range keys.GlobalKeys.GetAllBindings() {
+	for _, b := range keys.GlobalBindings() {
 		help := b.Help()
 		if help.Key == "" {
 			continue
@@ -265,10 +271,10 @@ func (h *HelpSystem) getPageBindings() []HelpBinding {
 	if h.currentPage == nil {
 		return []HelpBinding{}
 	}
-	
+
 	bindings := make([]HelpBinding, 0)
 	pageBindings := h.currentPage.GetHelp()
-	
+
 	for _, binding := range pageBindings {
 		help := binding.Help()
 		bindings = append(bindings, HelpBinding{
@@ -277,7 +283,7 @@ func (h *HelpSystem) getPageBindings() []HelpBinding {
 			Important:   false,
 		})
 	}
-	
+
 	return bindings
 }
 
@@ -286,7 +292,7 @@ func (h *HelpSystem) getPageTypeName() string {
 	if h.currentPage == nil {
 		return "Page"
 	}
-	
+
 	switch h.currentPage.GetID() {
 	case "main":
 		return "Main Page"
@@ -314,7 +320,7 @@ func (h *HelpSystem) GetQuickHelp() string {
 		"q quit",
 		"esc back",
 	}
-	
+
 	if h.currentPage != nil {
 		// Add one page-specific binding if available
 		pageBindings := h.currentPage.GetHelp()
@@ -323,6 +329,6 @@ func (h *HelpSystem) GetQuickHelp() string {
 			quickBindings = append(quickBindings, fmt.Sprintf("%s %s", help.Key, help.Desc))
 		}
 	}
-	
+
 	return strings.Join(quickBindings, " • ")
 }

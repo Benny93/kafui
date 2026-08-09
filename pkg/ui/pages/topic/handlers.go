@@ -11,6 +11,8 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+
+	"github.com/Benny93/kafui/pkg/ui/core"
 )
 
 // Handlers manages event handling for the topic page
@@ -181,14 +183,14 @@ func (h *Handlers) handleKeyMsg(model *Model, msg tea.KeyMsg) (tea.Model, tea.Cm
 func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (tea.Model, tea.Cmd) {
 	// Add the consumed message to internal storage (doesn't trigger view update)
 	model.addMessageInternal(msg.Message)
-	
+
 	// Ensure messages are sorted for pagination
 	model.sortMessages()
 	model.updateMessageTable()
-	
+
 	// Update total messages for pagination
 	model.pagination.SetTotalMessages(len(model.filteredMessages))
-	
+
 	model.markRenderDirty()
 
 	// Continue listening for more messages if we're still consuming
@@ -459,38 +461,58 @@ const (
 )
 
 func (h *Handlers) handleMouseMsg(model *Model, msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// Same gesture vocabulary as every other list: the wheel moves the view and
+	// never the cursor, a click selects, and a click on the already-selected
+	// row activates. This screen used to open a message on the first click,
+	// while the resource list only selected — one of the two had to be wrong.
 	switch msg.Button {
 	case tea.MouseButtonWheelUp:
-		if model.cursorRow > 0 {
-			model.cursorRow--
-			model.markRenderDirty()
-		}
+		model.pagination.PrevPage()
+		model.markRenderDirty()
 
 	case tea.MouseButtonWheelDown:
-		visibleCount := len(model.pagination.GetVisibleMessages(model.filteredMessages))
-		if model.cursorRow < visibleCount-1 {
-			model.cursorRow++
+		model.pagination.NextPage()
+		model.markRenderDirty()
+
+	case tea.MouseButtonNone:
+		// Hover feedback, same as every other list.
+		if !core.IsHover(msg) {
+			break
+		}
+		z := zone.Get("message-table")
+		if z == nil || !z.InBounds(msg) {
+			break
+		}
+		_, relY := z.Pos(msg)
+		if row := relY - tableHeaderLines; row >= 0 &&
+			row < len(model.pagination.GetVisibleMessages(model.filteredMessages)) &&
+			row != model.cursorRow {
+			model.cursorRow = row
 			model.markRenderDirty()
 		}
 
 	case tea.MouseButtonLeft:
+		if !core.IsLeftRelease(msg) {
+			break
+		}
 		z := zone.Get("message-table")
-		if !z.InBounds(msg) {
+		if z == nil || !z.InBounds(msg) {
 			break
 		}
 		_, relY := z.Pos(msg)
 		row := relY - tableHeaderLines
-		if row < 0 {
+		if row < 0 || row >= len(model.pagination.GetVisibleMessages(model.filteredMessages)) {
 			break
 		}
-		visibleCount := len(model.pagination.GetVisibleMessages(model.filteredMessages))
-		if row >= visibleCount {
-			break
-		}
-
+		// Capture the previous cursor before moving it, or the
+		// already-selected test would always be true.
+		wasSelected := row == model.cursorRow
+		double := model.clicks.Click(msg)
 		model.cursorRow = row
 		model.markRenderDirty()
-		return model, model.keys.handleSelect(model)
+		if double || wasSelected {
+			return model, model.keys.handleSelect(model)
+		}
 	}
 
 	return model, nil

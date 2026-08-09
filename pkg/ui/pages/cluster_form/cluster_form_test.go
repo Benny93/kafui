@@ -151,9 +151,11 @@ func TestValidateAction_InvokesService(t *testing.T) {
 		}}
 	}
 
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
+	// Validation is the registry's run/refresh action (r, alias F5); it used to
+	// be ctrl+v, a chord that appeared in no help text.
+	m.Update(tea.KeyMsg{Type: tea.KeyF5})
 
-	require.True(t, called, "ctrl+v must invoke the AC-11 validation service")
+	require.True(t, called, "F5 must invoke the AC-11 validation service")
 	require.Contains(t, gotCandidate.Clusters, "c1")
 	assert.Equal(t, []string{"b:9092"}, gotCandidate.Clusters["c1"].Brokers)
 	require.NotNil(t, m.results)

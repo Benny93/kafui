@@ -1,7 +1,6 @@
 package ksql
 
 import (
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -23,11 +22,3 @@ func (p *queryContentProvider) IsInputMode() bool { return p.model.IsInputMode()
 func (p *queryContentProvider) GetContentSize(width int) int {
 	return len(p.model.resRows) + len(p.model.props)*2 + 16
 }
-
-// queryHelpKeyMap adapts the query bindings to the footer help.KeyMap.
-type queryHelpKeyMap struct{ keys queryKeys }
-
-func (h queryHelpKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{h.keys.Execute, h.keys.Clear, h.keys.ClearRes, h.keys.AddProp, h.keys.FocusNext, h.keys.Back}
-}
-func (h queryHelpKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{h.ShortHelp()} }

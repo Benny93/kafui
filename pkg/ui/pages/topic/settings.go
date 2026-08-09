@@ -2,6 +2,7 @@ package topic
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strconv"
 	"strings"
 
@@ -38,14 +39,18 @@ func (k *Keys) handleShowSettings(model *Model) tea.Cmd {
 
 // handleSettingsKey handles keys while the settings overlay is open.
 func (k *Keys) handleSettingsKey(model *Model, msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "esc", "q":
+	action, bound := keys.Default.Resolve(keys.ScopeOverlay, msg.String())
+	if !bound {
+		return nil
+	}
+	switch action {
+	case keys.ActionCancel:
 		model.showSettings = false
 		model.markRenderDirty()
 		return nil
-	case "r":
+	case keys.ActionRefresh:
 		return k.handleShowSettings(model)
-	case "E":
+	case keys.ActionEdit:
 		// Jump straight to the edit form.
 		model.showSettings = false
 		return k.handleShowSettingsEdit(model)
@@ -97,7 +102,7 @@ func (m *Model) renderSettingsOverlay(width int) string {
 		errStyle := lipgloss.NewStyle().Foreground(stylesPkg.Error).Bold(true)
 		b.WriteString(errStyle.Render("Failed to load config: " + m.settingsErr.Error()))
 		b.WriteString("\n\n")
-		b.WriteString(muted.Render("r: retry • esc: close"))
+		b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionRefresh, "retry", keys.ActionCancel, "close")))
 		return b.String()
 	}
 	if len(m.settingsConfig) == 0 {
@@ -129,7 +134,7 @@ func (m *Model) renderSettingsOverlay(width int) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(muted.Render("E: edit • r: refresh • esc: close"))
+	b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionEdit, "edit", keys.ActionRefresh, "refresh", keys.ActionCancel, "close")))
 	return b.String()
 }
 

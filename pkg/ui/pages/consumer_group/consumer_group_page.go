@@ -13,6 +13,7 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
@@ -20,12 +21,12 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // Model is the consumer-group detail page.
 type Model struct {
 	common      *core.Common
-	keys        pageKeys
 	reusableApp *templateui.ReusableApp
 	dims        core.Dimensions
 
@@ -65,7 +66,6 @@ type Model struct {
 func NewModelWithCommon(common *core.Common, groupID string) core.Page {
 	m := &Model{
 		common:   common,
-		keys:     defaultKeys(),
 		groupID:  groupID,
 		expanded: -1,
 	}
@@ -85,7 +85,7 @@ func NewModelWithCommon(common *core.Common, groupID string) core.Page {
 		ShowSidebarByDefault: false,
 	}
 	m.reusableApp = templateui.NewReusableApp(config)
-	m.reusableApp.SetKeyMap(helpKeyMap{keys: m.keys})
+	m.reusableApp.SetKeyMap(keys.Hints(pageScope()))
 	return m
 }
 
@@ -143,10 +143,7 @@ func (m *Model) GetID() string    { return "consumer_group:" + m.groupID }
 func (m *Model) GetTitle() string { return "Group " + m.groupID }
 
 func (m *Model) GetHelp() []key.Binding {
-	return []key.Binding{
-		m.keys.Expand, m.keys.Filter, m.keys.Sort, m.keys.Refresh, m.keys.AutoRefresh,
-		m.keys.GotoTopic, m.keys.Reset, m.keys.DeleteOff, m.keys.Delete, m.keys.Export, m.keys.Back,
-	}
+	return keys.Help(pageScope())
 }
 
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) { return m, nil }
@@ -182,7 +179,41 @@ func (m *Model) loadDetail() tea.Cmd {
 
 // --- message handling (via the content provider) ---
 
+// topicTableZone is the click zone of the topic table, so its header can sort.
+const topicTableZone = "cg-topic-table"
+
+// markZone is zone.Mark guarded against there being no global manager.
+func markZone(id, s string) (out string) {
+	defer func() {
+		if recover() != nil {
+			out = s
+		}
+	}()
+	return zone.Mark(id, s)
+}
+
+// clickedTableHeader reports a click on the framed table's header row. These
+// tables cycle their sort key rather than exposing per-column sorts, so a
+// header click advances the sort — the nearest honest equivalent.
+func clickedTableHeader(id string, msg tea.MouseMsg) bool {
+	if !core.IsLeftRelease(msg) {
+		return false
+	}
+	z := zone.Get(id)
+	if z == nil || !z.InBounds(msg) {
+		return false
+	}
+	_, relY := z.Pos(msg)
+	// Frame border, then the header labels.
+	return relY == 1
+}
+
 func (m *Model) handle(msg tea.Msg) tea.Cmd {
+	if mouse, ok := msg.(tea.MouseMsg); ok && clickedTableHeader(topicTableZone, mouse) {
+		m.cycleSort()
+		return nil
+	}
+
 	switch v := msg.(type) {
 	case detailLoadedMsg:
 		return m.handleDetailLoaded(v)
@@ -248,39 +279,39 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if m.searching {
 		return m.handleSearchKey(msg)
 	}
+	action, bound := keys.Default.Resolve(pageScope(), msg.String())
+	if !bound {
+		return m.forwardToActive(msg)
+	}
 	if m.notFound {
-		if key.Matches(msg, m.keys.Retry) {
+		if action == keys.ActionRefresh {
 			m.notFound = false
 			return m.loadDetail()
 		}
 		return nil
 	}
 
-	switch {
-	case key.Matches(msg, m.keys.Expand):
+	switch action {
+	case keys.ActionActivate:
 		return m.toggleExpand()
-	case key.Matches(msg, m.keys.Filter):
+	case keys.ActionSearch:
 		m.searching = true
 		m.searchInput.SetValue(m.topicFilter)
 		return m.searchInput.Focus()
-	case key.Matches(msg, m.keys.Sort):
+	case keys.ActionSort:
 		m.cycleSort()
 		return nil
-	case key.Matches(msg, m.keys.Refresh):
+	case keys.ActionRefresh:
 		return m.loadDetail()
-	case key.Matches(msg, m.keys.AutoRefresh):
-		return m.cycleAutoRefresh()
-	case key.Matches(msg, m.keys.GotoTopic):
-		return m.gotoSelectedTopic()
-	case key.Matches(msg, m.keys.Reset):
-		return m.openResetForm()
-	case key.Matches(msg, m.keys.DeleteOff):
-		return m.deleteSelectedTopicOffsets()
-	case key.Matches(msg, m.keys.Delete):
+	case keys.ActionDelete:
 		return m.deleteGroup()
-	case key.Matches(msg, m.keys.Export):
+	case keys.ActionExport:
 		return m.exportCSV()
 	}
+	// Auto-refresh, go-to-topic, offset reset and offset deletion have no
+	// direct keys: they were a, t, R and d, four bare letters that collided
+	// with the actions menu, page navigation and the shared delete. They are
+	// actions-menu entries now.
 	return m.forwardToActive(msg)
 }
 
@@ -368,14 +399,14 @@ func (m *Model) render(width, height int) string {
 		return b.String()
 	}
 
-	b.WriteString(stylesPkg.FrameTable(m.topicTable.View()))
+	b.WriteString(markZone(topicTableZone, stylesPkg.FrameTable(m.topicTable.View())))
 	if m.expanded >= 0 && m.expanded < len(m.topicRows) {
 		b.WriteString("\n\n")
 		b.WriteString(m.common.Styles.Header.Render("Partitions of " + m.topicRows[m.expanded].topic))
 		b.WriteString("\n")
 		b.WriteString(stylesPkg.FrameTable(m.partTable.View()))
 		b.WriteString("\n")
-		b.WriteString(m.common.Styles.Muted.Render("enter/esc: collapse • d: delete offsets • t: go to topic"))
+		b.WriteString(m.common.Styles.Muted.Render(keys.Hint(keys.ScopeListContent, keys.ActionActivate, "collapse") + "  (delete offsets and go-to-topic are in the actions menu)"))
 	} else {
 		b.WriteString("\n")
 		b.WriteString(m.footerHint())
@@ -393,7 +424,8 @@ func (m *Model) footerHint() string {
 		auto = m.autoInterval.String()
 	}
 	return m.common.Styles.Muted.Render(fmt.Sprintf(
-		"enter: expand • /: filter • s: sort • r: refresh • a: auto-refresh (%s) • R: reset • ctrl+d: delete", auto))
+		keys.Hint(keys.ScopeListContent, keys.ActionActivate, "expand", keys.ActionSearch, "filter", keys.ActionSort, "sort",
+			keys.ActionRefresh, "refresh", keys.ActionDelete, "delete")+"  auto-refresh: %s", auto))
 }
 
 func (m *Model) summaryStrip() string {

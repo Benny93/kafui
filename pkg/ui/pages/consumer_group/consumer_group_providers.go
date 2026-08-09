@@ -1,7 +1,6 @@
 package consumergroup
 
 import (
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -23,11 +22,3 @@ func (p *contentProvider) IsInputMode() bool {
 func (p *contentProvider) GetContentSize(width int) int {
 	return len(p.model.topicRows) + 10
 }
-
-// helpKeyMap adapts the page bindings to the footer help.KeyMap interface.
-type helpKeyMap struct{ keys pageKeys }
-
-func (h helpKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{h.keys.Expand, h.keys.Filter, h.keys.Refresh, h.keys.Reset, h.keys.Delete, h.keys.Back}
-}
-func (h helpKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{h.ShortHelp()} }

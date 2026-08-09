@@ -10,40 +10,37 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Keys handles key bindings for the resource detail page
+// Keys resolves this page's keys through the single binding registry. The page
+// is a plain content view: back and quit are reserved globals the shell owns,
+// so nothing is handled here beyond what the registry declares for content.
 type Keys struct {
-	bindings keys.ResourceDetailKeyMap
+	scope keys.Scope
 }
 
-// NewKeys creates a new Keys instance using centralized key bindings
+// NewKeys creates a new Keys instance bound to the content scope.
 func NewKeys() *Keys {
-	return &Keys{
-		bindings: keys.DefaultKeyMap().ResourceDetail,
-	}
+	return &Keys{scope: keys.ScopeContent}
 }
 
-// GetKeyBindings returns all key bindings as a slice
+// GetKeyBindings returns the page's bindings for the help overlay.
 func (k *Keys) GetKeyBindings() []key.Binding {
-	return []key.Binding{
-		k.bindings.Back,
-		k.bindings.Quit,
-		k.bindings.ScrollUp,
-		k.bindings.ScrollDown,
-		k.bindings.Copy,
+	var out []key.Binding
+	for _, b := range keys.Default.InScope(k.scope) {
+		out = append(out, b.KeyBinding())
 	}
+	return out
 }
 
-// HandleKey processes key events
+// KeyScope reports the scope the shell resolves this page's keys against.
+func (k *Keys) KeyScope() keys.Scope { return k.scope }
+
+// HandleKey processes key events the shell forwarded to this page.
 func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
-	switch {
-	case key.Matches(msg, k.bindings.Back):
-		// Go back to previous page without adding to history
-		return func() tea.Msg {
-			return core.BackMsg{}
-		}
-	case key.Matches(msg, k.bindings.Quit):
-		return tea.Quit
+	action, bound := keys.Default.Resolve(k.scope, msg.String())
+	if !bound {
+		return nil
 	}
+	_ = action // the shell owns every action this page reacts to today
 	return nil
 }
 

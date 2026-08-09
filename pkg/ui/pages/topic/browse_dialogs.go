@@ -2,6 +2,7 @@ package topic
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strconv"
 	"strings"
 	"time"
@@ -346,6 +347,6 @@ func renderFormOverlay(title, hint string, form *formpkg.Form) string {
 		b.WriteString(form.View())
 	}
 	b.WriteString("\n")
-	b.WriteString(muted.Render("tab: next • ←/→: change • enter: submit • esc: cancel"))
+	b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionFocusNext, "next", keys.ActionPageBack, "change", keys.ActionActivate, "submit", keys.ActionCancel, "cancel")))
 	return b.String()
 }

@@ -36,7 +36,9 @@ func TestSidebarToggleFlipsAndEmits(t *testing.T) {
 		t.Fatal("expected sidebar visible at large size by default")
 	}
 
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	// Controls spec: the sidebar toggle is ctrl+b. It used to be 't', which the
+	// topic and connector screens also claimed.
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
 	if app.showSidebar {
 		t.Fatal("expected sidebar hidden after toggle")
 	}

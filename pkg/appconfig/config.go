@@ -38,6 +38,13 @@ type Config struct {
 	// Clusters holds per-cluster extension entries keyed by cluster name.
 	Clusters map[string]ClusterExtension `yaml:"clusters"`
 
+	// Keybindings rebinds actions from the controls specification. Each entry
+	// names a registry action and the keys that should trigger it; the first
+	// key listed is the one shown in the hint bar and help overlay. Overrides
+	// that conflict with another binding, shadow a reserved global, or use a
+	// key terminals cannot report are reported and ignored.
+	Keybindings []KeybindingOverride `yaml:"keybindings"`
+
 	// Authz holds the local permission-profile configuration (AA-2). A missing
 	// section (no profiles and no default) leaves authorization disabled: every
 	// operation is allowed. Read-only mode is independent of this section.
@@ -256,4 +263,13 @@ func Default() Config {
 		Clusters:        map[string]ClusterExtension{},
 		Audit:           AuditSettings{Enabled: false, Level: "alter_only"},
 	}
+}
+
+
+// KeybindingOverride rebinds one action declared in the controls specification.
+type KeybindingOverride struct {
+	// Action is the registry action id, e.g. "delete" or "actions-menu".
+	Action string `yaml:"action"`
+	// Keys are the keys that trigger it, most-advertised first.
+	Keys []string `yaml:"keys"`
 }

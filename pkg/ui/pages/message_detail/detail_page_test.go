@@ -6,8 +6,8 @@ import (
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/datasource/mock"
-	"github.com/stretchr/testify/assert"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestMain initializes the bubblezone global manager (required by zone.Mark calls
@@ -143,7 +143,7 @@ func TestGetFormattedKey(t *testing.T) {
 			}
 
 			pageModel := NewMessageDetailPageModel(mockDS, "test-topic", message)
-		model := pageModel.GetDetailModel()
+			model := pageModel.GetDetailModel()
 			model.displayFormat.KeyFormat = tc.keyFormat
 
 			result := model.GetFormattedKey()
@@ -221,7 +221,7 @@ func TestGetFormattedValue(t *testing.T) {
 			}
 
 			pageModel := NewMessageDetailPageModel(mockDS, "test-topic", message)
-		model := pageModel.GetDetailModel()
+			model := pageModel.GetDetailModel()
 			model.displayFormat.ValueFormat = tc.valueFormat
 
 			result := model.GetFormattedValue()
@@ -248,7 +248,7 @@ func TestToggleDisplayFormat(t *testing.T) {
 
 	message := api.Message{Key: "test-key", Value: "test-value", Offset: 1, Partition: 0}
 	pageModel := NewMessageDetailPageModel(mockDS, "test-topic", message)
-		model := pageModel.GetDetailModel()
+	model := pageModel.GetDetailModel()
 
 	// Test format cycling
 	testCases := []struct {
@@ -278,7 +278,7 @@ func TestToggleHeaders(t *testing.T) {
 
 	message := api.Message{Key: "test-key", Value: "test-value", Offset: 1, Partition: 0}
 	pageModel := NewMessageDetailPageModel(mockDS, "test-topic", message)
-		model := pageModel.GetDetailModel()
+	model := pageModel.GetDetailModel()
 
 	// Initially should show headers
 	assert.True(t, model.showHeaders)
@@ -299,7 +299,7 @@ func TestToggleMetadata(t *testing.T) {
 
 	message := api.Message{Key: "test-key", Value: "test-value", Offset: 1, Partition: 0}
 	pageModel := NewMessageDetailPageModel(mockDS, "test-topic", message)
-		model := pageModel.GetDetailModel()
+	model := pageModel.GetDetailModel()
 
 	// Initially should show metadata
 	assert.True(t, model.showMetadata)
@@ -426,7 +426,7 @@ func TestGetID(t *testing.T) {
 	// Verify ID format: "detail:<topic>:<partition>:<offset>"
 	assert.Contains(t, id, "detail:")
 	assert.Contains(t, id, "my-topic")
-	assert.Contains(t, id, "2")  // partition
+	assert.Contains(t, id, "2")   // partition
 	assert.Contains(t, id, "123") // offset
 
 	// Verify different messages produce different IDs
@@ -458,7 +458,7 @@ func TestGetIDWithSpecialCharacters(t *testing.T) {
 
 	// Test with topic names containing special characters
 	testCases := []struct {
-		topicName    string
+		topicName     string
 		shouldContain string
 	}{
 		{"topic-with-dashes", "topic-with-dashes"},
@@ -494,4 +494,3 @@ func TestGetTitle(t *testing.T) {
 	assert.NotEmpty(t, title)
 	assert.Contains(t, title, "my-topic")
 }
-

@@ -14,11 +14,10 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/components"
 	"github.com/Benny93/kafui/pkg/ui/components/form"
 	"github.com/Benny93/kafui/pkg/ui/core"
-	keybindings "github.com/Benny93/kafui/pkg/ui/keys"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/atotto/clipboard"
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -69,92 +68,126 @@ const (
 )
 
 // createResourceTableColumns creates column definitions for a given resource type.
+//
+// Numeric/short columns stay fixed; the wide text columns are flex so that
+// WithTargetWidth grows them to fill the content pane on a wide terminal and
+// shrinks them (truncating cells) instead of overflowing on a narrow one.
+//
+// Fixed widths are sized to their header plus the widest realistic value and
+// nothing more: bubble-table never shrinks a fixed column, so every spare
+// character they hold is a character the flex columns cannot use — and on an
+// 80-column terminal it is the difference between fitting and wrapping.
+//
+// Flex factors are kept small for the same reason: bubble-table hands the
+// integer remainder of the flex split out one column at a time, so a factor
+// sum far above the number of flex columns strands unused width.
 func createResourceTableColumns(resourceType ResourceType) []table.Column {
 	right := lipgloss.NewStyle().AlignHorizontal(lipgloss.Right)
 	switch resourceType {
 	case TopicResourceType:
 		return []table.Column{
-			table.NewColumn(colTopicName, "Name", 35),
-			table.NewColumn(colTopicPartitions, "Partitions", 12).WithStyle(right),
+			table.NewFlexColumn(colTopicName, "Name", 1),
+			table.NewColumn(colTopicPartitions, "Partitions", 11).WithStyle(right),
 			table.NewColumn(colTopicReplication, "Replication", 12).WithStyle(right),
-			table.NewColumn(colTopicMessages, "Messages", 14).WithStyle(right),
-			table.NewColumn(colTopicOSR, "OSR", 8).WithStyle(right),
-			table.NewColumn(colTopicSize, "Size", 12).WithStyle(right),
+			table.NewColumn(colTopicMessages, "Messages", 10).WithStyle(right),
+			table.NewColumn(colTopicOSR, "OSR", 5).WithStyle(right),
+			table.NewColumn(colTopicSize, "Size", 10).WithStyle(right),
 		}
 	case ContextResourceType:
 		return []table.Column{
-			table.NewColumn(colName, "Name", 35),
-			table.NewColumn(colPartitions, "Brokers", 40),
-			table.NewColumn(colReplication, "Status", 12).WithStyle(right),
+			table.NewFlexColumn(colName, "Name", 1),
+			table.NewFlexColumn(colPartitions, "Brokers", 1),
+			table.NewColumn(colReplication, "Status", 8).WithStyle(right),
 		}
 	case SchemaResourceType:
 		return []table.Column{
-			table.NewColumn(colName, "Subject", 32),
+			table.NewFlexColumn(colName, "Subject", 1),
 			table.NewColumn(colPartitions, "Version", 9).WithStyle(right),
-			table.NewColumn(colReplication, "ID", 8).WithStyle(right),
+			table.NewColumn(colReplication, "ID", 5).WithStyle(right),
 			table.NewColumn(colMessages, "Type", 10),
-			table.NewColumn(colSchemaCompat, "Compatibility", 20),
+			table.NewColumn(colSchemaCompat, "Compatibility", 14),
 		}
 	case ConsumerGroupResourceType:
 		return []table.Column{
-			table.NewColumn(colGroupName, "Name", 34),
-			table.NewColumn(colGroupState, "State", 18),
-			table.NewColumn(colGroupMembers, "Members", 9).WithStyle(right),
-			table.NewColumn(colGroupTopics, "Topics", 8).WithStyle(right),
-			table.NewColumn(colGroupLag, "Lag", 12).WithStyle(right),
+			table.NewFlexColumn(colGroupName, "Name", 1),
+			table.NewColumn(colGroupState, "State", 12),
+			table.NewColumn(colGroupMembers, "Members", 8).WithStyle(right),
+			table.NewColumn(colGroupTopics, "Topics", 7).WithStyle(right),
+			table.NewColumn(colGroupLag, "Lag", 10).WithStyle(right),
 			table.NewColumn(colGroupCoord, "Coordinator", 12).WithStyle(right),
 		}
 	case ACLResourceType:
 		return []table.Column{
-			table.NewColumn(colACLPrincipal, "Principal", 30),
-			table.NewColumn(colACLResource, "Resource", 22),
-			table.NewColumn(colACLPattern, "Pattern", 12),
-			table.NewColumn(colACLHost, "Host", 12),
-			table.NewColumn(colACLOperation, "Operation", 14),
+			table.NewFlexColumn(colACLPrincipal, "Principal", 2),
+			table.NewFlexColumn(colACLResource, "Resource", 1),
+			table.NewColumn(colACLPattern, "Pattern", 11),
+			table.NewColumn(colACLHost, "Host", 6),
+			table.NewColumn(colACLOperation, "Operation", 10),
 			table.NewColumn(colACLPermission, "Permission", 10),
 		}
 	case QuotaResourceType:
 		return []table.Column{
-			table.NewColumn(colQuotaUser, "User", 18),
-			table.NewColumn(colQuotaClient, "Client ID", 18),
-			table.NewColumn(colQuotaIP, "IP", 16),
-			table.NewColumn(colQuotaValues, "Quotas", 44),
+			table.NewFlexColumn(colQuotaUser, "User", 1),
+			table.NewFlexColumn(colQuotaClient, "Client ID", 1),
+			table.NewFlexColumn(colQuotaIP, "IP", 1),
+			table.NewFlexColumn(colQuotaValues, "Quotas", 2),
 		}
 	case BrokerResourceType:
 		return []table.Column{
-			table.NewColumn(colBrokerID, "ID", 8).WithStyle(right),
-			table.NewColumn(colBrokerHost, "Host", 24),
-			table.NewColumn(colBrokerPort, "Port", 8).WithStyle(right),
-			table.NewColumn(colBrokerDisk, "Disk Usage", 22),
-			table.NewColumn(colBrokerISR, "ISR", 10).WithStyle(right),
-			table.NewColumn(colBrokerSkew, "Skew", 10).WithStyle(right),
+			table.NewColumn(colBrokerID, "ID", 4).WithStyle(right),
+			table.NewFlexColumn(colBrokerHost, "Host", 1),
+			table.NewColumn(colBrokerPort, "Port", 6).WithStyle(right),
+			table.NewFlexColumn(colBrokerDisk, "Disk Usage", 1),
+			table.NewColumn(colBrokerISR, "ISR", 5).WithStyle(right),
+			table.NewColumn(colBrokerSkew, "Skew", 6).WithStyle(right),
 		}
 	case ConnectorResourceType:
 		return []table.Column{
-			table.NewColumn(colConnName, "Name", 26),
-			table.NewColumn(colConnCluster, "Connect", 16),
+			table.NewFlexColumn(colConnName, "Name", 2),
+			table.NewFlexColumn(colConnCluster, "Connect", 1),
 			table.NewColumn(colConnType, "Type", 8),
-			table.NewColumn(colConnPlugin, "Plugin", 22),
-			table.NewColumn(colConnTopics, "Topics", 20),
-			table.NewColumn(colConnState, "Status", 12),
-			table.NewColumn(colConnGroup, "Consumer group", 20),
-			table.NewColumn(colConnTasks, "Tasks", 8).WithStyle(right),
+			table.NewFlexColumn(colConnPlugin, "Plugin", 2),
+			table.NewFlexColumn(colConnTopics, "Topics", 1),
+			table.NewColumn(colConnState, "Status", 8),
+			table.NewFlexColumn(colConnGroup, "Consumer group", 1),
+			table.NewColumn(colConnTasks, "Tasks", 6).WithStyle(right),
 		}
 	case ConnectClusterResourceType:
 		return []table.Column{
-			table.NewColumn(colCCName, "Name", 28),
-			table.NewColumn(colCCVersion, "Version", 16),
-			table.NewColumn(colCCConnectors, "Connectors", 24).WithStyle(right),
-			table.NewColumn(colCCTasks, "Running Tasks", 16).WithStyle(right),
+			table.NewFlexColumn(colCCName, "Name", 2),
+			table.NewFlexColumn(colCCVersion, "Version", 1),
+			table.NewColumn(colCCConnectors, "Connectors", 11).WithStyle(right),
+			table.NewColumn(colCCTasks, "Running Tasks", 14).WithStyle(right),
 		}
 	default:
 		return []table.Column{
-			table.NewColumn(colName, "Name", 35),
-			table.NewColumn(colPartitions, "Partitions", 12).WithStyle(right),
+			table.NewFlexColumn(colName, "Name", 1),
+			table.NewColumn(colPartitions, "Partitions", 11).WithStyle(right),
 			table.NewColumn(colReplication, "Replication", 12).WithStyle(right),
-			table.NewColumn(colMessages, "Messages", 14).WithStyle(right),
+			table.NewColumn(colMessages, "Messages", 10).WithStyle(right),
 		}
 	}
+}
+
+// firstColumnWidth returns the rendered width of the leading (Name) column once
+// cols are laid out at totalWidth, mirroring bubble-table's flex arithmetic.
+// Returns 0 when the leading column is fixed — nothing to compute.
+func firstColumnWidth(cols []table.Column, totalWidth int) int {
+	if len(cols) == 0 || !cols[0].IsFlex() {
+		return 0
+	}
+	avail, factors := totalWidth-len(cols)-1, 0
+	for _, c := range cols {
+		if c.IsFlex() {
+			factors += c.FlexFactor()
+		} else {
+			avail -= c.Width()
+		}
+	}
+	if factors == 0 || avail <= 0 {
+		return 0
+	}
+	return avail * cols[0].FlexFactor() / factors
 }
 
 // createResourcesTable creates and configures the resources table using bubble-table
@@ -604,8 +637,6 @@ type KafuiContentProvider struct {
 
 	// Resource picker state (UI-8): `:` opens a capability-filtered picker with
 	// autocomplete; enter switches, esc cancels back to the current resource.
-	resourcePickerMode bool
-	resourcePickerInput string
 
 	// Data storage
 	allRows       []table.Row
@@ -626,6 +657,12 @@ type KafuiContentProvider struct {
 
 	// Current page size (updated from dimensions for click-to-select math)
 	perPage int
+
+	// clicks distinguishes a double click from two single clicks on the table.
+	clicks core.ClickTracker
+	// tableWidth is the width the table was last laid out at, needed to resolve
+	// which column a header click landed on.
+	tableWidth int
 
 	// nameColumnWidth tracks the rendered width of the Name column so that
 	// middle-truncation is proportional to the actual terminal width.
@@ -757,15 +794,15 @@ func (k *KafuiContentProvider) RenderContent(width, height int) string {
 	var tableHeight int
 	var tableWidth int
 
+	// width is the inner content width the template already computed (pane minus
+	// border, padding and the scrollbar column), so use it verbatim — deriving
+	// it from Layout.Main.Width instead over-estimates by the chrome and makes
+	// the table overflow and wrap on narrow terminals.
+	tableWidth = width
 	if k.common != nil && k.common.Layout != nil {
-		// Use layout system
-		layout := k.common.Layout
-		tableHeight = layout.GetAvailableHeight() - 3 // Reserve space for padding
-		tableWidth = layout.GetAvailableWidth() - 2
+		tableHeight = k.common.Layout.GetAvailableHeight() - 3 // Reserve space for padding
 	} else {
-		// Fallback to ad-hoc calculation
 		tableHeight = height - 6
-		tableWidth = width - 4
 	}
 
 	// Reserve one line for search bar hint when active (no separate status line needed,
@@ -787,15 +824,22 @@ func (k *KafuiContentProvider) RenderContent(width, height int) string {
 
 	// Update table visual dimensions and inject the correct page footer.
 	k.perPage = tableHeight
-	// Name column is 35/99 of total defined column width; reserve 6 chars for borders.
-	const totalDefinedWidth = 35 + 12 + 12 + 14 // 73
-	k.nameColumnWidth = (tableWidth - 6) * 35 / totalDefinedWidth
+	// Match the middle-truncation budget to the Name column's actual flex width.
+	resType := TopicResourceType
+	if k.currentResource != nil {
+		resType = k.currentResource.GetType()
+	}
+	k.nameColumnWidth = firstColumnWidth(createResourceTableColumns(resType), tableWidth)
 	if k.nameColumnWidth < 20 {
 		k.nameColumnWidth = 20
 	}
+	k.tableWidth = tableWidth
 	k.resourcesTable = k.resourcesTable.
 		WithPageSize(tableHeight).
 		WithTargetWidth(tableWidth).
+		// Pad short result sets so the table fills the pane instead of
+		// leaving a stub box floating above empty space.
+		WithMinimumHeight(tableHeight).
 		WithStaticFooter(k.tableFooterText())
 
 	// The create/clone form takes over the content area when active.
@@ -810,10 +854,6 @@ func (k *KafuiContentProvider) RenderContent(width, height int) string {
 	}
 
 	// Resource picker overlay takes over the content area (UI-8).
-	if k.resourcePickerMode {
-		return k.renderResourcePicker(tableWidth)
-	}
-
 	if k.error != nil {
 		return k.renderError()
 	}
@@ -971,42 +1011,15 @@ func (k *KafuiContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
 			return cmd
 		}
 
-		// Resource picker mode takes precedence over everything else (UI-8).
-		if k.resourcePickerMode {
-			switch msg.String() {
-			case "esc", "escape":
-				k.resourcePickerMode = false
-				k.resourcePickerInput = ""
-				return nil
-			case "enter":
-				return k.commitResourcePicker(k.resourcePickerInput)
-			case "tab":
-				if best := k.bestResourceMatch(k.resourcePickerInput); best != "" {
-					k.resourcePickerInput = best
-				}
-				return nil
-			case "backspace":
-				if len(k.resourcePickerInput) > 0 {
-					k.resourcePickerInput = k.resourcePickerInput[:len(k.resourcePickerInput)-1]
-				}
-				return nil
-			default:
-				if len(msg.Runes) > 0 {
-					k.resourcePickerInput += string(msg.Runes)
-				}
-				return nil
-			}
-		}
-
-		// Handle search mode first
+		// Text-entry precedence: while the filter is open every printable key is
+		// typed, so nothing bound in Normal mode fires.
 		if k.searchMode {
 			switch msg.String() {
-			case "escape":
+			case "esc":
 				k.searchMode = false
 				k.clearSearch()
 				return nil
 			case "enter":
-				// Confirm search and exit search mode
 				k.searchMode = false
 				return nil
 			case "backspace":
@@ -1016,7 +1029,6 @@ func (k *KafuiContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
 				}
 				return nil
 			default:
-				// Handle typing in search mode
 				if len(msg.Runes) > 0 {
 					k.currentFilter += string(msg.Runes)
 					k.handleSearch(k.currentFilter)
@@ -1025,155 +1037,101 @@ func (k *KafuiContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
 			}
 		}
 
-		// Handle normal mode keys
-		switch msg.String() {
-		case "/":
+		// Every remaining key resolves through the single binding registry.
+		// An unbound key does nothing rather than falling into a screen-local
+		// switch, which is what let the same keystroke mean two things.
+		action, bound := keys.Default.Resolve(keys.ScopeList, msg.String())
+		if !bound {
+			break
+		}
+		switch action {
+		case keys.ActionSearch:
 			k.searchMode = true
-			k.currentFilter = "" // Reset filter when starting search
+			k.currentFilter = ""
 			return nil
-		case ":":
-			// Open the resource picker (UI-8).
-			return func() tea.Msg {
-				return StartResourceSwitchingMsg{}
-			}
-		case "enter":
-			// Handle resource selection
+
+		case keys.ActionActivate:
 			return k.handleResourceSelection()
-		// Logical page navigation — handled here so bubble-table doesn't
-		// treat them as visual page changes within the current 50-item slice.
-		case "pgup", "left", "h":
+
+		// Logical page navigation — handled here so bubble-table doesn't treat
+		// these as visual page changes within the current 50-item slice.
+		case keys.ActionPageBack:
 			if k.pagination.PrevPage() {
 				k.updateTableForCurrentPageAndReset()
 				cmds = append(cmds, k.loadPageDetails())
 			}
 			return tea.Batch(cmds...)
-		case "pgdown", "right", "l":
+		case keys.ActionPageForward:
 			if k.pagination.NextPage() {
 				k.updateTableForCurrentPageAndReset()
 				cmds = append(cmds, k.loadPageDetails())
 			}
 			return tea.Batch(cmds...)
-		case "home", "g":
+		case keys.ActionFirst:
 			if !k.pagination.OnFirstPage() {
 				k.pagination.FirstPage()
 				k.updateTableForCurrentPageAndReset()
 				cmds = append(cmds, k.loadPageDetails())
 			}
 			return tea.Batch(cmds...)
-		case "end", "G":
+		case keys.ActionLast:
 			if !k.pagination.OnLastPage() {
 				k.pagination.LastPage()
 				k.updateTableForCurrentPageAndReset()
 				cmds = append(cmds, k.loadPageDetails())
 			}
 			return tea.Batch(cmds...)
-		default:
-			if key.Matches(msg, keybindings.DefaultMainKeyMap().Copy) {
-				return k.handleCopyRow()
-			}
-			if k.isBrokerResource() {
-				switch msg.String() {
-				case "s":
-					k.cycleBrokerSortColumn()
-					return nil
-				case "S":
-					k.toggleBrokerSortDir()
-					return nil
-				case "ctrl+e":
-					return k.exportBrokersCSV()
-				}
-			}
-			if k.isGroupResource() {
-				switch msg.String() {
-				case "s":
-					k.cycleGroupSortColumn()
-					return nil
-				case "S":
-					k.toggleGroupSortDir()
-					return nil
-				case "f":
-					k.cycleGroupStateFilter()
-					return nil
-				case "ctrl+d":
-					return k.deleteSelectedGroup()
-				case "ctrl+e":
-					return k.exportGroupsCSV()
-				}
-			}
+
+		case keys.ActionCopy:
+			return k.handleCopyRow()
+
+		case keys.ActionSort:
+			k.cycleSortColumn()
+			return nil
+		case keys.ActionSortReverse:
+			k.toggleSortDir()
+			return nil
+
+		case keys.ActionToggleInternal:
 			if k.isTopicResource() {
-				switch msg.String() {
-				case "s":
-					k.cycleTopicSortColumn()
-					return nil
-				case "S":
-					k.toggleTopicSortDir()
-					return nil
-				case "i":
-					return k.toggleHideInternal()
-				case "ctrl+e":
-					return k.exportTopicsCSV()
-				case "n":
-					return k.openCreateTopicForm()
-				case "ctrl+n":
-					return k.openCloneTopicForm()
-				case "ctrl+d":
-					return k.deleteSelectedTopics()
-				case "ctrl+r":
-					return k.recreateSelectedTopic()
-				case "ctrl+p":
-					return k.purgeSelectedTopics()
-				case " ":
-					k.toggleTopicSelection()
-					return nil
-				case "ctrl+a":
-					k.selectAllVisibleTopics()
-					return nil
-				case "esc":
-					if len(k.selected) > 0 {
-						k.clearTopicSelection()
-						return nil
-					}
-				}
+				return k.toggleHideInternal()
 			}
-			if k.isACLResource() {
-				switch msg.String() {
-				case "f":
-					return k.cycleACLResourceTypeFilter()
-				case "p":
-					return k.cycleACLPatternFilter()
-				case "n":
-					return k.openCreateACLForm()
-				case "ctrl+d":
-					return k.deleteSelectedACL()
-				case "ctrl+e":
-					return k.exportACLsCSV()
-				case "ctrl+i":
-					return k.openACLSyncForm()
-				}
-			}
+			return nil
+
+		case keys.ActionExport:
+			return k.exportCurrentResourceCSV()
+
+		case keys.ActionNew:
+			return k.createForCurrentResource()
+
+		case keys.ActionDelete:
+			return k.deleteForCurrentResource()
+
+		case keys.ActionEdit:
 			if k.isQuotaResource() {
-				switch msg.String() {
-				case "n":
-					return k.openQuotaForm(false)
-				case "e":
-					return k.openQuotaForm(true)
-				case "ctrl+d":
-					return k.deleteSelectedQuota()
-				}
+				return k.openQuotaForm(true)
 			}
-			if k.isConnectorResource() {
-				switch msg.String() {
-				case "n":
-					return k.openCreateConnectorForm()
-				case "ctrl+e":
-					return k.exportConnectorsCSV()
-				}
+			return nil
+
+		case keys.ActionToggleMark:
+			if k.isTopicResource() {
+				k.toggleTopicSelection()
 			}
-			if k.isConnectClusterResource() {
-				if msg.String() == "ctrl+e" {
-					return k.exportConnectClustersCSV()
-				}
+			return nil
+		case keys.ActionMarkAll:
+			if k.isTopicResource() {
+				k.selectAllVisibleTopics()
 			}
+			return nil
+
+		case keys.ActionCancel:
+			// The shell unwinds esc, but a live selection is this pane's own
+			// level to clear, so it is consumed here first (see Unwind).
+			if len(k.selected) > 0 {
+				k.clearTopicSelection()
+				return nil
+			}
+			return nil
 		}
 
 		// Delegate remaining keys (↑/↓ row navigation) to bubble-table
@@ -1231,10 +1189,8 @@ func (k *KafuiContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
 		}
 
 	case StartResourceSwitchingMsg:
-		// Open the capability-filtered resource picker (UI-8) instead of the
-		// old blind cycle.
-		k.resourcePickerMode = true
-		k.resourcePickerInput = ""
+		// Superseded by the shell command palette, which this page feeds via
+		// PaletteEntries. Kept as a message so existing senders still compile.
 		return nil
 
 	case TopicCountsLoadedMsg:
@@ -1405,46 +1361,101 @@ func (k *KafuiContentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd {
 		return k.handleSelectContext(msg)
 
 	case tea.MouseMsg:
-		// Scroll wheel navigates within the current page.
+		// Gesture vocabulary from the controls spec: the wheel moves the view
+		// and never the selection; a click selects; a click on the row that is
+		// already selected activates it. Right-click is the shell's — it opens
+		// the actions menu for whatever is under the pointer.
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
-			idx := k.resourcesTable.GetHighlightedRowIndex()
-			if idx > 0 {
-				k.resourcesTable = k.resourcesTable.WithHighlightedRow(idx - 1)
+			// The list is paginated to exactly what fits, so a page is the
+			// scroll unit. The cursor is not dragged along row by row.
+			if k.pagination.PrevPage() {
+				k.updateTableForCurrentPageAndReset()
+				cmds = append(cmds, k.loadPageDetails())
 			}
 		case tea.MouseButtonWheelDown:
-			activeItems := k.allItems
-			if k.isFiltered {
-				activeItems = k.filteredItems
+			if k.pagination.NextPage() {
+				k.updateTableForCurrentPageAndReset()
+				cmds = append(cmds, k.loadPageDetails())
 			}
-			pageItems := k.pagination.GetCurrentPageItems(activeItems)
-			idx := k.resourcesTable.GetHighlightedRowIndex()
-			if idx < len(pageItems)-1 {
-				k.resourcesTable = k.resourcesTable.WithHighlightedRow(idx + 1)
+		case tea.MouseButtonNone:
+			// Hover: the row under the pointer highlights, so what is clickable
+			// is discoverable without clicking.
+			if !core.IsHover(msg) {
+				break
 			}
+			if row, ok := k.rowAtMouse(msg); ok {
+				k.resourcesTable = k.resourcesTable.WithHighlightedRow(row)
+			}
+
 		case tea.MouseButtonLeft:
-			// Only handle clicks that land inside the table zone.
-			z := zone.Get("resource-table")
-			if z.InBounds(msg) {
-				_, relY := z.Pos(msg)
-				// The table renders: border + header + separator = 3 lines before first data row.
-				const headerLines = 3
-				pageLocalRow := relY - headerLines
-				if pageLocalRow >= 0 {
-					activeItems := k.allItems
-					if k.isFiltered {
-						activeItems = k.filteredItems
-					}
-					pageItems := k.pagination.GetCurrentPageItems(activeItems)
-					if pageLocalRow < len(pageItems) {
-						k.resourcesTable = k.resourcesTable.WithHighlightedRow(pageLocalRow)
-					}
-				}
+			if !core.IsLeftRelease(msg) {
+				break
 			}
+			// A click on the header row sorts by THAT column; clicking the
+			// active sort column again reverses it.
+			if relX, ok := k.clickedHeader(msg); ok {
+				resType := TopicResourceType
+				if k.currentResource != nil {
+					resType = k.currentResource.GetType()
+				}
+				if col, hit := columnAtX(createResourceTableColumns(resType), k.tableWidth, relX); hit {
+					k.setSortColumn(col)
+				}
+				return tea.Batch(cmds...)
+			}
+			row, ok := k.rowAtMouse(msg)
+			if !ok {
+				break
+			}
+			double := k.clicks.Click(msg)
+			if double || row == k.resourcesTable.GetHighlightedRowIndex() {
+				// Both gestures activate: a double click, and a click on the
+				// row that is already selected.
+				k.resourcesTable = k.resourcesTable.WithHighlightedRow(row)
+				return k.handleResourceSelection()
+			}
+			k.resourcesTable = k.resourcesTable.WithHighlightedRow(row)
 		}
 	}
 
 	return tea.Batch(cmds...)
+}
+
+// clickedHeader reports whether the pointer is on the table's header row, and
+// the X offset within the table so the column can be resolved.
+func (k *KafuiContentProvider) clickedHeader(msg tea.MouseMsg) (int, bool) {
+	z := zone.Get("resource-table")
+	if z == nil || !z.InBounds(msg) {
+		return 0, false
+	}
+	relX, relY := z.Pos(msg)
+	// Row 0 is the top border, row 1 the header labels.
+	return relX, relY == 1
+}
+
+// rowAtMouse maps a mouse position to a page-local row index, or reports false
+// when the pointer is not over a data row.
+func (k *KafuiContentProvider) rowAtMouse(msg tea.MouseMsg) (int, bool) {
+	z := zone.Get("resource-table")
+	if z == nil || !z.InBounds(msg) {
+		return 0, false
+	}
+	_, relY := z.Pos(msg)
+	// The table renders border + header + separator before the first data row.
+	const headerLines = 3
+	row := relY - headerLines
+	if row < 0 {
+		return 0, false
+	}
+	activeItems := k.allItems
+	if k.isFiltered {
+		activeItems = k.filteredItems
+	}
+	if row >= len(k.pagination.GetCurrentPageItems(activeItems)) {
+		return 0, false
+	}
+	return row, true
 }
 
 func (k *KafuiContentProvider) InitContent() tea.Cmd {
@@ -1499,7 +1510,7 @@ func (k *KafuiContentProvider) activeOverlayForm() *form.Form {
 // IsInputMode returns true when the search bar is active so that
 // ReusableApp suppresses app-level hotkeys that would otherwise steal keystrokes.
 func (k *KafuiContentProvider) IsInputMode() bool {
-	return k.searchMode || k.resourcePickerMode || k.showTopicForm || k.activeOverlayForm() != nil
+	return k.searchMode || k.showTopicForm || k.activeOverlayForm() != nil
 }
 
 // GetContentSize returns the estimated content size for scrollbar calculation
@@ -2403,47 +2414,6 @@ func (k *KafuiContentProvider) bestResourceMatch(query string) string {
 		return ""
 	}
 	return m[0].name
-}
-
-// commitResourcePicker resolves the input (typed name or the first suggestion),
-// switches to that capability-allowed resource, and closes the picker.
-func (k *KafuiContentProvider) commitResourcePicker(input string) tea.Cmd {
-	rt := k.parseResourceType(strings.TrimSpace(input))
-	if rt == -1 {
-		// Fall back to the first suggestion for the partial input.
-		if best := k.bestResourceMatch(input); best != "" {
-			rt = k.parseResourceType(best)
-		}
-	}
-	k.resourcePickerMode = false
-	k.resourcePickerInput = ""
-	if rt == -1 || !k.pickerCapabilityAllows(rt) {
-		return nil
-	}
-	k.switchResource(SwitchResourceMsg(rt))
-	return tea.Batch(k.loadCurrentResource(), k.breadcrumbCmd(), k.countSpinner.Tick)
-}
-
-// renderResourcePicker renders the picker input line and the capability-filtered
-// suggestion list.
-func (k *KafuiContentProvider) renderResourcePicker(width int) string {
-	promptStyle := k.styles.SearchStyle.Prompt
-	var b strings.Builder
-	b.WriteString(promptStyle.Render(": ") + k.resourcePickerInput + promptStyle.Render("█"))
-	b.WriteString("\n\n")
-	current := ResourceType(-1)
-	if k.currentResource != nil {
-		current = k.currentResource.GetType()
-	}
-	for _, c := range k.matchedResourceChoices(k.resourcePickerInput) {
-		if c.rt == current {
-			b.WriteString(k.styles.SearchStyle.Prompt.Render("› "+c.name) + "\n")
-		} else {
-			b.WriteString(k.styles.Muted.Render("  "+c.name) + "\n")
-		}
-	}
-	b.WriteString("\n" + k.styles.SearchStyle.Help.Render("Enter switch • Tab complete • Esc cancel"))
-	return b.String()
 }
 
 // handleSelectContext switches the active Kafka context and reloads the topic list.

@@ -9,7 +9,11 @@ Show
 
 Sleep 1500ms
 # Open the metrics page; let a couple of collection cycles fill the sparklines
-Ctrl+T
+Type ":"
+Sleep 800ms
+Type "metrics"
+Sleep 800ms
+Enter
 Sleep 5s
 Down@450ms 3
 Sleep 2s

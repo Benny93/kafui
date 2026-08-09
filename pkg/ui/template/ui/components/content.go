@@ -124,9 +124,9 @@ func (c *content) View() string {
 
 	// Size and render the content area
 	return style.
-		Width(c.width - 2).   // Account for border
-		Height(c.height - 2). // Account for border
-		MaxHeight(c.height - 2).
+		Width(c.width-2).   // Account for border
+		Height(c.height-2). // Account for border
+		MaxHeight(c.height-2).
 		Align(lipgloss.Top, lipgloss.Left).
 		Padding(1).
 		Render(content)

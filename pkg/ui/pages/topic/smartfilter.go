@@ -2,6 +2,7 @@ package topic
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -119,24 +120,28 @@ func (k *Keys) handleShowSavedFilters(model *Model) tea.Cmd {
 
 func (k *Keys) handleSavedFiltersKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	filters := shared.LoadPrefs().SavedFilters
-	switch msg.String() {
-	case "esc", "q":
+	action, bound := keys.Default.Resolve(keys.ScopeOverlay, msg.String())
+	if !bound {
+		return nil
+	}
+	switch action {
+	case keys.ActionCancel:
 		model.showSavedFilters = false
 		model.markRenderDirty()
 		return nil
-	case "up", "k":
+	case keys.ActionUp:
 		if model.savedFilterCursor > 0 {
 			model.savedFilterCursor--
 			model.markRenderDirty()
 		}
 		return nil
-	case "down", "j":
+	case keys.ActionDown:
 		if model.savedFilterCursor < len(filters)-1 {
 			model.savedFilterCursor++
 			model.markRenderDirty()
 		}
 		return nil
-	case "d":
+	case keys.ActionDelete:
 		// Delete the highlighted saved filter.
 		if model.savedFilterCursor >= 0 && model.savedFilterCursor < len(filters) {
 			p := shared.LoadPrefs()
@@ -148,7 +153,7 @@ func (k *Keys) handleSavedFiltersKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 			model.markRenderDirty()
 		}
 		return nil
-	case "enter":
+	case keys.ActionActivate:
 		// Apply the highlighted saved filter.
 		if model.savedFilterCursor >= 0 && model.savedFilterCursor < len(filters) {
 			model.showSavedFilters = false
@@ -191,9 +196,9 @@ func (m *Model) renderSavedFiltersOverlay(width int) string {
 	b.WriteString("\n\n")
 	filters := shared.LoadPrefs().SavedFilters
 	if len(filters) == 0 {
-		b.WriteString(muted.Render("No saved filters. In search, type ~<expr> then press ctrl+s to save."))
+		b.WriteString(muted.Render("No saved filters. In search, type ~<expr> then save it from the actions menu."))
 		b.WriteString("\n\n")
-		b.WriteString(muted.Render("esc: close"))
+		b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionCancel, "close")))
 		return b.String()
 	}
 	for i, f := range filters {
@@ -205,6 +210,6 @@ func (m *Model) renderSavedFiltersOverlay(width int) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(muted.Render("↑/↓: select • enter: apply • d: delete • esc: close"))
+	b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionUp, "select", keys.ActionActivate, "apply", keys.ActionDelete, "delete", keys.ActionCancel, "close")))
 	return b.String()
 }

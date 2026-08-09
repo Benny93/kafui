@@ -10,17 +10,20 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Keys handles key bindings for the topic page using centralized key definitions
+// Keys routes the topic screen's keys through the single binding registry.
+// The screen promotes exactly one action of its own (pause/resume); everything
+// that used to sit on an undiscoverable letter is now an actions-menu entry.
 type Keys struct {
-	bindings keys.TopicKeyMap
+	scope keys.Scope
 }
 
-// NewKeys creates a new Keys instance using centralized key bindings
+// NewKeys creates a new Keys instance bound to the topic scope.
 func NewKeys() *Keys {
-	return &Keys{
-		bindings: keys.DefaultKeyMap().Topic,
-	}
+	return &Keys{scope: keys.ScopeTopic}
 }
+
+// KeyScope reports the scope the shell resolves this page's keys against.
+func (k *Keys) KeyScope() keys.Scope { return k.scope }
 
 // HandleKey processes key events using centralized key bindings
 func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
@@ -66,94 +69,47 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return k.handleSavedFiltersKey(model, msg)
 	}
 
-	// Overlay-open and header-action keys (checked before the centralized
-	// bindings so single-character actions don't collide with them).
-	switch msg.String() {
-	case "C":
-		return k.handleShowGroups(model)
-	case "o":
-		return k.handleShowOverview(model)
-	case "s":
-		return k.handleShowSettings(model)
-	case "E":
-		return k.handleShowSettingsEdit(model)
-	case "t":
-		return k.handleShowAnalysis(model)
-	case "+":
-		return k.handleIncreasePartitionsDialog(model)
-	case "F":
-		return k.handleReplicationFactorDialog(model)
-	case "ctrl+p":
-		return k.handleClearAllMessages(model)
-	case "ctrl+r":
-		return k.handleRecreateTopic(model)
-	case "ctrl+d":
-		return k.handleDeleteTopic(model)
-	case "S":
-		return k.handleShowSeek(model)
-	case "#":
-		return k.handleShowPartitions(model)
-	case "P":
-		return k.handleShowProduce(model)
-	case "Y":
-		return k.handleReproduce(model)
-	case "L":
-		return k.handleShowSavedFilters(model)
-	case "X":
-		return k.handleShowProjections(model)
+	// Every key resolves through the registry. The twelve bare letters this
+	// screen used to claim (C o s E t + F S # P Y L X) are gone: they appeared
+	// in no help text, and several shadowed shell chords. They are now entries
+	// in the actions menu, which shows each one's name.
+	action, bound := keys.Default.Resolve(k.scope, msg.String())
+	if !bound {
+		return tea.Batch(cmds...)
 	}
 
-	// Handle navigation keys
-	switch {
-	case key.Matches(msg, k.bindings.Back):
-		return k.handleBack(model)
-	case key.Matches(msg, k.bindings.Quit):
-		return k.handleQuit(model)
-	case key.Matches(msg, k.bindings.Search):
+	switch action {
+	case keys.ActionSearch:
 		return k.handleSearch(model)
-	case key.Matches(msg, k.bindings.Pause):
+	case keys.ActionPause:
 		return k.handlePauseResume(model)
-	case key.Matches(msg, k.bindings.SwitchMode):
-		return k.handleSwitchMode(model)
-	case key.Matches(msg, k.bindings.Refresh):
+	case keys.ActionRefresh:
+		// One refresh concept. `r`, `R` and ctrl+r used to be three.
 		return k.handleRefresh(model)
-	case key.Matches(msg, k.bindings.Retry):
-		return k.handleRetry(model)
-	case key.Matches(msg, k.bindings.Select):
+	case keys.ActionActivate:
 		return k.handleSelect(model)
-	}
 
-	// Handle display option keys
-	switch {
-	case key.Matches(msg, k.bindings.Format):
+	case keys.ActionFormat:
 		return k.handleFormat(model)
-	case key.Matches(msg, k.bindings.Headers):
-		return k.handleHeaders(model)
-	case key.Matches(msg, k.bindings.Metadata):
+	case keys.ActionMetadata:
 		return k.handleMetadata(model)
-	}
 
-	// Handle scrolling keys
-	switch {
-	case key.Matches(msg, k.bindings.ScrollUp):
+	case keys.ActionUp:
 		return k.handleNavigation(model, "up")
-	case key.Matches(msg, k.bindings.ScrollDown):
+	case keys.ActionDown:
 		return k.handleNavigation(model, "down")
-	case key.Matches(msg, k.bindings.PageUp):
+	case keys.ActionPageBack:
 		return k.handleNavigation(model, "pageup")
-	case key.Matches(msg, k.bindings.PageDown):
+	case keys.ActionPageForward:
 		return k.handleNavigation(model, "pagedown")
-	case key.Matches(msg, k.bindings.GotoStart):
+	case keys.ActionFirst:
 		return k.handleNavigation(model, "home")
-	case key.Matches(msg, k.bindings.GotoEnd):
+	case keys.ActionLast:
 		return k.handleNavigation(model, "end")
-	}
 
-	// Handle message operation keys
-	switch {
-	case key.Matches(msg, k.bindings.CopyKey):
-		return k.handleCopyKey(model)
-	case key.Matches(msg, k.bindings.CopyValue):
+	case keys.ActionCopy:
+		// One copy key acting on the focused pane, rather than c for the key
+		// and v for the value.
 		return k.handleCopyValue(model)
 	}
 
@@ -188,8 +144,9 @@ func (k *Keys) handleSearchMode(model *Model, msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
-	// Ctrl+S saves the active smart filter (MSG-25).
-	if msg.String() == "ctrl+s" {
+	// Saving the active smart filter (MSG-25). It was ctrl+s, which is XOFF and
+	// can freeze the terminal; F2 is the save key on every other form.
+	if action, bound := keys.Default.Resolve(keys.ScopeTextEntry, msg.String()); bound && action == keys.ActionCommitSave {
 		return model.saveCurrentFilter()
 	}
 
@@ -376,45 +333,20 @@ func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
 	return nil
 }
 
-// GetKeyBindings returns the centralized key bindings for help display
+// GetKeyBindings returns this screen's bindings for the help overlay, read
+// from the registry so help cannot list a key the screen does not handle — the
+// previous list advertised twelve keys the help overlay never rendered.
 func (k *Keys) GetKeyBindings() []key.Binding {
-	return []key.Binding{
-		k.bindings.Search,
-		k.bindings.SwitchMode,
-		k.bindings.Back,
-		k.bindings.Quit,
-		k.bindings.Select,
-		k.bindings.Pause,
-		k.bindings.Refresh,
-		k.bindings.Retry,
-		k.bindings.ScrollUp,
-		k.bindings.ScrollDown,
-		k.bindings.GotoStart,
-		k.bindings.GotoEnd,
-		k.bindings.CopyKey,
-		k.bindings.CopyValue,
-		key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "overview")),
-		key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "settings")),
-		key.NewBinding(key.WithKeys("E"), key.WithHelp("E", "edit settings")),
-		key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "consumer groups")),
-		key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "statistics")),
-		key.NewBinding(key.WithKeys("+"), key.WithHelp("+", "add partitions")),
-		key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "replication factor")),
-		key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "clear messages")),
-		key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "recreate")),
-		key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "delete")),
-		key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "seek")),
-		key.NewBinding(key.WithKeys("#"), key.WithHelp("#", "partitions/serde")),
-		key.NewBinding(key.WithKeys("P"), key.WithHelp("P", "produce")),
-		key.NewBinding(key.WithKeys("Y"), key.WithHelp("Y", "reproduce")),
-		key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "saved filters")),
-		key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "projections")),
+	var out []key.Binding
+	for _, b := range keys.Default.InScope(k.scope) {
+		out = append(out, b.KeyBinding())
 	}
+	return out
 }
 
-// GetCentralizedKeyMap returns the centralized key map for footer display
-func GetCentralizedKeyMap() keys.TopicKeyMap {
-	return keys.DefaultKeyMap().Topic
+// GetCentralizedKeyMap returns the hint key map for the footer.
+func GetCentralizedKeyMap() keys.HintKeyMap {
+	return keys.Hints(keys.ScopeTopic)
 }
 
 // GetShortcuts returns formatted shortcut descriptions

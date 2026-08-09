@@ -16,6 +16,7 @@ import (
 	"github.com/Benny93/kafui/pkg/appconfig"
 	formpkg "github.com/Benny93/kafui/pkg/ui/components/form"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -132,12 +133,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.disabled {
 			return m, func() tea.Msg { return core.BackMsg{} }
 		}
-		switch msg.String() {
-		case "ctrl+v":
-			return m, m.runValidate()
-		case "ctrl+d":
-			if m.originalName != "" {
-				return m, m.confirmDelete()
+		// Validate is the registry's refresh/run action (r / F5). Deleting a
+		// cluster has no direct key at all — it is an actions-menu entry, since
+		// ctrl+d reads as end-of-input and the spec forbids binding it.
+		if action, bound := keys.Default.Resolve(keys.ScopeContent, msg.String()); bound {
+			if action == keys.ActionRefresh {
+				return m, m.runValidate()
 			}
 		}
 	}
@@ -231,7 +232,7 @@ func (m *Model) View() string {
 	var b strings.Builder
 	b.WriteString(s.Header.Render(title))
 	b.WriteString("\n")
-	b.WriteString(s.Muted.Render("ctrl+v validate • ctrl+d delete • enter submit • esc cancel"))
+	b.WriteString(s.Muted.Render(keys.Hint(keys.ScopeContent, keys.ActionRefresh, "validate", keys.ActionActivate, "submit", keys.ActionCancel, "cancel")))
 	b.WriteString("\n\n")
 	b.WriteString(m.form.View())
 	if m.notice != "" {

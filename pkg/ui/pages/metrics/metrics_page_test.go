@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	metricssvc "github.com/Benny93/kafui/pkg/metrics"
 	"github.com/Benny93/kafui/pkg/datasource/mock"
+	metricssvc "github.com/Benny93/kafui/pkg/metrics"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

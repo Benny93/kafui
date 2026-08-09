@@ -7,7 +7,26 @@ defects and gaps found while implementing and while recording the VHS demos.
 
 ---
 
-## 1. Tables overflow their pane and get wrapped by the enclosing box (HIGH)
+## 1. Tables overflow their pane and get wrapped by the enclosing box (FIXED)
+
+**Fixed (2026-08-07)** via option 1 below: the wide text columns in
+`createResourceTableColumns` (`pkg/ui/pages/main/providers.go`) are now
+`table.NewFlexColumn`, so `WithTargetWidth` both grows them to fill the pane on
+a wide terminal and shrinks/truncates them instead of overflowing on a narrow
+one. `RenderContent` also derives the Name-truncation budget from the column's
+actual flex width (`firstColumnWidth`) and calls `WithMinimumHeight` so short
+result sets fill the pane vertically instead of leaving a stub box. Verified
+with VHS at 1840px and at ~104 cols; regression test in `column_fit_test.go`.
+Two follow-ups were needed to make ~80 columns work: the fixed numeric columns
+were sized to their header + widest value (they held 4-12 spare characters
+each), and `RenderContent` now uses the inner content width the template hands
+it instead of `Layout.Main.Width - 2`, which over-estimated by the box border,
+padding and scrollbar column. `vhs/render-responsive.sh` records the demo at
+80/120/200 columns for the README.
+Still open: the per-page detail tables and `pkg/ui/components/datatable` use
+fixed columns and have the same latent issue.
+
+Original report follows.
 
 **Symptom.** In several feature GIFs the resource table's rows break onto a
 second line and the columns no longer line up (e.g. the ACLs view splits
@@ -62,6 +81,8 @@ page) since 8 columns rarely fit a terminal cleanly.
 table's fixed columns, and all GIFs were re-rendered with `vhs/render-all.sh`.
 This makes the demos correct but does **not** fix the underlying product bug —
 the table still overflows on a normal-width terminal. Item #1 above is the fix.
+Now that the columns flex, `_config.tape` can go back to a normal width/font;
+the GIFs need re-rendering with `vhs/render-all.sh` either way.
 
 **Related, fixed separately.** The ksqlDB query results table (a different
 widget, `charmbracelet/bubbles/table`, not evertras/bubble-table) had the same
@@ -71,7 +92,7 @@ of 8 chars with no cap on the total, so wide result sets (many columns)
 overflowed the pane regardless of how narrow it was. Fixed by budgeting column
 width against the pane width and bubbles/table's per-cell padding instead of an
 unconditional floor (`pkg/ui/pages/ksql/query_page.go`). This item (#1) — the
-main resource tables' fixed-column-sum overflow — is still open.
+main resource tables' fixed-column-sum overflow — is now fixed too.
 
 ---
 

@@ -3,6 +3,7 @@ package topic
 import (
 	"context"
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strings"
 	"time"
 
@@ -42,15 +43,19 @@ func (k *Keys) handleShowAnalysis(model *Model) tea.Cmd {
 
 // handleAnalysisKey handles keys while the analysis overlay is open.
 func (k *Keys) handleAnalysisKey(model *Model, msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "esc", "q":
+	action, bound := keys.Default.Resolve(keys.ScopeOverlay, msg.String())
+	if !bound {
+		return nil
+	}
+	switch action {
+	case keys.ActionCancel:
 		model.showAnalysis = false
 		model.markRenderDirty()
 		return nil
-	case "s", "enter":
+	case keys.ActionActivate:
 		// Start or restart analysis, guarded by a confirmation (full scan can be expensive).
 		return k.confirmStartAnalysis(model)
-	case "x":
+	case keys.ActionDelete:
 		// Cancel a running analysis.
 		if model.analysis != nil && model.analysis.State == api.AnalysisRunning {
 			ds := model.dataSource
@@ -135,7 +140,7 @@ func (m *Model) renderAnalysisOverlay(width int) string {
 		// Never analyzed.
 		b.WriteString(muted.Render("This topic has not been analysed yet."))
 		b.WriteString("\n\n")
-		b.WriteString(muted.Render("s: start analysis • esc: close"))
+		b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionActivate, "start analysis", keys.ActionCancel, "close")))
 	case a.State == api.AnalysisRunning:
 		p := a.Progress
 		b.WriteString(fmt.Sprintf("  Running… %.1f%%\n", p.Percentage()))
@@ -144,7 +149,7 @@ func (m *Model) renderAnalysisOverlay(width int) string {
 		}
 		b.WriteString(fmt.Sprintf("  Scanned:  %d messages, %s\n", p.MessagesScanned, shared.FormatBytes2dp(p.BytesScanned)))
 		b.WriteString("\n")
-		b.WriteString(muted.Render("x: cancel • esc: close"))
+		b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionDelete, "cancel", keys.ActionCancel, "close")))
 	case a.State == api.AnalysisFailed:
 		errStyle := lipgloss.NewStyle().Foreground(stylesPkg.Error).Bold(true)
 		b.WriteString(errStyle.Render("Analysis failed: " + a.Err))
@@ -154,7 +159,7 @@ func (m *Model) renderAnalysisOverlay(width int) string {
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(muted.Render("s: restart • esc: close"))
+		b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionActivate, "restart", keys.ActionCancel, "close")))
 	default: // completed
 		b.WriteString(m.renderAnalysisResult(a))
 	}
@@ -171,7 +176,7 @@ func (m *Model) renderAnalysisResult(a *api.TopicAnalysis) string {
 	if r.MessageCount == 0 {
 		b.WriteString(muted.Render("This topic appears to be empty (0 messages)."))
 		b.WriteString("\n\n")
-		b.WriteString(muted.Render("s: restart • esc: close"))
+		b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionActivate, "restart", keys.ActionCancel, "close")))
 		return b.String()
 	}
 	b.WriteString(fmt.Sprintf("  Messages:        %d\n", r.MessageCount))
@@ -202,7 +207,7 @@ func (m *Model) renderAnalysisResult(a *api.TopicAnalysis) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(muted.Render("s: restart • esc: close"))
+	b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionActivate, "restart", keys.ActionCancel, "close")))
 	return b.String()
 }
 

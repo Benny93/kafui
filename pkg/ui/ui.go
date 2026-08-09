@@ -8,6 +8,7 @@ import (
 	"github.com/Benny93/kafui/pkg/appconfig"
 	"github.com/Benny93/kafui/pkg/cluster"
 	"github.com/Benny93/kafui/pkg/metrics"
+	"github.com/Benny93/kafui/pkg/ui/components/menu"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/debug"
 	"github.com/Benny93/kafui/pkg/ui/dialog"
@@ -17,7 +18,6 @@ import (
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templatestyles "github.com/Benny93/kafui/pkg/ui/template/ui/styles"
 	"github.com/Benny93/kafui/pkg/version"
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
@@ -25,16 +25,20 @@ import (
 
 // Model represents the main application state
 type Model struct {
-	common          *core.Common     // Shared context (replaces direct dataSource)
-	Router          *router.Router   // Exported for testing
-	state           core.UIState     // Application state (replaces ShowHelp bool)
-	focusState      core.FocusState  // Focus state
-	HelpSystem      *core.HelpSystem // Help system
-	FocusManager    *core.FocusManager
-	confirm         *dialog.Confirm // Root-owned confirmation modal
-	notifier        *notify.Manager // Shell-owned notification/status line
-	width           int
-	height          int
+	common       *core.Common     // Shared context (replaces direct dataSource)
+	Router       *router.Router   // Exported for testing
+	state        core.UIState     // Application state (replaces ShowHelp bool)
+	focusState   core.FocusState  // Focus state
+	HelpSystem   *core.HelpSystem // Help system
+	FocusManager *core.FocusManager
+	confirm      *dialog.Confirm // Root-owned confirmation modal
+	notifier     *notify.Manager // Shell-owned notification/status line
+	palette      *menu.Model     // Command palette (`:` / ctrl+p)
+	actions      *menu.Model     // Contextual actions menu (`a` / right-click)
+	mouseOn      bool            // Mouse reporting; off releases the terminal's own selection
+	keycast      debug.Keycast   // Debug builds: the recent-keys strip
+	width        int
+	height       int
 }
 
 // initialModelWithRouter creates a new Model using the router-based navigation
@@ -55,6 +59,9 @@ func initialModelWithRouter(dataSource api.KafkaDataSource) *Model {
 		FocusManager: focusManager,
 		confirm:      dialog.New(common.Styles),
 		notifier:     notify.New(common.Styles),
+		palette:      menu.New(),
+		actions:      menu.New(),
+		mouseOn:      true,
 	}
 }
 
@@ -224,6 +231,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Shell-internal messages raised by palette entries.
+	if cmd, handled := m.handleControlMsg(msg); handled {
+		return m, cmd
+	}
+
 	// Periodic collection tick: run a cycle and reschedule.
 	if _, ok := msg.(cluster.CollectTickMsg); ok {
 		if c := m.common.Collector; c != nil {
@@ -248,7 +260,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.applyThemeMode(cfg.UI.Theme)
 		}
 		return m, core.NewNotification(core.StatusInfo, "Config changed",
-			"reloaded settings — press ctrl+g to review the active cluster")
+			"reloaded settings — open the command palette to review the active cluster")
 	}
 
 	// Sidebar toggle: persist the user's explicit choice (UI-15). The template
@@ -268,10 +280,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if _, isMouse := msg.(tea.MouseMsg); isMouse {
+		if cmd, consumed := m.palette.Update(msg); consumed {
+			return m, cmd
+		}
+		if cmd, consumed := m.actions.Update(msg); consumed {
+			return m, cmd
+		}
+		// Right-click anywhere opens the actions menu for the focused item.
+		if mm, ok := msg.(tea.MouseMsg); ok && mm.Button == tea.MouseButtonRight && mm.Action == tea.MouseActionRelease {
+			m.openActions()
+			return m, nil
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.palette.SetDimensions(msg.Width, msg.Height)
+		m.actions.SetDimensions(msg.Width, msg.Height)
 		// Update layout through Common context
 		m.common.UpdateLayout(msg.Width, msg.Height)
 		// Propagate dimensions to router and help system
@@ -280,92 +308,103 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.confirm.SetDimensions(msg.Width, msg.Height)
 
 	case tea.KeyMsg:
-		// Handle debug screenshot keys first (before focus manager)
-		switch msg.String() {
-		case "f3":
-			return m, m.takeScreenshot(false)
-		case "shift+f3":
-			return m, m.takeScreenshot(true)
+		// Record the press and what the registry made of it, before any layer
+		// consumes it. An unbound key and a bound key whose action did nothing
+		// look identical on screen; this tells them apart.
+		if debug.KeycastEnabled {
+			m.recordKey(msg)
 		}
 
-		// Handle focus management first (if not in help mode)
+		// Overlay precedence: while the palette or the actions menu is open it
+		// owns every key, so nothing reaches the screen behind it.
+		if cmd, consumed := m.palette.Update(msg); consumed {
+			return m, cmd
+		}
+		if cmd, consumed := m.actions.Update(msg); consumed {
+			return m, cmd
+		}
+
+		// Debug-build keys resolve before focus handling so they work anywhere.
+		if a, ok := keys.Default.Resolve(keys.ScopeDebug, msg.String()); ok {
+			switch a {
+			case keys.ActionScreenshot:
+				return m, m.takeScreenshot(false)
+			case keys.ActionScreenshotRedacted:
+				return m, m.takeScreenshot(true)
+			}
+		}
+
+		// Focus cycling (tab / shift+tab) when not in help.
 		if m.state != core.StateHelp {
 			if cmd := m.FocusManager.HandleKeyMsg(msg); cmd != nil {
 				return m, cmd
 			}
 		}
 
-		// A page (e.g. the ksqlDB query editor) may hold a focused text input.
-		// While it does, single-key global hotkeys must not fire so typed
-		// characters (including 'q', 'C', 'K', 'T', '?') reach the input; esc
-		// (back) and ctrl+c (quit) still work as escapes.
-		inputMode := false
-		if p, ok := m.Router.GetCurrentPage().(interface{ IsInputMode() bool }); ok {
-			inputMode = p.IsInputMode()
+		// Text-entry precedence: a page holding a focused field consumes every
+		// key but the emergency exit, so typed characters are never actions.
+		if m.inInputMode() {
+			// ctrl+c is the single binding that escapes text entry, and the
+			// text-entry context is where that exception is declared.
+			if a, ok := keys.Default.Resolve(keys.ScopeTextEntry, msg.String()); ok && a == keys.ActionForceQuit {
+				return m, tea.Quit
+			}
+			break
 		}
 
-		// Handle global key bindings
-		switch {
-		case key.Matches(msg, keys.GlobalKeys.ToggleTheme) && !inputMode:
-			// Cycle theme auto → dark → light and sync both style systems (UI-3).
-			next := nextThemeMode(m.currentThemeMode())
-			m.applyThemeMode(next)
-			return m, m.persistThemeCmd(next)
-		case key.Matches(msg, keys.GlobalKeys.Help) && !inputMode:
-			// Toggle help state
+		// The shell claims a fixed handful of global actions and forwards
+		// everything else. It never does both.
+		action, bound := keys.Default.Resolve(keys.ScopeDebug, msg.String())
+		if !bound {
+			break
+		}
+		switch action {
+		case keys.ActionHelp:
 			if m.state == core.StateHelp {
 				m.setState(core.StateNormal)
 				m.HelpSystem.Hide()
 			} else {
 				m.setState(core.StateHelp)
 				m.HelpSystem.Toggle()
-				// Update help system with current page
 				if currentPage := m.Router.GetCurrentPage(); currentPage != nil {
 					m.HelpSystem.SetCurrentPage(currentPage)
 				}
 			}
 			return m, nil
-		case key.Matches(msg, keys.GlobalKeys.Clusters) && !inputMode:
-			if m.state != core.StateHelp {
-				return m, m.Router.NavigateTo("clusters", nil)
-			}
-		case key.Matches(msg, keys.GlobalKeys.Ksql) && !inputMode:
-			// ponytail: ksqlDB is reached via this global key (consistent with the
-			// clusters 'C' and appconfig 'ctrl+g' dashboards, which likewise have no
-			// sidebar item). A capability-gated main-page sidebar entry is deferred.
-			// Gated on the active cluster advertising ksqlDB support.
-			if m.state != core.StateHelp && m.common.HasCapability(api.CapKsqlDB) {
-				return m, m.Router.NavigateTo("ksql", nil)
-			}
-		case key.Matches(msg, keys.GlobalKeys.Metrics) && !inputMode:
-			// Metrics are always available (offset-delta collection needs no
-			// config), so this global key is not capability-gated.
-			if m.state != core.StateHelp {
-				return m, m.Router.NavigateTo("metrics", nil)
-			}
-		case key.Matches(msg, keys.GlobalKeys.Config) && !inputMode:
-			if m.state != core.StateHelp {
-				return m, m.Router.NavigateTo("appconfig", nil)
-			}
-		case key.Matches(msg, keys.GlobalKeys.ClusterWizard) && !inputMode:
-			// Cluster setup wizard, gated on the dynamic-config toggle (AC-12).
-			if m.state != core.StateHelp {
-				if m.common.AppConfig != nil && m.common.AppConfig.DynamicConfigEnabled {
-					return m, m.Router.NavigateTo("cluster_form", nil)
-				}
-				return m, core.NewNotification(core.StatusInfo, "Cluster wizard disabled",
-					"set dynamicConfigEnabled: true in the kafui config to enable in-app cluster editing")
-			}
-		case key.Matches(msg, keys.GlobalKeys.Quit) && (!inputMode || msg.String() == "ctrl+c"):
-			return m, tea.Quit
-		case key.Matches(msg, keys.GlobalKeys.Back):
-			if m.state != core.StateHelp {
-				return m, m.Router.Back()
-			}
-			// Close help if it's open
-			m.setState(core.StateNormal)
-			m.HelpSystem.Hide()
+
+		case keys.ActionPalette:
+			m.openPalette()
 			return m, nil
+
+		case keys.ActionActionsMenu:
+			m.openActions()
+			return m, nil
+
+		case keys.ActionForceQuit:
+			return m, tea.Quit
+
+		case keys.ActionQuit:
+			if m.state == core.StateHelp {
+				m.setState(core.StateNormal)
+				m.HelpSystem.Hide()
+				return m, nil
+			}
+			return m, tea.Quit
+
+		case keys.ActionCancel:
+			// Esc unwinds exactly one level. Help first, then whatever the page
+			// has open, and only then the parent screen.
+			if m.state == core.StateHelp {
+				m.setState(core.StateNormal)
+				m.HelpSystem.Hide()
+				return m, nil
+			}
+			if u, ok := m.Router.GetCurrentPage().(core.Unwinder); ok {
+				if cmd, consumed := u.Unwind(); consumed {
+					return m, cmd
+				}
+			}
+			return m, m.Router.Back()
 		}
 	}
 
@@ -389,7 +428,22 @@ func (m *Model) View() string {
 	if !m.notifier.Empty() {
 		content = lipgloss.JoinVertical(lipgloss.Left, content, m.notifier.View(m.width))
 	}
-	// Overlay the confirmation modal when active.
+	// Debug builds show the recent-keys strip above the status line.
+	if v := m.keycast.View(); v != "" {
+		content = lipgloss.JoinVertical(lipgloss.Left, content, v)
+	}
+	// Overlay the discovery surfaces, then the confirmation modal, so a
+	// confirmation raised from a menu entry renders above the menu.
+	// Centre the overlays over the CONTENT pane, not the whole terminal: a box
+	// centred on the terminal reaches into the sidebar and covers its border
+	// and bullet column, which reads as corrupted text rather than as something
+	// drawn on top.
+	if v := m.palette.View(); v != "" {
+		content = composite(content, v, m.contentWidth(), m.height)
+	}
+	if v := m.actions.View(); v != "" {
+		content = composite(content, v, m.contentWidth(), m.height)
+	}
 	if m.confirm.Active() {
 		content = m.confirm.View(content)
 	}
@@ -472,5 +526,8 @@ func NewUIModelWithCommon(common *core.Common) *Model {
 		FocusManager: focusManager,
 		confirm:      dialog.New(common.Styles),
 		notifier:     notify.New(common.Styles),
+		palette:      menu.New(),
+		actions:      menu.New(),
+		mouseOn:      true,
 	}
 }

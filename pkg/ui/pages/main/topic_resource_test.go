@@ -70,15 +70,29 @@ func loadTopicsInto(t *testing.T, k *KafuiContentProvider) {
 }
 
 // highlightTopic points the table at the topic with the given name.
+// highlightTopic selects a topic by name. The table highlights a PAGE-LOCAL
+// row, so the index has to be taken within the current page, not within
+// allItems — with enough topics to paginate, an allItems index points at the
+// wrong row or past the end, and the test silently toggled nothing.
 func highlightTopic(t *testing.T, k *KafuiContentProvider, name string) {
 	t.Helper()
-	for i, item := range k.allItems {
-		if k.getItemID(item) == name {
-			k.resourcesTable = k.resourcesTable.WithHighlightedRow(i)
-			return
-		}
+	items := k.allItems
+	if k.isFiltered {
+		items = k.filteredItems
 	}
-	t.Fatalf("topic %q not found in allItems", name)
+	for page := 0; ; page++ {
+		for row, item := range k.pagination.GetCurrentPageItems(items) {
+			if k.getItemID(item) == name {
+				k.resourcesTable = k.resourcesTable.WithHighlightedRow(row)
+				return
+			}
+		}
+		if !k.pagination.NextPage() {
+			break
+		}
+		k.updateTableForCurrentPageAndReset()
+	}
+	t.Fatalf("topic %q not found on any page", name)
 }
 
 // --- TP-14: row rendering ---

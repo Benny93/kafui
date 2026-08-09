@@ -15,7 +15,7 @@ VERSION_PKG := github.com/Benny93/kafui/pkg/version
 LDFLAGS := -w -s -X $(VERSION_PKG).Version=$(VERSION) -X $(VERSION_PKG).Commit=$(COMMIT) -X $(VERSION_PKG).BuildTime=$(BUILD_TIME)
 
 .PHONY: build install run run-mock release release-snapshot test test-short test-integration test-benchmarks run-kafka stop-kafka docker-build
-.PHONY: vhs vhs-install vhs-clean
+.PHONY: vhs vhs-install vhs-clean demos demos-responsive
 .PHONY: build-debug run-debug test-debug
 
 
@@ -91,6 +91,14 @@ vhs-install:
 vhs: vhs-install
 	@echo "Running VHS topic navigation test..."
 	go test ./test/vhs/... -run TestVHS_TopicNavigation -v
+
+demos: vhs-install
+	@echo "Rendering the README feature demos (vhs/gifs/*.gif)"
+	./vhs/render-all.sh
+
+demos-responsive: vhs-install
+	@echo "Rendering the responsive-layout demos at 80/120/200 columns"
+	./vhs/render-responsive.sh
 
 vhs-clean:
 	@echo "Cleaning VHS output..."

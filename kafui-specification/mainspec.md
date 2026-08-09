@@ -29,6 +29,7 @@ The application is a terminal tui interactive terminal that connects to one or m
 | 11 | Application Configuration | [application-config/spec.md](application-config/spec.md) | Declarative cluster configuration, runtime config viewing/editing through the UI (setup wizard), connectivity validation before apply, file uploads, secret redaction, app info/health endpoints |
 | 12 | Metrics & Monitoring | [metrics-and-monitoring/spec.md](metrics-and-monitoring/spec.md) | Broker metrics collection (JMX/Prometheus scraping), cluster-level aggregation, Prometheus exposition endpoints, time-series graphs with predefined parameterized queries |
 | 13 | Web UI Shell & Cross-Cutting UX | [ui-shell/spec.md](ui-shell/spec.md) | SPA serving, navigation tree with feature-conditional sections, deep-linkable routing, theming, notifications, confirmation dialogs, shared table/editor patterns, version notice |
+| 14 | Controls — Keyboard & Mouse | [controls/spec.md](controls/spec.md) | Input model and modes, the single binding registry, the reserved global key vocabulary, command palette and contextual actions menu, complete key map and mouse map, discoverability requirements, current-state audit and migration map |
 
 ## Cross-Cutting Constraints
 
@@ -39,8 +40,9 @@ These apply across all feature areas and take precedence over silence in individ
 - **Read-only mode**: When a cluster is configured read-only, all state-changing operations against it SHALL be rejected (features 1, 11).
 - **Feature-conditional UI**: Sections for optional integrations (schema registry, connect, ksqlDB, ACL support, metrics) SHALL appear only when the corresponding integration is configured/supported for the selected cluster (features 1, 13).
 - **Secret handling**: Credentials and other secrets SHALL never be returned in plain text by any endpoint that displays configuration (features 7, 11).
-- **Destructive-action confirmation**: The UI SHALL require explicit confirmation before any destructive operation (feature 13).
+- **Destructive-action confirmation**: The UI SHALL require explicit confirmation before any destructive operation (features 13, 14).
+- **One control vocabulary**: Every user action in every feature SHALL be expressed with the bindings and gestures defined in feature 14. A feature SHALL NOT introduce its own key or mouse convention, and SHALL NOT make any action reachable only by an undocumented key or only by the mouse.
 
 ## How to Use This Specification
 
-Implementation agents SHOULD implement features in roughly the index order: 1, 11 and 13 form the foundation (connectivity, configuration, shell); 2–5 are the core Kafka workflows; 6–9 are optional integrations; 10 and 12 span the whole application and can be layered in once their touch points exist.
+Implementation agents SHOULD implement features in roughly the index order: 1, 11 and 13 form the foundation (connectivity, configuration, shell); 2–5 are the core Kafka workflows; 6–9 are optional integrations; 10 and 12 span the whole application and can be layered in once their touch points exist. Feature 14 constrains every other feature's user interface and SHOULD be established alongside 13, before the screens that would otherwise invent their own bindings.

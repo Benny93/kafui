@@ -40,7 +40,7 @@ func NewModelWithCommon(common *core.Common) *Model {
 		ShowSidebarByDefault: false,
 	}
 	m.reusableApp = templateui.NewReusableApp(config)
-	m.reusableApp.SetKeyMap(keys.DefaultKeyMap().Detail)
+	m.reusableApp.SetKeyMap(keys.Hints(keys.ScopeContent))
 
 	return m
 }
@@ -260,15 +260,13 @@ func (m *Model) GetTitle() string {
 
 // GetHelp implements the Page interface.
 func (m *Model) GetHelp() []key.Binding {
-	km := keys.DefaultKeyMap().Detail
-	return []key.Binding{km.ScrollUp, km.ScrollDown, km.PageUp, km.PageDown, km.Back, km.Quit}
+	return keys.Help(keys.ScopeContent)
 }
 
 // HandleNavigation implements the Page interface.
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "esc" {
-		return m, func() tea.Msg { return core.BackMsg{} }
-	}
+	// esc is a reserved global: the shell unwinds one level and navigates back,
+	// so the page must not also handle it.
 	return m, nil
 }
 

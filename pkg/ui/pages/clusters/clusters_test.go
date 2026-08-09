@@ -148,8 +148,10 @@ func TestOfflineFilterToggle(t *testing.T) {
 	// Full list initially.
 	assert.Len(t, m.visibleClusters(), 2)
 
-	// Toggle offline-only via key 'o'.
-	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	// Toggle offline-only. The filter is the registry's "show a different
+	// subset" key, `i`, which is what it means on every other list; it used to
+	// be a bare `o`.
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
 	assert.True(t, m.offlineOnly)
 	vis := m.visibleClusters()
 	require.Len(t, vis, 1)
@@ -160,7 +162,7 @@ func TestOfflineFilterToggle(t *testing.T) {
 	assert.NotContains(t, out, "up-cluster")
 
 	// Toggle back restores the full list.
-	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
 	assert.False(t, m.offlineOnly)
 	assert.Len(t, m.visibleClusters(), 2)
 }
@@ -171,10 +173,12 @@ func TestHelpListsOfflineBinding(t *testing.T) {
 	for _, b := range m.GetHelp() {
 		keys = append(keys, b.Help().Key)
 	}
-	assert.Contains(t, keys, "o")
+	assert.Contains(t, keys, "i", "the offline filter")
 	assert.Contains(t, keys, "enter")
 	assert.Contains(t, keys, "r")
-	assert.Contains(t, keys, "v")
+	// Validate has no direct key: it is an actions-menu entry, since `v` was a
+	// bare letter that appeared in no shared help.
+	assert.NotContains(t, keys, "v")
 }
 
 func TestPageIdentity(t *testing.T) {

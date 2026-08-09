@@ -2,6 +2,7 @@ package schemadetail
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -52,21 +53,25 @@ func (m *Model) confirmSetCompatCmd(level api.CompatibilityLevel) tea.Cmd {
 
 func handlePickerKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 	levels := api.CompatibilityLevels()
-	switch msg.String() {
-	case "up", "k":
+	action, bound := keys.Default.Resolve(keys.ScopeOverlay, msg.String())
+	if !bound {
+		return nil
+	}
+	switch action {
+	case keys.ActionUp:
 		if m.pickerCursor > 0 {
 			m.pickerCursor--
 		}
-	case "down", "j":
+	case keys.ActionDown:
 		if m.pickerCursor < len(levels)-1 {
 			m.pickerCursor++
 		}
-	case "enter":
+	case keys.ActionActivate:
 		if level := m.SelectedLevel(); level != "" {
 			m.mode = modeContent
 			return m.confirmSetCompatCmd(level)
 		}
-	case "esc", "backspace":
+	case keys.ActionCancel:
 		m.mode = modeContent
 	}
 	return nil
@@ -95,6 +100,6 @@ func renderPicker(m *Model, width, height int) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render("↑/↓ select · enter set (confirm) · esc cancel"))
+	b.WriteString(mutedStyle.Render(keys.Hint(keys.ScopeOverlay, keys.ActionUp, "select", keys.ActionActivate, "set (confirm)", keys.ActionCancel, "cancel")))
 	return b.String()
 }

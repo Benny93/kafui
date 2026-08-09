@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -18,49 +18,6 @@ import (
 )
 
 // ─── Key bindings ────────────────────────────────────────────────────────────
-
-// SchemaDetailKeyMap implements help.KeyMap for the schema detail page.
-type SchemaDetailKeyMap struct {
-	Versions      key.Binding
-	Diff          key.Binding
-	Register      key.Binding
-	CheckCompat   key.Binding
-	Compatibility key.Binding
-	DeleteSubject key.Binding
-	DeleteVersion key.Binding
-	Topic         key.Binding
-	Copy          key.Binding
-	Back          key.Binding
-	Quit          key.Binding
-}
-
-func NewSchemaDetailKeyMap() SchemaDetailKeyMap {
-	return SchemaDetailKeyMap{
-		Versions:      key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "versions")),
-		Diff:          key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
-		Register:      key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "register version")),
-		CheckCompat:   key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "check compat")),
-		Compatibility: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "compatibility")),
-		DeleteSubject: key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "delete subject")),
-		DeleteVersion: key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete version")),
-		Topic:         key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "open topic")),
-		Copy:          key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy")),
-		Back:          key.NewBinding(key.WithKeys("esc", "backspace"), key.WithHelp("esc", "back")),
-		Quit:          key.NewBinding(key.WithKeys("ctrl+c", "q"), key.WithHelp("q", "quit")),
-	}
-}
-
-func (k SchemaDetailKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Versions, k.Diff, k.Register, k.Compatibility, k.Back, k.Quit}
-}
-
-func (k SchemaDetailKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Versions, k.Diff, k.Register, k.CheckCompat},
-		{k.Compatibility, k.DeleteSubject, k.DeleteVersion, k.Topic},
-		{k.Copy, k.Back, k.Quit},
-	}
-}
 
 // ─── Content Provider ────────────────────────────────────────────────────────
 
@@ -152,30 +109,24 @@ func handleContentKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 		_, cmd := m.viewer.Update(msg)
 		return cmd
 	}
-	switch msg.String() {
-	case "y":
-		m.CopyToClipboard()
-		return nil
-	case "v":
-		return m.enterVersions()
-	case "d":
-		return m.enterDiffFromContent()
-	case "r":
-		m.enterRegister()
-		return nil
-	case "c":
-		m.enterPicker()
-		return nil
-	case "ctrl+k":
-		m.enterRegister()
-		return m.checkOnlyCmd()
-	case "D":
-		return m.confirmDeleteSubjectCmd()
-	default:
-		// Delegate scrolling / in-content search to the viewer.
-		_, cmd := m.viewer.Update(msg)
-		return cmd
+	// Resolved through the single binding registry. y v d r c ctrl+k D used to
+	// be seven bare keys with no help text, three of which (d, r, c) meant
+	// something different from the same key on every other screen.
+	if action, bound := keys.Default.Resolve(keys.ScopeContent, msg.String()); bound {
+		switch action {
+		case keys.ActionCopy:
+			m.CopyToClipboard()
+			return nil
+		case keys.ActionNew:
+			m.enterRegister()
+			return nil
+		case keys.ActionDelete:
+			return m.confirmDeleteSubjectCmd()
+		}
 	}
+	// Everything else — scrolling, in-content search, wrap — is the viewer's.
+	_, cmd := m.viewer.Update(msg)
+	return cmd
 }
 
 func (p *SchemaDetailContentProvider) InitContent() tea.Cmd {

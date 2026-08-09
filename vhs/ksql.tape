@@ -9,7 +9,11 @@ Show
 
 Sleep 1500ms
 # Open the ksqlDB overview
-Type "K"
+Type ":"
+Sleep 800ms
+Type "ksqlDB"
+Sleep 800ms
+Enter
 Sleep 3s
 # Switch Tables / Streams tab
 Tab

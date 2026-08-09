@@ -3,6 +3,7 @@ package consumergroup
 import (
 	"context"
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"sort"
 	"strconv"
 	"strings"
@@ -163,7 +164,8 @@ func (f *resetForm) Update(msg tea.Msg) (tea.Cmd, bool) {
 			f.togglePart()
 			return nil, true
 		}
-	case "a":
+	case "ctrl+a":
+		// Was a bare `a`, which is the actions-menu key everywhere else.
 		if f.focus == focusPartitions {
 			f.toggleAll()
 			return nil, true
@@ -353,7 +355,7 @@ func (f *resetForm) View() string {
 	b.WriteString(sel(focusMode, "Reset type: < "+string(f.currentMode())+" >"))
 	b.WriteString("\n\n")
 
-	b.WriteString(sel(focusPartitions, "Partitions (space: toggle, a: all):"))
+	b.WriteString(sel(focusPartitions, "Partitions ("+keys.Default.KeyFor(keys.ActionToggleMark)+" toggle, "+keys.Default.KeyFor(keys.ActionMarkAll)+" all):"))
 	b.WriteString("\n")
 	parts := f.currentParts()
 	for i, p := range parts {
@@ -394,7 +396,7 @@ func (f *resetForm) View() string {
 		b.WriteString(lipgloss.NewStyle().Foreground(stylesPkg.Error).Render(f.errMsg))
 		b.WriteString("\n")
 	}
-	b.WriteString(muted.Render("tab/↑↓: move • ←/→: change • esc: cancel"))
+	b.WriteString(muted.Render(keys.Hint(keys.ScopeListContent, keys.ActionFocusNext, "move", keys.ActionPageBack, "change", keys.ActionCancel, "cancel")))
 	return b.String()
 }
 

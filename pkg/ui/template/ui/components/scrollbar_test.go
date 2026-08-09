@@ -33,10 +33,10 @@ func TestScrollbar_ThumbSize(t *testing.T) {
 	height := 20
 	contentSize := 100
 	viewportSize := 20
-	
+
 	scrollbar := Scrollbar(height, contentSize, viewportSize, 0)
 	lines := strings.Split(scrollbar, "\n")
-	
+
 	// Count thumb characters (should be different from track)
 	// The thumb should be at least 1 character
 	if len(lines) != height {
@@ -48,12 +48,12 @@ func TestScrollbar_ScrollPosition(t *testing.T) {
 	height := 20
 	contentSize := 100
 	viewportSize := 20
-	
+
 	// Test scrollbar at different positions
 	scrollbarTop := Scrollbar(height, contentSize, viewportSize, 0)
 	scrollbarMiddle := Scrollbar(height, contentSize, viewportSize, 40)
 	scrollbarBottom := Scrollbar(height, contentSize, viewportSize, 80)
-	
+
 	// Verify all scrollbars are rendered
 	if scrollbarTop == "" {
 		t.Error("Expected scrollbar at top position")
@@ -71,12 +71,12 @@ func TestScrollbar_MinThumbSize(t *testing.T) {
 	height := 10
 	contentSize := 1000
 	viewportSize := 10
-	
+
 	scrollbar := Scrollbar(height, contentSize, viewportSize, 0)
 	if scrollbar == "" {
 		t.Error("Expected scrollbar with minimum thumb size")
 	}
-	
+
 	lines := strings.Split(scrollbar, "\n")
 	hasThumb := false
 	for _, line := range lines {
@@ -85,7 +85,7 @@ func TestScrollbar_MinThumbSize(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if !hasThumb {
 		t.Error("Scrollbar should have at least one thumb character")
 	}

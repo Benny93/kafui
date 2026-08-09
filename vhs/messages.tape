@@ -14,7 +14,7 @@ Sleep 800ms
 Enter
 Sleep 1s
 # Ensure live tailing is running, then watch messages stream in.
-Space
+Type "p"
 Sleep 5s
 Down@350ms 4
 Sleep 1s

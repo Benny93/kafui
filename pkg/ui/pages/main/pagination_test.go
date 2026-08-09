@@ -8,11 +8,11 @@ import (
 
 func TestResourcePaginationModel_SetTotalItems(t *testing.T) {
 	tests := []struct {
-		name           string
-		total          int
-		perPage        int
-		expectedPages  int
-		expectedPage   int
+		name          string
+		total         int
+		perPage       int
+		expectedPages int
+		expectedPage  int
 	}{
 		{"zero items", 0, 50, 0, 0},
 		{"exactly one page", 50, 50, 1, 0},

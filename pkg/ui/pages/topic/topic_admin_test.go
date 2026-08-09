@@ -129,10 +129,10 @@ func TestDiffConfigChanges(t *testing.T) {
 		{Name: "max.message.bytes", Value: "1048576", Default: "1048576"},
 	}
 	values := map[string]string{
-		"cleanup.policy":    "delete",     // unchanged
-		"retention.ms":      "1000",       // changed
-		"max.message.bytes": "1048576",    // unchanged
-		"min.insync.replicas": "",         // new empty custom → excluded
+		"cleanup.policy":      "delete",  // unchanged
+		"retention.ms":        "1000",    // changed
+		"max.message.bytes":   "1048576", // unchanged
+		"min.insync.replicas": "",        // new empty custom → excluded
 	}
 	changes := diffConfigChanges(loaded, values)
 	require.Len(t, changes, 1, "only the changed entry is submitted")
@@ -247,7 +247,9 @@ func TestPerPartitionPurgePassesHighlightedID(t *testing.T) {
 	m.showOverview = true
 	m.overview = &api.TopicDetails{Partitions: []api.PartitionInfo{{ID: 0}, {ID: 1}, {ID: 2}}}
 	m.partitionCursor = 2
-	cmd := m.keys.handleOverviewKey(m, keyMsg("x"))
+	// Per-partition purge is the overlay's delete action (`d`); `x` was a bare
+	// letter that appeared in no help text.
+	cmd := m.keys.handleOverviewKey(m, keyMsg("d"))
 	cm := run(cmd).(core.ShowConfirmMsg)
 	run(cm.OnConfirm)
 	require.Len(t, spy.purgeCalls, 1)

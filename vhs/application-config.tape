@@ -9,7 +9,11 @@ Show
 
 Sleep 1500ms
 # Open the effective configuration view (redacted secrets, build info, clusters)
-Ctrl+G
+Type ":"
+Sleep 800ms
+Type "application config"
+Sleep 800ms
+Enter
 Sleep 3s
 # Scroll through the config document
 Down@250ms 8

@@ -140,12 +140,12 @@ type ConsumptionState struct {
 
 // MessageFilter represents filtering options for messages
 type MessageFilter struct {
-	Query         string
+	Query           string
 	PartitionFilter *int32
-	OffsetRange   *OffsetRange
-	TimeRange     *TimeRange
-	KeyPattern    string
-	ValuePattern  string
+	OffsetRange     *OffsetRange
+	TimeRange       *TimeRange
+	KeyPattern      string
+	ValuePattern    string
 }
 
 // OffsetRange represents a range of offsets
@@ -162,12 +162,12 @@ type TimeRange struct {
 
 // ConsumptionConfig represents configuration for message consumption
 type ConsumptionConfig struct {
-	Topic      string
-	Partition  int32
-	Offset     int64
-	Follow     bool
+	Topic       string
+	Partition   int32
+	Offset      int64
+	Follow      bool
 	MaxMessages int
-	Timeout    time.Duration
+	Timeout     time.Duration
 }
 
 // MessageDisplayFormat represents how messages should be displayed
@@ -204,20 +204,20 @@ type ErrorContext struct {
 
 // RetryPolicy defines retry behavior
 type RetryPolicy struct {
-	MaxRetries      int
-	InitialDelay    time.Duration
-	MaxDelay        time.Duration
-	BackoffFactor   float64
+	MaxRetries        int
+	InitialDelay      time.Duration
+	MaxDelay          time.Duration
+	BackoffFactor     float64
 	EnableExponential bool
 }
 
 // DefaultRetryPolicy returns a sensible default retry policy
 func DefaultRetryPolicy() RetryPolicy {
 	return RetryPolicy{
-		MaxRetries:      3,
-		InitialDelay:    time.Second * 2,
-		MaxDelay:        time.Second * 30,
-		BackoffFactor:   2.0,
+		MaxRetries:        3,
+		InitialDelay:      time.Second * 2,
+		MaxDelay:          time.Second * 30,
+		BackoffFactor:     2.0,
 		EnableExponential: true,
 	}
 }

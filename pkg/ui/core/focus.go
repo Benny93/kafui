@@ -236,9 +236,9 @@ func (fm *FocusManager) HandleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	}
 	
 	switch {
-	case key.Matches(msg, keys.GlobalKeys.NextPage): // Tab
+	case key.Matches(msg, keys.BindingFor(keys.ActionFocusNext)): // Tab
 		return fm.FocusNext()
-	case key.Matches(msg, keys.GlobalKeys.PrevPage): // Shift+Tab
+	case key.Matches(msg, keys.BindingFor(keys.ActionFocusPrev)): // Shift+Tab
 		return fm.FocusPrevious()
 	}
 	

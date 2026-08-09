@@ -2,6 +2,7 @@ package schemadetail
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -48,28 +49,33 @@ func (m *Model) SelectedVersion() int {
 
 func handleVersionsKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 	dv := m.displayVersions()
-	switch msg.String() {
-	case "up", "k":
+	action, bound := keys.Default.Resolve(keys.ScopeOverlay, msg.String())
+	if !bound {
+		return nil
+	}
+	switch action {
+	case keys.ActionUp:
 		if m.versionCursor > 0 {
 			m.versionCursor--
 		}
-	case "down", "j":
+	case keys.ActionDown:
 		if m.versionCursor < len(dv)-1 {
 			m.versionCursor++
 		}
-	case "enter":
+	case keys.ActionActivate:
 		if v := m.SelectedVersion(); v > 0 {
 			return m.selectVersion(dv[m.versionCursor])
 		}
-	case "d":
+	case keys.ActionEdit:
+		// Diffing is the "look at it another way" action for a version.
 		if len(m.versions) >= 2 {
 			return m.enterDiff(m.SelectedVersion(), m.latestVersion())
 		}
-	case "x":
+	case keys.ActionDelete:
 		if v := m.SelectedVersion(); v > 0 {
 			return m.confirmDeleteVersionCmd(v)
 		}
-	case "esc", "backspace":
+	case keys.ActionCancel:
 		m.mode = modeContent
 	}
 	return nil
@@ -123,6 +129,6 @@ func renderVersionList(m *Model, width, height int) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render("↑/↓ select · enter view · d diff vs latest · x delete version · esc back"))
+	b.WriteString(mutedStyle.Render(keys.Hint(keys.ScopeOverlay, keys.ActionUp, "select", keys.ActionActivate, "view", keys.ActionEdit, "diff vs latest", keys.ActionDelete, "delete version", keys.ActionCancel, "back")))
 	return b.String()
 }

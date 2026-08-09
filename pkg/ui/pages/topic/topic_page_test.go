@@ -217,11 +217,11 @@ func (m *MockDataSource) CreateConnector(connect, name string, config map[string
 func (m *MockDataSource) UpdateConnectorConfig(connect, name string, config map[string]string) (api.Connector, error) {
 	return api.Connector{}, nil
 }
-func (m *MockDataSource) DeleteConnector(connect, name string) error            { return nil }
-func (m *MockDataSource) PauseConnector(connect, name string) error             { return nil }
-func (m *MockDataSource) ResumeConnector(connect, name string) error            { return nil }
-func (m *MockDataSource) StopConnector(connect, name string) error              { return nil }
-func (m *MockDataSource) RestartConnector(connect, name string) error           { return nil }
+func (m *MockDataSource) DeleteConnector(connect, name string) error  { return nil }
+func (m *MockDataSource) PauseConnector(connect, name string) error   { return nil }
+func (m *MockDataSource) ResumeConnector(connect, name string) error  { return nil }
+func (m *MockDataSource) StopConnector(connect, name string) error    { return nil }
+func (m *MockDataSource) RestartConnector(connect, name string) error { return nil }
 func (m *MockDataSource) RestartConnectorTask(connect, name string, taskID int) error {
 	return nil
 }

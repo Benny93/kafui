@@ -9,15 +9,19 @@ Show
 
 Sleep 1500ms
 # Open the cluster overview dashboard
-Type "C"
+Type ":"
+Sleep 800ms
+Type "cluster dashboard"
+Sleep 800ms
+Enter
 Sleep 3s
 # Navigate the cluster rows
 Down@450ms 2
 Sleep 1500ms
 # Toggle the offline-only filter
-Type "o"
+Type "i"
 Sleep 1500ms
-Type "o"
+Type "i"
 Sleep 1500ms
 
 Hide

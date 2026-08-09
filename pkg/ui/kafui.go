@@ -14,10 +14,11 @@ import (
 	"github.com/Benny93/kafui/pkg/datasource/kafds"
 	"github.com/Benny93/kafui/pkg/datasource/mock"
 	"github.com/Benny93/kafui/pkg/metrics"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/router"
 	"github.com/Benny93/kafui/pkg/ui/shared"
-	zone "github.com/lrstanley/bubblezone"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // openUIFunc is a variable that holds the OpenUI function, allowing it to be mocked in tests
@@ -144,6 +145,21 @@ func OpenUI(dataSource api.KafkaDataSource, appCfg appconfig.Config, gate *authz
 	common.Gate = gate
 	common.Identity = identity
 	common.ApplyAppConfig(appCfg)
+
+	// Install the user's key-binding overrides. Rejected overrides are reported
+	// and dropped — the application starts on the defaults rather than refusing
+	// to run because one line of config was wrong.
+	if len(appCfg.Keybindings) > 0 {
+		overrides := make([]keys.Override, 0, len(appCfg.Keybindings))
+		for _, o := range appCfg.Keybindings {
+			overrides = append(overrides, keys.Override{Action: o.Action, Keys: o.Keys})
+		}
+		registry, problems := keys.ApplyOverrides(overrides)
+		keys.SetDefault(registry)
+		for _, p := range problems {
+			log.Printf("keybinding override rejected: %v", p)
+		}
+	}
 	// Resolve and apply the theme to BOTH style systems (UI-3): "auto" uses
 	// terminal-background detection; the template chrome follows the selection.
 	model.applyThemeMode(appCfg.UI.Theme)

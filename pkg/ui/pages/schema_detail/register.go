@@ -3,6 +3,7 @@ package schemadetail
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/ui/components/editor"
@@ -85,13 +86,15 @@ func handleRegisterKey(m *Model, msg tea.KeyMsg) tea.Cmd {
 		m.mode = modeContent
 		m.editor = nil
 		return nil
-	case "ctrl+s":
+	case "f2":
+		// ctrl+s used to submit here. It is XOFF and can freeze the terminal.
 		text := m.editor.Value()
 		if reason := m.validateRegister(text); reason != "" {
 			return core.NewNotification(core.StatusWarning, "Register schema", reason)
 		}
 		return m.checkThenRegisterCmd(text)
-	case "ctrl+k":
+	case "f5":
+		// The registry's run action: check compatibility without registering.
 		return m.checkOnlyCmd()
 	default:
 		if m.editor != nil {
@@ -142,6 +145,6 @@ func renderRegister(m *Model, width, height int) string {
 		m.editor.SetDimensions(width, height-3)
 		body = m.editor.View()
 	}
-	hint := mutedStyle.Render("ctrl+s check & register · ctrl+k check only · esc cancel")
+	hint := mutedStyle.Render(keys.Hint(keys.ScopeTextEntry, keys.ActionCommitSave, "check & register", keys.ActionRefresh, "check only", keys.ActionCancel, "cancel"))
 	return strings.Join([]string{header, body, hint}, "\n")
 }

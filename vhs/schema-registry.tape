@@ -14,7 +14,10 @@ Sleep 1s
 Enter
 Sleep 2500ms
 # Browse versions
-Type "v"
+# Versions is an actions-menu entry now
+Type "a"
+Sleep 1200ms
+Type "b"
 Sleep 2500ms
 Escape
 Sleep 1200ms

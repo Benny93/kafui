@@ -1,53 +1,16 @@
 package ksql
 
-import "github.com/charmbracelet/bubbles/key"
+import "github.com/Benny93/kafui/pkg/ui/keys"
 
-// overviewKeys are the ksqlDB overview page bindings.
-type overviewKeys struct {
-	NextTab key.Binding
-	Sort    key.Binding
-	Query   key.Binding
-	Seed    key.Binding
-	Retry   key.Binding
-	Back    key.Binding
-}
+// The ksqlDB pages used to carry their own key maps — a second registry that
+// could, and did, disagree with the global one (ctrl+d for "delete property"
+// while ctrl+d also meant delete and toggled the debug overlay; ctrl+r for
+// "clear results" while ctrl+r refreshed the sidebar). Both pages now resolve
+// through the single registry.
 
-func defaultOverviewKeys() overviewKeys {
-	return overviewKeys{
-		NextTab: key.NewBinding(key.WithKeys("tab", "left", "right"), key.WithHelp("tab", "switch tab")),
-		Sort:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
-		Query:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "query editor")),
-		Seed:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "query selected")),
-		Retry:   key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "retry")),
-		Back:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-	}
-}
+// overviewScope is the key scope of the ksqlDB overview page.
+func overviewScope() keys.Scope { return keys.ScopeList }
 
-// queryKeys are the ksqlDB query editor page bindings.
-//
-// Terminals cannot distinguish Cmd+Enter and even Ctrl+Enter is unreliable
-// (kitty-protocol dependent), so execute is bound to Ctrl+Enter with a
-// documented Ctrl+X fallback that every terminal delivers.
-type queryKeys struct {
-	Execute   key.Binding
-	Clear     key.Binding
-	Abort     key.Binding
-	ClearRes  key.Binding
-	FocusNext key.Binding
-	AddProp   key.Binding
-	DelProp   key.Binding
-	Back      key.Binding
-}
-
-func defaultQueryKeys() queryKeys {
-	return queryKeys{
-		Execute:   key.NewBinding(key.WithKeys("ctrl+@", "ctrl+x"), key.WithHelp("ctrl+x", "execute")),
-		Clear:     key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "clear editor")),
-		Abort:     key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "abort/back")),
-		ClearRes:  key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "clear results")),
-		FocusNext: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next field")),
-		AddProp:   key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "add property")),
-		DelProp:   key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "delete property")),
-		Back:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-	}
-}
+// queryScope is the key scope of the query editor. It is a text-entry context:
+// every printable key is typed, and only F5 (run), tab, esc and ctrl+c act.
+func queryScope() keys.Scope { return keys.ScopeTextEntry }

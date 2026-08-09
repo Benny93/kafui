@@ -13,8 +13,8 @@ in [`vhs/`](./vhs) and are rendered with [VHS](https://github.com/charmbracelet/
 ### Cluster management & dashboard
 
 Multi-cluster overview with health status, version, broker/partition counts, an
-offline-only filter, on-demand refresh (`r`), and connection validation (`v`).
-Open it from anywhere with `C`.
+offline-only filter, on-demand refresh (`r`), an offline-only toggle (`i`), and
+connection validation from the actions menu. Reach it from anywhere with `:`.
 
 ![Cluster management & dashboard](vhs/gifs/cluster-management.gif)
 
@@ -77,8 +77,8 @@ Streams and tables overview and an interactive query editor that streams
 
 ACL bindings with pattern types, resource/pattern filters, and create /
 convenience forms (custom, or consumer/producer/stream expansion), plus CSV
-export & declarative sync. A sibling client-quotas resource (`:quotas`) views
-and edits quota entities.
+export & declarative sync. A sibling client-quotas resource (`:` then "quotas")
+views and edits quota entities.
 
 ![ACLs & client quotas](vhs/gifs/acls-and-quotas.gif)
 
@@ -86,7 +86,7 @@ and edits quota entities.
 
 Live message/throughput rates with unicode sparklines from an in-process
 history, an optional Prometheus query/graph surface, and an opt-in Prometheus
-exposition endpoint (`--metrics-listen`). Open it with `ctrl+t`.
+exposition endpoint (`--metrics-listen`). Reach it with `:`.
 
 ![Metrics & monitoring](vhs/gifs/metrics-and-monitoring.gif)
 
@@ -101,18 +101,63 @@ at the datasource boundary, a JSONL audit log, and an effective-permissions
 ### Application configuration
 
 A read-only view of the effective, merged configuration with secrets redacted,
-build info, and per-cluster details (`ctrl+g`). A setup wizard (`ctrl+w`, gated
-on `dynamicConfigEnabled`) adds, edits, and validates clusters.
+build info, and per-cluster details. A setup wizard (gated on
+`dynamicConfigEnabled`) adds, edits, and validates clusters. Both are reached
+with `:`.
 
 ![Application configuration](vhs/gifs/application-config.gif)
 
 ### UI shell & cross-cutting UX
 
-A consistent shell across every page: full help overlay (`?`), auto/dark/light
-theming (`T`), a capability-filtered resource picker (`:`), confirmation
-dialogs, notifications, deep-linking, and error pages.
+A consistent shell across every page: full help overlay (`?`), a contextual
+hint bar whose entries are clickable, auto/dark/light theming, confirmation
+dialogs, notifications, deep-linking, and error pages. One key vocabulary
+throughout — see [the controls spec](kafui-specification/controls/spec.md).
 
 ![UI shell](vhs/gifs/ui-shell.gif)
+
+### Command palette
+
+`:` opens a palette listing every destination and every application-level
+command, found by typing part of its name. It replaces the per-screen jump keys
+the app used to have, and it teaches the direct shortcuts by showing each
+entry's key beside it. Commands the active cluster or your permissions do not
+allow stay listed but disabled, with the reason — so you learn the feature
+exists rather than wondering where it went.
+
+![Command palette](vhs/gifs/command-palette.gif)
+
+The companion surface is `a` (or right-click), which opens the same style of
+menu for whatever row is selected: everything you can do to it, each with its
+key and a one-letter mnemonic.
+
+### Scales to your terminal
+
+Tables flex to whatever width they get: the text columns grow to fill a wide
+pane and truncate rather than wrap when you shrink it, so the same views stay
+usable from an 80-column split all the way up to a full-screen terminal. The
+same run is recorded below at three sizes.
+
+<details>
+<summary><b>~80 columns</b> — a split pane</summary>
+
+![Responsive layout at 80 columns](vhs/gifs/responsive-narrow.gif)
+
+</details>
+<details>
+<summary><b>~120 columns</b> — a typical window</summary>
+
+![Responsive layout at 120 columns](vhs/gifs/responsive-medium.gif)
+
+</details>
+<details open>
+<summary><b>~200 columns</b> — full screen</summary>
+
+![Responsive layout at 200 columns](vhs/gifs/responsive-wide.gif)
+
+</details>
+
+Re-record with `./vhs/render-responsive.sh`.
 
 ## Usage
 

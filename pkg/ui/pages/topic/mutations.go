@@ -2,6 +2,7 @@ package topic
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strconv"
 	"strings"
 
@@ -243,6 +244,6 @@ func (m *Model) renderMutationOverlay(width int) string {
 		b.WriteString(m.mutationForm.View())
 	}
 	b.WriteString("\n")
-	b.WriteString(muted.Render("enter: submit • esc: cancel"))
+	b.WriteString(muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionActivate, "submit", keys.ActionCancel, "cancel")))
 	return b.String()
 }

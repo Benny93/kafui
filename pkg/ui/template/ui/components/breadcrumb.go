@@ -1,8 +1,15 @@
 package components
 
 import (
+	"fmt"
+
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 )
+
+// BreadcrumbZoneID is the bubblezone id of the nth breadcrumb segment.
+func BreadcrumbZoneID(i int) string { return fmt.Sprintf("breadcrumb-%d", i) }
 
 // Breadcrumb represents a breadcrumb navigation component
 type Breadcrumb struct {
@@ -38,6 +45,17 @@ func (b *Breadcrumb) HasItems() bool {
 	return len(b.items) > 0
 }
 
+// ClickedSegment reports which breadcrumb segment a mouse event landed on, or
+// -1 when the event is elsewhere.
+func (b *Breadcrumb) ClickedSegment(msg tea.MouseMsg) int {
+	for i := range b.items {
+		if z := zone.Get(BreadcrumbZoneID(i)); z != nil && z.InBounds(msg) {
+			return i
+		}
+	}
+	return -1
+}
+
 // View renders the breadcrumb component in a status bar style
 func (b *Breadcrumb) View() string {
 	if len(b.items) == 0 {
@@ -65,8 +83,10 @@ func (b *Breadcrumb) View() string {
 	var renderedItems []string
 	for i, item := range b.items {
 		style := styles[i%len(styles)]
-		// Last item gets a more prominent bold style if we want, but let's stick to nuggets
-		renderedItems = append(renderedItems, style.Render(item))
+		// Each segment is a click target: clicking an ancestor walks back to it,
+		// which is the mouse equivalent of pressing esc that many times.
+		renderedItems = append(renderedItems,
+			mark(BreadcrumbZoneID(i), style.Render(item)))
 	}
 
 	// Join items with a bit of space but no separator, or maybe a subtle one
@@ -83,3 +103,6 @@ func (b *Breadcrumb) View() string {
 
 	return statusBarStyle.Render(content)
 }
+
+// Depth reports how many segments the trail has.
+func (b *Breadcrumb) Depth() int { return len(b.items) }

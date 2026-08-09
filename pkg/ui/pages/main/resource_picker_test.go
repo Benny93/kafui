@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Benny93/kafui/pkg/datasource/mock"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -14,57 +15,50 @@ func newPickerProvider(t *testing.T) *KafuiContentProvider {
 	return NewKafuiContentProvider(ds)
 }
 
-func TestResourcePicker_OpenAndCancel(t *testing.T) {
-	k := newPickerProvider(t)
-	k.HandleContentUpdate(StartResourceSwitchingMsg{})
-	if !k.resourcePickerMode {
-		t.Fatal("expected picker to open on StartResourceSwitchingMsg")
+// The bespoke `:` resource picker is superseded by the shell's command palette.
+// This screen exports the resource vocabulary; the SHELL turns it into palette
+// entries, so switching resource works from every screen rather than only from
+// the list you are already on.
+func TestPaletteResourcesCoverEveryResource(t *testing.T) {
+	names := map[string]bool{}
+	for _, rt := range PaletteResources() {
+		names[rt.String()] = true
 	}
-	if !k.IsInputMode() {
-		t.Fatal("picker should count as input mode")
-	}
-	// Esc cancels.
-	k.HandleContentUpdate(tea.KeyMsg{Type: tea.KeyEsc})
-	if k.resourcePickerMode {
-		t.Fatal("expected picker closed after esc")
+	for _, want := range []string{"topics", "consumer-groups", "brokers", "acls", "quotas", "schemas"} {
+		if !names[want] {
+			t.Errorf("the palette is missing a destination for %q", want)
+		}
 	}
 }
 
-func TestResourcePicker_SuggestionFilter(t *testing.T) {
+func TestResourceChoiceFilter(t *testing.T) {
 	k := newPickerProvider(t)
 	all := k.matchedResourceChoices("")
 	if len(all) == 0 {
-		t.Fatal("expected non-empty resource choices")
+		t.Fatal("expected resource choices")
 	}
-	m := k.matchedResourceChoices("cons")
-	if len(m) != 1 || m[0].rt != ConsumerGroupResourceType {
-		t.Fatalf("expected only consumer-groups to match 'cons', got %v", m)
-	}
-}
-
-func TestResourcePicker_EnterSwitches(t *testing.T) {
-	k := newPickerProvider(t)
-	k.switchResource(SwitchResourceMsg(TopicResourceType))
-	k.HandleContentUpdate(StartResourceSwitchingMsg{})
-	// Type a partial name and confirm; picker resolves the first match.
-	for _, r := range "consumer-groups" {
-		k.HandleContentUpdate(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-	k.HandleContentUpdate(tea.KeyMsg{Type: tea.KeyEnter})
-	if k.resourcePickerMode {
-		t.Fatal("expected picker closed after enter")
-	}
-	if k.currentResource.GetType() != ConsumerGroupResourceType {
-		t.Fatalf("expected switch to consumer-groups, got %v", k.currentResource.GetType())
+	if got := k.matchedResourceChoices("top"); len(got) == 0 || len(got) >= len(all) {
+		t.Fatalf("expected 'top' to narrow %d choices, got %d", len(all), len(got))
 	}
 }
 
-func TestResourcePicker_TabComplete(t *testing.T) {
+// The screen must not treat `:` itself as input any more — the palette is the
+// shell's overlay, so the page stays in Normal mode while it is open.
+func TestColonIsNoLongerPageInputMode(t *testing.T) {
 	k := newPickerProvider(t)
-	k.HandleContentUpdate(StartResourceSwitchingMsg{})
-	k.resourcePickerInput = "top"
-	k.HandleContentUpdate(tea.KeyMsg{Type: tea.KeyTab})
-	if k.resourcePickerInput != "topics" {
-		t.Fatalf("expected tab to complete to 'topics', got %q", k.resourcePickerInput)
+	k.HandleContentUpdate(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(":")})
+	if k.IsInputMode() {
+		t.Fatal("the page must not enter input mode for the palette key")
+	}
+}
+
+// Regression for the defect the controls spec was written against: a key that
+// is not in the registry must do nothing rather than fall into a screen-local
+// switch. `t` used to toggle the sidebar and open topic analysis at once.
+func TestUnboundKeysAreInert(t *testing.T) {
+	for _, k := range []string{"t", "T", "C", "K", "v", "z"} {
+		if _, bound := keys.Default.Resolve(keys.ScopeList, k); bound {
+			t.Errorf("key %q should not be bound on a list screen", k)
+		}
 	}
 }

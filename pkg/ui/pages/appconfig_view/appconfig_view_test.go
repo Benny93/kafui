@@ -147,10 +147,9 @@ func TestModel_PageInterface(t *testing.T) {
 	assert.Nil(t, m.OnFocus())
 	assert.Nil(t, m.OnBlur())
 
-	// esc triggers a back navigation command.
+	// esc is a reserved global: the shell unwinds one level and navigates back,
+	// so the page must not also emit a BackMsg for it.
 	page, cmd := m.HandleNavigation(tea.KeyMsg{Type: tea.KeyEsc})
 	assert.Equal(t, m, page)
-	require.NotNil(t, cmd)
-	_, isBack := cmd().(core.BackMsg)
-	assert.True(t, isBack)
+	assert.Nil(t, cmd, "esc is the shell's to handle")
 }

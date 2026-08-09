@@ -2,6 +2,7 @@ package topic
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -146,7 +147,10 @@ func (h *Handlers) handleEditConfigLoaded(model *Model, msg EditConfigLoadedMsg)
 // handleEditFormKey routes keys to the edit form while it is open.
 func (k *Keys) handleEditFormKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	if model.settingsForm == nil {
-		if msg.String() == "esc" || msg.String() == "q" {
+		// esc only. `q` closed the form, so a config value containing a q was
+		// impossible to type.
+		if action, bound := keys.Default.Resolve(keys.ScopeTextEntry, msg.String()); bound &&
+			action == keys.ActionCancel {
 			model.showSettingsEdit = false
 			model.markRenderDirty()
 		}
@@ -200,6 +204,6 @@ func (m *Model) renderEditOverlay(width int) string {
 	}
 	b.WriteString(m.settingsForm.View())
 	b.WriteString("\n")
-	b.WriteString(muted.Render("tab: next field • enter: submit/next • esc: cancel"))
+	b.WriteString(muted.Render(keys.Hint(keys.ScopeTextEntry, keys.ActionFocusNext, "next field", keys.ActionCommit, "submit/next", keys.ActionCancel, "cancel")))
 	return b.String()
 }

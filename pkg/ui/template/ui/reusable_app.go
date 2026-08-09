@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/components"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/styles"
@@ -98,6 +99,13 @@ func NewDefaultApp() *ReusableApp {
 	return NewReusableApp(config)
 }
 
+// scope is the key scope the shell resolves against. Screen-local actions are
+// resolved by the screen itself; the shell only claims the handful of
+// application-level actions it owns, and forwards everything else.
+func (a *ReusableApp) scope() keys.Scope {
+	return keys.ScopeDebug // debug + global: the shell's own vocabulary
+}
+
 func (a *ReusableApp) Init() tea.Cmd {
 	return tea.Batch(
 		a.header.Init(),
@@ -130,40 +138,69 @@ func (a *ReusableApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, a.updateSidebarSize())
 		cmds = append(cmds, a.footer.SetSize(a.width, 1)) // Footer height is 1
 
+	case tea.MouseMsg:
+		// Chrome click targets. Each one synthesises the key press its hint
+		// advertises, so a click and its keystroke take exactly the same path
+		// and can never drift apart.
+		if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionRelease {
+			if b, ok := a.footer.ClickedHint(msg); ok {
+				if kk := b.Keys(); len(kk) > 0 {
+					return a, synthesizeKey(kk[0])
+				}
+			}
+			if n := a.breadcrumb.ClickedSegment(msg); n >= 0 {
+				// Clicking an ancestor segment walks back to it: one BackMsg
+				// per level between here and there.
+				if depth := a.breadcrumb.Depth() - 1 - n; depth > 0 {
+					return a, backNTimes(depth)
+				}
+			}
+		}
+
 	case core.BreadcrumbUpdateMsg:
 		a.breadcrumb.SetItems(msg.Items)
 		return a, tea.Batch(a.updateContentSize(), a.updateSidebarSize())
 
 	case tea.KeyMsg:
-		// When the content area has an active text input (e.g. search bar), suppress
-		// all app-level hotkeys so every keystroke reaches the input unmodified.
-		// ctrl+c is always allowed as an emergency exit.
+		// Controls spec, key routing precedence: text entry beats everything but
+		// the emergency exit, and the shell HANDLES a key or FORWARDS it, never
+		// both. Falling through used to mean ctrl+d toggled the debug overlay and
+		// deleted the selected row in the same keystroke.
 		if msg.String() != "ctrl+c" && a.content.IsInputMode() {
 			break
 		}
-		switch msg.String() {
-		case "ctrl+c", "q":
+		action, bound := keys.Default.Resolve(a.scope(), msg.String())
+		if !bound {
+			break
+		}
+		switch action {
+		case keys.ActionForceQuit, keys.ActionQuit:
 			return a, tea.Quit
-		case "ctrl+s", "t":
-			// Only allow sidebar toggle in normal/big modes
+
+		case keys.ActionSidebar:
+			// Only meaningful in normal/big modes; in compact modes the sidebar
+			// has no room, so the key is inert rather than silently broken.
 			if a.sizeMode >= styles.SizeModeNormal {
 				a.showSidebar = !a.showSidebar
-				cmds = append(cmds, a.updateContentSize())
-				cmds = append(cmds, a.updateSidebarSize())
-				// Persist the user's explicit choice (UI-15); the shell handles it.
 				visible := a.showSidebar
-				cmds = append(cmds, func() tea.Msg { return core.SidebarToggledMsg{Visible: visible} })
+				return a, tea.Batch(
+					a.updateContentSize(),
+					a.updateSidebarSize(),
+					func() tea.Msg { return core.SidebarToggledMsg{Visible: visible} },
+				)
 			}
-		case "ctrl+r":
-			if refreshable, ok := a.sidebar.(components.Refreshable); ok {
-				cmds = append(cmds, refreshable.Refresh())
-			}
-		case "ctrl+d":
+			return a, nil
+
+		case keys.ActionDebugOverlay:
 			a.showDebug = !a.showDebug
-		case "?":
+			return a, nil
+
+		case keys.ActionHelp:
 			a.showHelp = !a.showHelp
 			a.footer.ToggleShowAll()
+			return a, nil
 		}
+		// Every other bound action belongs to the screen; fall through to it.
 	}
 
 	// Update components
@@ -335,4 +372,54 @@ func (a *ReusableApp) SetKeyMap(keyMap help.KeyMap) {
 func (a *ReusableApp) ToggleHelp() {
 	a.showHelp = !a.showHelp
 	a.footer.ToggleShowAll()
+}
+
+// synthesizeKey turns a registry key name back into a KeyMsg so that clicking a
+// hint is indistinguishable from pressing it.
+func synthesizeKey(name string) tea.Cmd {
+	return func() tea.Msg {
+		switch name {
+		case "enter":
+			return tea.KeyMsg{Type: tea.KeyEnter}
+		case "esc":
+			return tea.KeyMsg{Type: tea.KeyEsc}
+		case "tab":
+			return tea.KeyMsg{Type: tea.KeyTab}
+		case "shift+tab":
+			return tea.KeyMsg{Type: tea.KeyShiftTab}
+		case " ":
+			return tea.KeyMsg{Type: tea.KeySpace}
+		case "up":
+			return tea.KeyMsg{Type: tea.KeyUp}
+		case "down":
+			return tea.KeyMsg{Type: tea.KeyDown}
+		case "left":
+			return tea.KeyMsg{Type: tea.KeyLeft}
+		case "right":
+			return tea.KeyMsg{Type: tea.KeyRight}
+		}
+		if len(name) == 1 {
+			return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(name)}
+		}
+		// Ctrl chords and function keys round-trip through their string form.
+		for t, s := range map[tea.KeyType]string{
+			tea.KeyCtrlA: "ctrl+a", tea.KeyCtrlB: "ctrl+b", tea.KeyCtrlE: "ctrl+e",
+			tea.KeyCtrlN: "ctrl+n", tea.KeyCtrlP: "ctrl+p", tea.KeyCtrlU: "ctrl+u",
+			tea.KeyCtrlW: "ctrl+w", tea.KeyCtrlC: "ctrl+c", tea.KeyF5: "f5",
+		} {
+			if s == name {
+				return tea.KeyMsg{Type: t}
+			}
+		}
+		return nil
+	}
+}
+
+// backNTimes emits n BackMsgs so a breadcrumb click unwinds to that ancestor.
+func backNTimes(n int) tea.Cmd {
+	cmds := make([]tea.Cmd, 0, n)
+	for range n {
+		cmds = append(cmds, func() tea.Msg { return core.BackMsg{} })
+	}
+	return tea.Sequence(cmds...)
 }

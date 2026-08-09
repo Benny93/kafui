@@ -10,6 +10,7 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/components/editor"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
@@ -44,7 +45,6 @@ func newPropRow() propRow {
 // QueryModel is the ksqlDB query editor page.
 type QueryModel struct {
 	common      *core.Common
-	keys        queryKeys
 	reusableApp *templateui.ReusableApp
 	dims        core.Dimensions
 
@@ -88,7 +88,6 @@ func NewQueryModelWithSeed(common *core.Common, seed string) core.Page {
 func newQueryModel(common *core.Common, seed string) *QueryModel {
 	m := &QueryModel{
 		common: common,
-		keys:   defaultQueryKeys(),
 		editor: editor.NewEditor(seed),
 	}
 	m.resTable = table.New(table.WithFocused(false), table.WithHeight(10))
@@ -98,7 +97,7 @@ func newQueryModel(common *core.Common, seed string) *QueryModel {
 		ShowSidebarByDefault: false,
 	}
 	m.reusableApp = templateui.NewReusableApp(config)
-	m.reusableApp.SetKeyMap(queryHelpKeyMap{keys: m.keys})
+	m.reusableApp.SetKeyMap(keys.Hints(queryScope()))
 	return m
 }
 
@@ -133,7 +132,7 @@ func (m *QueryModel) GetID() string    { return "ksql_query" }
 func (m *QueryModel) GetTitle() string { return "ksqlDB Query" }
 
 func (m *QueryModel) GetHelp() []key.Binding {
-	return []key.Binding{m.keys.Execute, m.keys.Clear, m.keys.ClearRes, m.keys.AddProp, m.keys.DelProp, m.keys.FocusNext, m.keys.Back}
+	return keys.Help(queryScope())
 }
 
 func (m *QueryModel) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) { return m, nil }
@@ -178,24 +177,23 @@ func (m *QueryModel) handle(msg tea.Msg) tea.Cmd {
 }
 
 func (m *QueryModel) handleKey(msg tea.KeyMsg) tea.Cmd {
-	switch {
-	case key.Matches(msg, m.keys.Execute):
+	// Text-entry scope: everything printable is typed. Statement execution is
+	// F5, the one action key that is not a printable character. Clearing the
+	// editor, clearing results and the property rows are actions-menu entries.
+	action, bound := keys.Default.Resolve(queryScope(), msg.String())
+	if !bound {
+		return m.forwardToFocused(msg)
+	}
+	switch action {
+	case keys.ActionRefresh:
 		return m.execute()
-	case key.Matches(msg, m.keys.Clear):
+	case keys.ActionFocusNext:
+		m.advanceFocus()
+		return nil
+	case keys.ActionClearField:
 		if !m.running {
 			m.editor.SetValue("")
 		}
-		return nil
-	case key.Matches(msg, m.keys.ClearRes):
-		return m.clearResults()
-	case key.Matches(msg, m.keys.AddProp):
-		m.addProp()
-		return nil
-	case key.Matches(msg, m.keys.DelProp):
-		m.delProp()
-		return nil
-	case key.Matches(msg, m.keys.FocusNext):
-		m.advanceFocus()
 		return nil
 	}
 	return m.forwardToFocused(msg)
@@ -551,7 +549,9 @@ func (m *QueryModel) renderContent(width, height int) string {
 	b.WriteString(m.renderResults())
 	b.WriteString("\n")
 	b.WriteString(m.common.Styles.Muted.Render(
-		"ctrl+x: execute • ctrl+l: clear editor • ctrl+n/ctrl+d: add/del property • ctrl+r: clear results • tab: focus • esc: back"))
+		keys.Hint(keys.ScopeTextEntry, keys.ActionRefresh, "run", keys.ActionFocusNext, "focus",
+			keys.ActionClearField, "clear editor", keys.ActionCancel, "back") +
+			"  (properties and clearing results are in the actions menu)"))
 	return b.String()
 }
 
@@ -560,7 +560,7 @@ func (m *QueryModel) renderProps() string {
 	b.WriteString(m.common.Styles.Header.Render("Properties"))
 	b.WriteString("\n")
 	if len(m.props) == 0 {
-		b.WriteString(m.common.Styles.Muted.Render("(none — ctrl+n to add a streams property)"))
+		b.WriteString(m.common.Styles.Muted.Render("(none — add a streams property from the actions menu)"))
 		return b.String()
 	}
 	for _, r := range m.props {

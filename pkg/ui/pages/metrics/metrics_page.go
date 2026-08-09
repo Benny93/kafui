@@ -22,6 +22,7 @@ import (
 	"github.com/Benny93/kafui/pkg/metrics/promquery"
 	"github.com/Benny93/kafui/pkg/ui/components"
 	"github.com/Benny93/kafui/pkg/ui/core"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
@@ -45,32 +46,20 @@ type Model struct {
 	metrics    api.ClusterMetrics
 	history    api.TimeSeries
 
-	picker *graphPicker
-
-	keys        pageKeys
+	picker      *graphPicker
 	reusableApp *templateui.ReusableApp
 }
 
-type pageKeys struct {
-	Refresh key.Binding
-	Graphs  key.Binding
-	Run     key.Binding
-	Params  key.Binding
-}
-
-func defaultKeys() pageKeys {
-	return pageKeys{
-		Refresh: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-		Graphs:  key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "graphs")),
-		Run:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "run graph")),
-		Params:  key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "set params")),
-	}
-}
+// pageScope is the key scope this page resolves against. The page used to
+// carry its own key map, which bound `g` to "graphs" — `g` is the go-to-first
+// alias — and `p` to "set params" while `p` means pause elsewhere. Both are
+// actions-menu entries now.
+func pageScope() keys.Scope { return keys.ScopeListContent }
 
 // NewModelWithCommon builds the metrics page. The intended router page ID is
 // "metrics".
 func NewModelWithCommon(common *core.Common) *Model {
-	m := &Model{common: common, keys: defaultKeys()}
+	m := &Model{common: common}
 
 	m.table = table.New(
 		table.WithColumns(columns()),
@@ -91,7 +80,7 @@ func NewModelWithCommon(common *core.Common) *Model {
 		ShowSidebarByDefault: false,
 	}
 	m.reusableApp = templateui.NewReusableApp(config)
-	m.reusableApp.SetKeyMap(helpKeyMap{keys: m.keys})
+	m.reusableApp.SetKeyMap(keys.Hints(pageScope()))
 	return m
 }
 
@@ -114,14 +103,6 @@ func (p *contentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd { return p.mo
 func (p *contentProvider) InitContent() tea.Cmd                    { return nil }
 func (p *contentProvider) IsInputMode() bool                       { return false }
 func (p *contentProvider) GetContentSize(width int) int            { return len(p.model.metrics.Topics) + 12 }
-
-// helpKeyMap adapts the page bindings to the footer help.KeyMap interface.
-type helpKeyMap struct{ keys pageKeys }
-
-func (h helpKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{h.keys.Refresh, h.keys.Graphs}
-}
-func (h helpKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{h.ShortHelp()} }
 
 // --- core.Page ---
 
@@ -149,7 +130,7 @@ func (m *Model) SetDimensions(width, height int) {
 func (m *Model) GetID() string    { return "metrics" }
 func (m *Model) GetTitle() string { return "Metrics" }
 
-func (m *Model) GetHelp() []key.Binding { return []key.Binding{m.keys.Refresh, m.keys.Graphs} }
+func (m *Model) GetHelp() []key.Binding { return keys.Help(pageScope()) }
 
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) { return m, nil }
 
@@ -205,42 +186,37 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return cmd
 	}
 
-	if key.Matches(msg, m.keys.Refresh) {
-		if m.common != nil && m.common.MetricsCollector != nil {
-			return m.common.MetricsCollector.CollectCmd()
-		}
-		return nil
-	}
-	if key.Matches(msg, m.keys.Graphs) {
-		if m.picker.hasGraphs() {
-			m.picker.visible = !m.picker.visible
-		}
+	action, bound := keys.Default.Resolve(pageScope(), msg.String())
+	if !bound {
 		return nil
 	}
 
+	if !m.picker.visible || !m.picker.hasGraphs() {
+		switch action {
+		case keys.ActionRefresh:
+			if m.common != nil && m.common.MetricsCollector != nil {
+				return m.common.MetricsCollector.CollectCmd()
+			}
+			return nil
+		}
+	}
+
 	if m.picker.visible && m.picker.hasGraphs() {
-		switch {
-		case msg.String() == "up" || msg.String() == "k":
+		switch action {
+		case keys.ActionUp:
 			m.picker.moveCursor(-1)
 			return nil
-		case msg.String() == "down" || msg.String() == "j":
+		case keys.ActionDown:
 			m.picker.moveCursor(1)
 			return nil
-		case key.Matches(msg, m.keys.Params):
+		case keys.ActionActivate:
 			if gr, ok := m.picker.selected(); ok {
 				if m.picker.beginParams(gr) {
 					return m.picker.runCmd(m.buildGraphClient(), m.activeCluster())
 				}
 			}
 			return nil
-		case key.Matches(msg, m.keys.Run):
-			if gr, ok := m.picker.selected(); ok {
-				if m.picker.beginParams(gr) {
-					return m.picker.runCmd(m.buildGraphClient(), m.activeCluster())
-				}
-			}
-			return nil
-		case msg.String() == "esc":
+		case keys.ActionCancel:
 			m.picker.visible = false
 			return nil
 		}

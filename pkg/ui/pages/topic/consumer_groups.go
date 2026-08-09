@@ -2,6 +2,7 @@ package topic
 
 import (
 	"fmt"
+	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strconv"
 	"strings"
 
@@ -37,24 +38,28 @@ func (k *Keys) handleShowGroups(model *Model) tea.Cmd {
 
 // handleGroupsOverlayKey handles keys while the consumer-groups overlay is open.
 func (k *Keys) handleGroupsOverlayKey(model *Model, msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "esc", "q":
+	action, bound := keys.Default.Resolve(keys.ScopeOverlay, msg.String())
+	if !bound {
+		return nil
+	}
+	switch action {
+	case keys.ActionCancel:
 		model.showGroups = false
 		model.markRenderDirty()
 		return nil
-	case "up", "k":
+	case keys.ActionUp:
 		if model.groupsCursor > 0 {
 			model.groupsCursor--
 			model.markRenderDirty()
 		}
 		return nil
-	case "down", "j":
+	case keys.ActionDown:
 		if model.groupsCursor < len(model.groups)-1 {
 			model.groupsCursor++
 			model.markRenderDirty()
 		}
 		return nil
-	case "enter":
+	case keys.ActionActivate:
 		if model.groupsCursor >= 0 && model.groupsCursor < len(model.groups) {
 			id := model.groups[model.groupsCursor].Name
 			return func() tea.Msg {
@@ -98,7 +103,7 @@ func (m *Model) renderGroupsOverlay(width int) string {
 	if len(m.groups) == 0 {
 		b.WriteString(styles.Muted.Render("No consumer groups are consuming this topic."))
 		b.WriteString("\n\n")
-		b.WriteString(styles.Muted.Render("esc: close"))
+		b.WriteString(styles.Muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionCancel, "close")))
 		return b.String()
 	}
 	header := fmt.Sprintf("  %-32s %-16s %-6s %-10s %-8s", "Group", "State", "Coord", "Assignor", "Lag")
@@ -121,7 +126,7 @@ func (m *Model) renderGroupsOverlay(width int) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(styles.Muted.Render("↑/↓: select • enter: open group • esc: close"))
+	b.WriteString(styles.Muted.Render(keys.Hint(keys.ScopeOverlay, keys.ActionUp, "select", keys.ActionActivate, "open group", keys.ActionCancel, "close")))
 	return b.String()
 }
 

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestCalculateMaxItems(t *testing.T) {
