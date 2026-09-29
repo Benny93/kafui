@@ -10,7 +10,7 @@ defects and gaps found while implementing and while recording the VHS demos.
 ## 1. Tables overflow their pane and get wrapped by the enclosing box (FIXED)
 
 **Fixed (2026-08-07)** via option 1 below: the wide text columns in
-`createResourceTableColumns` (`pkg/ui/pages/main/providers.go`) are now
+`createResourceTableColumns` (`pkg/ui/pages/main/table_columns.go`) are now
 `table.NewFlexColumn`, so `WithTargetWidth` both grows them to fill the pane on
 a wide terminal and shrinks/truncates them instead of overflowing on a narrow
 one. `RenderContent` also derives the Name-truncation budget from the column's
@@ -51,7 +51,7 @@ never shrinks fixed columns below their declared width. Column-width sums today:
 | Connect clusters | 84              | yes                  |
 | Quotas     | 96                    | borderline           |
 
-Defined in `createResourceTableColumns` (`pkg/ui/pages/main/providers.go`). The
+Defined in `createResourceTableColumns` (`pkg/ui/pages/main/table_columns.go`). The
 per-page detail tables (broker/connector/consumer_group/ksql/metrics/clusters)
 and `pkg/ui/components/datatable` use the same library and have the same latent
 issue on narrow terminals.

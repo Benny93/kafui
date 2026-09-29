@@ -192,6 +192,7 @@ func OpenUI(dataSource api.KafkaDataSource, appCfg appconfig.Config, gate *authz
 	})
 	// Optional Prometheus exposition endpoint (MM-16): flag-gated, default off.
 	stopExposition := startExpositionServer(metricsListen, common.MetricsCollector, appCfg)
+	model.metricsExposed = stopExposition != nil
 	// CLI deep-linking (UI-9): open a topic directly, or pre-switch the resource.
 	if initialTopic != "" {
 		model.Router.SetInitialRoute("topic:"+initialTopic, &router.NavigationData{TopicName: initialTopic})

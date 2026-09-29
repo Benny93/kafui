@@ -35,12 +35,6 @@ type (
 		err      error
 	}
 
-	brokerStatsLoadedMsg struct {
-		brokerID int32
-		stats    api.BrokerStats
-		ok       bool
-	}
-
 	logDirsLoadedMsg struct {
 		brokerID int32
 		dirs     []api.BrokerLogDir

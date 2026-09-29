@@ -175,10 +175,14 @@ func (m *Model) apply(values map[string]string) tea.Cmd {
 	if err != nil {
 		return core.NotifyError("Apply failed", err)
 	}
-	m.applyEffective(merged)
+	back := func() tea.Msg { return core.BackMsg{} }
+	if err := m.applyEffective(merged); err != nil {
+		// The file is saved; only the live datasource failed to pick it up.
+		return tea.Batch(core.NotifyError("Cluster saved, but reload failed", err), back)
+	}
 	return tea.Batch(
 		core.NewNotification(core.StatusSuccess, "Cluster saved", name),
-		func() tea.Msg { return core.BackMsg{} },
+		back,
 	)
 }
 
@@ -202,18 +206,26 @@ func (m *Model) doDelete(name string) tea.Cmd {
 		if err != nil {
 			return core.NotificationMsg{Severity: core.StatusError, Title: "Delete failed", Message: err.Error()}
 		}
-		m.applyEffective(merged)
+		back := func() tea.Msg { return core.BackMsg{} }
+		if err := m.applyEffective(merged); err != nil {
+			// The file is updated; only the live datasource failed to pick it up.
+			return tea.BatchMsg{core.NotifyError("Cluster deleted, but reload failed", err), back}
+		}
 		return core.BackMsg{}
 	}
 }
 
 // applyEffective installs the new effective config on Common and reloads the
-// datasource in place when it supports it (real kafds; the mock does not).
-func (m *Model) applyEffective(merged appconfig.Config) {
+// datasource in place when it supports it (real kafds; the mock does not). The
+// returned error is the reload's; Common is updated either way.
+func (m *Model) applyEffective(merged appconfig.Config) error {
 	m.common.ApplyAppConfig(merged)
 	if r, ok := m.common.DataSource.(reloader); ok {
-		_ = r.Reload(merged)
+		if err := r.Reload(merged); err != nil {
+			return fmt.Errorf("reloading datasource: %w", err)
+		}
 	}
+	return nil
 }
 
 // View implements core.Page.

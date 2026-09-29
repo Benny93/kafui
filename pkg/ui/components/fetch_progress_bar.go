@@ -15,6 +15,12 @@ type ProgressMsg struct {
 	Current int
 	Total   int
 	Done    bool
+
+	// source is the channel the message was read from, set by
+	// ListenForProgress. FetchProgressBar ignores messages from any channel
+	// but the one it is tracking, so a superseded operation cannot drive the
+	// progress of the next one.
+	source <-chan ProgressMsg
 }
 
 // ProgressBarFrameMsg is a re-export of the underlying animation frame message.
@@ -36,7 +42,9 @@ func NewProgressChannel(total int) chan ProgressMsg {
 // Chain this inside your Update handler to receive a continuous stream.
 func ListenForProgress(ch <-chan ProgressMsg) tea.Cmd {
 	return func() tea.Msg {
-		return <-ch
+		msg := <-ch
+		msg.source = ch
+		return msg
 	}
 }
 
@@ -94,6 +102,9 @@ func (f *FetchProgressBar) StartListening(ch <-chan ProgressMsg, total int) tea.
 func (f FetchProgressBar) Update(msg tea.Msg) (FetchProgressBar, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ProgressMsg:
+		if !f.Tracks(msg) {
+			return f, nil
+		}
 		if msg.Done {
 			f.current = f.total
 			f.active = false
@@ -136,6 +147,13 @@ func (f FetchProgressBar) View(width int) string {
 		Render(fmt.Sprintf("%d%%", pct))
 
 	return label + "\n" + f.bar.View()
+}
+
+// Tracks reports whether msg belongs to the operation this bar is tracking.
+// A message read by ListenForProgress from another channel (a superseded
+// operation) does not; a message built directly, with no source, always does.
+func (f FetchProgressBar) Tracks(msg ProgressMsg) bool {
+	return msg.source == nil || msg.source == f.ch
 }
 
 // IsActive returns true while an operation is in progress.

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	_ "encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -14,30 +14,6 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/avro"
-	"github.com/birdayz/kaf/pkg/proto"
-	"github.com/golang/protobuf/jsonpb"
-	prettyjson "github.com/hokaccha/go-prettyjson"
-	"github.com/spf13/cobra"
-	"github.com/vmihailenco/msgpack/v5"
-)
-
-var (
-	// Backward compatibility global variables
-	offsetFlag      string
-	groupFlag       string
-	groupCommitFlag bool
-	outputFormat    = OutputFormatDefault
-	raw             bool
-	follow          bool
-	tail            int32
-	schemaCache     *avro.SchemaCache
-	keyfmt          *prettyjson.Formatter
-	protoType       string
-	keyProtoType    string
-	flagPartitions  []int32
-	limitMessagesFlag int64
-	reg             *proto.DescriptorRegistry
-	handler         api.MessageHandlerFunc // Global handler for backward compatibility
 )
 
 type offsets struct {
@@ -67,18 +43,10 @@ type ConsumeConfig struct {
 	OffsetFlag        string
 	GroupFlag         string
 	GroupCommitFlag   bool
-	OutputFormat      OutputFormat
-	Raw               bool
 	Follow            bool
 	Tail              int32
-	SchemaCache       *avro.SchemaCache
-	Keyfmt            *prettyjson.Formatter
-	ProtoType         string
-	KeyProtoType      string
 	FlagPartitions    []int32
 	LimitMessagesFlag int64
-	Reg               *proto.DescriptorRegistry
-	DecodeMsgPack     bool
 
 	// Typed seek model (MSG-1..4). When Seek is set it drives per-partition
 	// offset resolution instead of OffsetFlag.
@@ -98,7 +66,6 @@ type ConsumeConfig struct {
 // DefaultConsumeConfig returns a default configuration
 func DefaultConsumeConfig() *ConsumeConfig {
 	return &ConsumeConfig{
-		OutputFormat:      OutputFormatDefault,
 		OffsetFlag:        "oldest",
 		FlagPartitions:    []int32{},
 		LimitMessagesFlag: 0,
@@ -106,15 +73,15 @@ func DefaultConsumeConfig() *ConsumeConfig {
 }
 
 func DoConsume(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any)) {
-	DoConsumeWithDeps(ctx, topic, consumeFlags, handleMessage, onError, configProviderInstance, consumerInstance, messageProcessorInstance)
+	DoConsumeWithDeps(ctx, topic, consumeFlags, handleMessage, onError, configProviderInstance, consumerInstance)
 }
 
-func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface, processor MessageProcessorInterface) {
+func DoConsumeWithDeps(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface) {
 	config := DefaultConsumeConfig()
-	DoConsumeWithConfig(ctx, topic, consumeFlags, handleMessage, onError, configProvider, consumer, processor, config)
+	DoConsumeWithConfig(ctx, topic, consumeFlags, handleMessage, onError, configProvider, consumer, config)
 }
 
-func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface, processor MessageProcessorInterface, config *ConsumeConfig) {
+func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.ConsumeFlags, handleMessage api.MessageHandlerFunc, onError func(err any), configProvider ConfigProviderInterface, consumer ConsumerInterface, config *ConsumeConfig) {
 	var offset int64
 	cfg, err := configProvider.GetConsumerConfig()
 	if err != nil {
@@ -125,6 +92,11 @@ func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.Con
 	if err != nil {
 		onError(err)
 		return
+	}
+	// This call owns the client: both consume paths below return only once
+	// they are done with it, so closing here also drops its broker connections.
+	if client != nil {
+		defer client.Close()
 	}
 
 	// Update config from flags
@@ -152,20 +124,8 @@ func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.Con
 		return
 	}
 
-	// Allow deprecated flag to override when outputFormat is not specified, or default.
-	if config.OutputFormat == OutputFormatDefault && config.Raw {
-		config.OutputFormat = OutputFormatRaw
-	}
-
-	// Initialize the Avro schema cache from the active cluster config so that
-	// Avro-encoded message values and keys are decoded to JSON automatically.
-	// getSchemaCache() returns nil (not an error) when no registry URL is set,
-	// in which case avroDecodeWithCache passes the raw bytes through unchanged.
-	if config.SchemaCache == nil {
-		if sc, err := getSchemaCache(); err == nil {
-			config.SchemaCache = sc
-		}
-	}
+	// Avro keys/values are kept as raw bytes here and decoded lazily by
+	// DecodeMessage, which uses the shared schema cache.
 
 	switch config.OffsetFlag {
 	case "oldest":
@@ -184,20 +144,12 @@ func DoConsumeWithConfig(ctx context.Context, topic string, consumeFlags api.Con
 	}
 
 	if config.GroupFlag != "" {
-		withConsumerGroupWithDeps(ctx, client, topic, config.GroupFlag, consumer, processor, config, handleMessage)
+		if err := withConsumerGroupWithDeps(ctx, client, topic, config.GroupFlag, consumer, config, handleMessage); err != nil {
+			onError(err)
+		}
 	} else {
-		withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumer, processor, config, handleMessage)
+		withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, config, handleMessage)
 	}
-}
-
-type g struct{}
-
-func (g *g) Setup(s sarama.ConsumerGroupSession) error {
-	return nil
-}
-
-func (g *g) Cleanup(s sarama.ConsumerGroupSession) error {
-	return nil
 }
 
 type consumerGroupHandler struct {
@@ -224,35 +176,31 @@ func (g *consumerGroupHandler) ConsumeClaim(s sarama.ConsumerGroupSession, claim
 	return nil
 }
 
-func withConsumerGroup(ctx context.Context, client sarama.Client, topic, group string) error {
-	config := DefaultConsumeConfig()
-	return withConsumerGroupWithDeps(ctx, client, topic, group, consumerInstance, messageProcessorInstance, config, nil)
-}
-
-func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic, group string, consumer ConsumerInterface, processor MessageProcessorInterface, config *ConsumeConfig, handler api.MessageHandlerFunc) error {
+func withConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic, group string, consumer ConsumerInterface, config *ConsumeConfig, handler api.MessageHandlerFunc) error {
 	cg, err := consumer.CreateConsumerGroupFromClient(group, client)
 	if err != nil {
-		return fmt.Errorf("Failed to create consumer group: %v", err)
+		return fmt.Errorf("Failed to create consumer group: %w", err)
 	}
+	defer cg.Close()
 
 	groupHandler := &consumerGroupHandler{
 		config:  config,
 		handler: handler,
 	}
-	
-	err = cg.Consume(ctx, []string{topic}, groupHandler)
-	if err != nil {
-		return fmt.Errorf("Error on consume: %v", err)
+
+	// Consume returns after every rebalance, so rejoin until the caller is done.
+	for ctx.Err() == nil {
+		if err := cg.Consume(ctx, []string{topic}, groupHandler); err != nil {
+			if errors.Is(err, sarama.ErrClosedConsumerGroup) || ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("Error on consume: %w", err)
+		}
 	}
 	return nil
 }
 
-func withoutConsumerGroup(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any)) {
-	config := DefaultConsumeConfig()
-	withoutConsumerGroupWithDeps(ctx, client, topic, offset, onError, consumerInstance, messageProcessorInstance, config, nil)
-}
-
-func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any), consumer ConsumerInterface, processor MessageProcessorInterface, config *ConsumeConfig, handler api.MessageHandlerFunc) {
+func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, topic string, offset int64, onError func(err any), config *ConsumeConfig, handler api.MessageHandlerFunc) {
 	if client == nil {
 		onError(fmt.Sprintf("Unable to create consumer from client: client is nil\n"))
 		return
@@ -262,6 +210,8 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
 		onError(fmt.Sprintf("Unable to create consumer from client: %v\n", err))
 		return
 	}
+	// Runs after wg.Wait below, once every partition goroutine has returned.
+	defer saramaConsumer.Close()
 
 	availablePartitions, err := saramaConsumer.Partitions(topic)
 	if err != nil {
@@ -333,6 +283,9 @@ func withoutConsumerGroupWithDeps(ctx context.Context, client sarama.Client, top
 				onError(fmt.Errorf("Unable to consume partition: %v %v %v %v\n", topic, partition, start, err))
 				return
 			}
+			// Stop the partition's background fetch loop once we're done with
+			// it; otherwise it keeps pulling data into its buffer indefinitely.
+			defer pc.AsyncClose()
 
 			var count int64 = 0
 
@@ -410,7 +363,13 @@ func resolvePartitionSeek(client sarama.Client, topic string, partition int32, o
 
 	case api.SeekToOffset:
 		end := clampSeekOffset(*config.SeekOffset, offs)
-		start = end - window
+		// newest is one past the last record, so the last readable target is newest-1.
+		if end == offs.newest && end > offs.oldest {
+			end--
+		}
+		// [start, end] holds exactly `window` offsets, so the per-partition
+		// message limit is reached on the target itself rather than just before it.
+		start = end - window + 1
 		if start < offs.oldest {
 			start = offs.oldest
 		}
@@ -465,55 +424,7 @@ func clampSeekOffset(o int64, offs *offsets) int64 {
 	return o
 }
 
-func handleMessage(msg *sarama.ConsumerMessage, mu *sync.Mutex) {
-	// Backward compatibility function - uses global variables
-	config := &ConsumeConfig{
-		ProtoType:     protoType,
-		KeyProtoType:  keyProtoType,
-		DecodeMsgPack: decodeMsgPack,
-		Reg:           reg,
-		SchemaCache:   schemaCache,
-	}
-	handleMessageWithConfig(msg, mu, config, handler)
-}
-
 func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config *ConsumeConfig, handler api.MessageHandlerFunc) {
-	var stderr bytes.Buffer
-
-	// Default to raw bytes; proto/msgpack decode inline, Avro deferred to DecodeMessage.
-	dataToDisplay := msg.Value
-	keyToDisplay := msg.Key
-	var err error
-
-	if config.ProtoType != "" {
-		if decoded, decErr := protoDecode(config.Reg, msg.Value, config.ProtoType); decErr == nil {
-			dataToDisplay = decoded
-		} else {
-			fmt.Fprintf(&stderr, "failed to decode proto. falling back to binary output. Error: %v\n", decErr)
-		}
-	}
-
-	if config.KeyProtoType != "" {
-		if decoded, decErr := protoDecode(config.Reg, msg.Key, config.KeyProtoType); decErr == nil {
-			keyToDisplay = decoded
-		} else {
-			fmt.Fprintf(&stderr, "failed to decode proto key. falling back to binary output. Error: %v\n", decErr)
-		}
-	}
-
-	if config.DecodeMsgPack {
-		var obj interface{}
-		err = msgpack.Unmarshal(msg.Value, &obj)
-		if err != nil {
-			fmt.Fprintf(&stderr, "could not decode msgpack data: %v\n", err)
-		} else {
-			dataToDisplay, err = json.Marshal(obj)
-			if err != nil {
-				fmt.Fprintf(&stderr, "could not decode msgpack data: %v\n", err)
-			}
-		}
-	}
-
 	keySchema := getSchemaIdIfPresent(msg.Key)
 	valueSchema := getSchemaIdIfPresent(msg.Value)
 	headers := make([]api.MessageHeader, 0)
@@ -526,7 +437,7 @@ func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config
 	}
 
 	// For Avro-encoded messages, store raw bytes and defer decoding to DecodeMessage.
-	// For proto/msgpack/plain messages, store the already-decoded string directly.
+	// Other messages are stored as plain strings.
 	var keyStr, valueStr string
 	var rawKey, rawValue []byte
 
@@ -534,14 +445,14 @@ func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config
 		rawKey = make([]byte, len(msg.Key))
 		copy(rawKey, msg.Key)
 	} else {
-		keyStr = string(keyToDisplay)
+		keyStr = string(msg.Key)
 	}
 
 	if valueSchema != "" {
 		rawValue = make([]byte, len(msg.Value))
 		copy(rawValue, msg.Value)
 	} else {
-		valueStr = string(dataToDisplay)
+		valueStr = string(msg.Value)
 	}
 
 	// Per-message metadata (MSG-5). Distinguish null (nil) from empty (len 0).
@@ -584,8 +495,8 @@ func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config
 		HeadersSize:   headersSize,
 		KeyNull:       keyNull,
 		ValueNull:     valueNull,
-		KeySerde:      serdeName(keySchema, config.KeyProtoType, config),
-		ValueSerde:    serdeName(valueSchema, config.ProtoType, config),
+		KeySerde:      serdeName(keySchema),
+		ValueSerde:    serdeName(valueSchema),
 	}
 
 	if handler != nil {
@@ -593,19 +504,14 @@ func handleMessageWithConfig(msg *sarama.ConsumerMessage, mu *sync.Mutex, config
 	}
 }
 
-// serdeName reports the decoder currently used for a key or value. It is a
-// placeholder until the serde framework (MSG-11..) replaces the hardwired paths.
-func serdeName(schemaID, protoType string, config *ConsumeConfig) string {
-	switch {
-	case schemaID != "":
+// serdeName reports the decoder used for a key or value at consume time:
+// Avro when a schema ID is present, otherwise plain string. DecodeMessage
+// refines this with the serde framework.
+func serdeName(schemaID string) string {
+	if schemaID != "" {
 		return "avro"
-	case protoType != "":
-		return "protobuf"
-	case config.DecodeMsgPack:
-		return "msgpack"
-	default:
-		return "string"
 	}
+	return "string"
 }
 
 func getSchemaIdIfPresent(b []byte) string {
@@ -620,179 +526,39 @@ func getSchemaIdIfPresent(b []byte) string {
 	return fmt.Sprint(int(schemaID))
 }
 
-func formatMessage(msg *sarama.ConsumerMessage, rawMessage []byte, keyToDisplay []byte, stderr *bytes.Buffer) []byte {
-	switch outputFormat {
-	case OutputFormatRaw:
-		return rawMessage
-	case OutputFormatJSON:
-		jsonMessage := make(map[string]interface{})
-
-		jsonMessage["partition"] = msg.Partition
-		jsonMessage["offset"] = msg.Offset
-		jsonMessage["timestamp"] = msg.Timestamp
-
-		if len(msg.Headers) > 0 {
-			jsonMessage["headers"] = msg.Headers
-		}
-
-		jsonMessage["key"] = formatJSON(keyToDisplay)
-		jsonMessage["payload"] = formatJSON(rawMessage)
-
-		jsonToDisplay, err := json.Marshal(jsonMessage)
-		if err != nil {
-			fmt.Fprintf(stderr, "could not decode JSON data: %v", err)
-		}
-
-		return jsonToDisplay
-	case OutputFormatDefault:
-		fallthrough
-	default:
-		if isJSON(rawMessage) {
-			rawMessage = formatValue(rawMessage)
-		}
-
-		if isJSON(keyToDisplay) {
-			keyToDisplay = formatKey(keyToDisplay)
-		}
-
-		//w := tabwriter.NewWriter(stderr, tabwriterMinWidth, tabwriterWidth, tabwriterPadding, tabwriterPadChar, tabwriterFlags)
-		constructedMsg := ""
-		if len(msg.Headers) > 0 {
-			//fmt.Fprintf(w, "Headers:\n")
-			constructedMsg += "Headers:\n"
-		}
-
-		for _, hdr := range msg.Headers {
-			var hdrValue string
-			// Try to detect azure eventhub-specific encoding
-			if len(hdr.Value) > 0 {
-				switch hdr.Value[0] {
-				case 161:
-					hdrValue = string(hdr.Value[2 : 2+hdr.Value[1]])
-				case 131:
-					hdrValue = strconv.FormatUint(binary.BigEndian.Uint64(hdr.Value[1:9]), 10)
-				default:
-					hdrValue = string(hdr.Value)
-				}
-			}
-
-			//fmt.Fprintf(w, "\tKey: %v\tValue: %v\n", string(hdr.Key), hdrValue)
-			constructedMsg += fmt.Sprintf("\tKey: %v\tValue: %v\n", string(hdr.Key), hdrValue)
-
-		}
-
-		if msg.Key != nil && len(msg.Key) > 0 {
-			//fmt.Fprintf(w, "Key:\t%v\n", string(keyToDisplay))
-			constructedMsg += fmt.Sprintf("Key:\t%v\n", string(keyToDisplay))
-		}
-		//fmt.Fprintf(w, "Partition:\t%v\nOffset:\t%v\nTimestamp:\t%v\n", msg.Partition, msg.Offset, msg.Timestamp)
-		//w.Flush()
-		constructedMsg += fmt.Sprintf("Partition:\t%v\nOffset:\t%v\nTimestamp:\t%v\n", msg.Partition, msg.Offset, msg.Timestamp)
-		constructedMsg += string(rawMessage)
-		return []byte(constructedMsg)
-	}
-}
-
-// proto to JSON
-func protoDecode(reg *proto.DescriptorRegistry, b []byte, _type string) ([]byte, error) {
-	if reg == nil {
-		return b, nil
-	}
-	dynamicMessage := reg.MessageForType(_type)
-	if dynamicMessage == nil {
-		return b, nil
-	}
-
-	err := dynamicMessage.Unmarshal(b)
-	if err != nil {
-		return nil, err
-	}
-
-	var m jsonpb.Marshaler
-	var w bytes.Buffer
-
-	err = m.Marshal(&w, dynamicMessage)
-	if err != nil {
-		return nil, err
-	}
-	return w.Bytes(), nil
-
-}
-
-func avroDecode(b []byte) ([]byte, error) {
-	if schemaCache != nil {
-		return schemaCache.DecodeMessage(b)
-	}
-	return b, nil
-}
-
 func avroDecodeWithCache(b []byte, cache *avro.SchemaCache) ([]byte, error) {
 	if cache != nil {
-		return cache.DecodeMessage(b)
+		decoded, err := cache.DecodeMessage(b)
+		if err != nil {
+			return decoded, err
+		}
+		return sortJSONKeys(decoded), nil
 	}
 	return b, nil
 }
 
-func formatKey(key []byte) []byte {
-	if keyfmt != nil {
-		if b, err := keyfmt.Format(key); err == nil {
-			return b
-		}
-	}
-	return key
-
-}
-
-func formatValue(key []byte) []byte {
-	if b, err := prettyjson.Format(key); err == nil {
+// sortJSONKeys re-renders a JSON object or array with every object's keys in
+// sorted order. goavro renders a record by ranging over a Go map, so without
+// this the same fields come out in a different order in every message, which
+// makes two similar messages hard to compare. Numbers are kept verbatim (a
+// long beyond float64 precision stays exact) and nothing is HTML-escaped.
+// Input that is not a JSON object or array is returned unchanged.
+func sortJSONKeys(b []byte) []byte {
+	trimmed := bytes.TrimSpace(b)
+	if len(trimmed) == 0 || (trimmed[0] != '{' && trimmed[0] != '[') {
 		return b
 	}
-	return key
-}
-
-func formatJSON(data []byte) interface{} {
-	var i interface{}
-	if err := json.Unmarshal(data, &i); err != nil {
-		return string(data)
+	dec := json.NewDecoder(bytes.NewReader(trimmed))
+	dec.UseNumber()
+	var v interface{}
+	if err := dec.Decode(&v); err != nil || dec.More() {
+		return b
 	}
-
-	return i
-}
-
-func isJSON(data []byte) bool {
-	var i interface{}
-	if err := json.Unmarshal(data, &i); err == nil {
-		return true
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil { // encoding/json sorts map keys
+		return b
 	}
-	return false
-}
-
-type OutputFormat string
-
-const (
-	OutputFormatDefault OutputFormat = "default"
-	OutputFormatRaw     OutputFormat = "raw"
-	OutputFormatJSON    OutputFormat = "json"
-)
-
-func (e *OutputFormat) String() string {
-	return string(*e)
-}
-
-func (e *OutputFormat) Set(v string) error {
-	switch v {
-	case "default", "raw", "json":
-		*e = OutputFormat(v)
-		return nil
-	default:
-		return fmt.Errorf("must be one of: default, raw, json")
-	}
-}
-
-func (e *OutputFormat) Type() string {
-	return "OutputFormat"
-}
-
-func completeOutputFormat(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	return []string{"default", "raw", "json"}, cobra.ShellCompDirectiveNoFileComp
+	return bytes.TrimSuffix(out.Bytes(), []byte("\n"))
 }

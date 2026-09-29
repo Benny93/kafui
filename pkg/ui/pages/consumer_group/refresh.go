@@ -34,27 +34,34 @@ func (m *Model) cycleAutoRefresh() tea.Cmd {
 	}
 	return tea.Batch(
 		core.NewNotification(core.StatusInfo, "Auto-refresh", m.autoInterval.String()),
-		m.scheduleTick(),
+		m.startTicks(),
 	)
 }
 
-// scheduleTick arms a single auto-refresh tick for the current interval.
+// startTicks starts a new auto-refresh tick chain, superseding any running one.
+func (m *Model) startTicks() tea.Cmd {
+	m.tickGen++
+	return m.scheduleTick()
+}
+
+// scheduleTick arms the next auto-refresh tick of the current chain.
 func (m *Model) scheduleTick() tea.Cmd {
 	interval := m.autoInterval
 	id := m.groupID
+	gen := m.tickGen
 	if interval <= 0 {
 		return nil
 	}
 	return tea.Tick(interval, func(time.Time) tea.Msg {
-		return autoRefreshTickMsg{groupID: id, interval: interval}
+		return autoRefreshTickMsg{groupID: id, interval: interval, gen: gen}
 	})
 }
 
 // handleAutoTick captures the current lags as the trend baseline, re-fetches the
 // detail, and re-arms the next tick (ignoring stale ticks after a change).
 func (m *Model) handleAutoTick(v autoRefreshTickMsg) tea.Cmd {
-	if v.groupID != m.groupID || v.interval != m.autoInterval || m.autoInterval == 0 {
-		return nil // stale tick (interval changed or turned off)
+	if v.groupID != m.groupID || v.gen != m.tickGen || v.interval != m.autoInterval || m.autoInterval == 0 {
+		return nil // stale tick (superseded chain, interval changed or turned off)
 	}
 	m.captureBaseline()
 	return tea.Batch(m.loadDetail(), m.scheduleTick())

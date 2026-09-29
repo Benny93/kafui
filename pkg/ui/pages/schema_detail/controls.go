@@ -64,3 +64,10 @@ func (p *SchemaDetailPageModel) ContextActions() []menu.Entry {
 
 // KeyScope implements core.KeyScoper.
 func (p *SchemaDetailPageModel) KeyScope() keys.Scope { return keys.ScopeContent }
+
+// IsInputMode implements core.InputModeReporter on the page the router holds,
+// delegating to the content provider, so typing in the register editor,
+// version picker or search prompt does not trigger shell shortcuts (q, a, :).
+func (p *SchemaDetailPageModel) IsInputMode() bool {
+	return p.contentProvider != nil && p.contentProvider.IsInputMode()
+}

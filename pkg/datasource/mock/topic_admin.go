@@ -149,6 +149,28 @@ func (kp *KafkaDataSourceMock) GetTopicSizes(topicNames []string) (map[string]in
 	return out, nil
 }
 
+// GetTopicHealth returns deterministic replication health for the batch. The
+// mock keeps one out-of-sync replica on every topic so the OSR column is
+// visibly exercised; a healthy real cluster reports zero.
+func (kp *KafkaDataSourceMock) GetTopicHealth(topicNames []string) (map[string]api.TopicHealth, error) {
+	kp.topicMu.Lock()
+	defer kp.topicMu.Unlock()
+
+	topics := currentTopics()
+	out := make(map[string]api.TopicHealth, len(topicNames))
+	for _, name := range topicNames {
+		if _, ok := topics[name]; !ok {
+			continue
+		}
+		out[name] = api.TopicHealth{
+			OutOfSyncReplicas:         1,
+			UnderReplicatedPartitions: 1,
+			IsInternal:                strings.HasPrefix(name, "__"),
+		}
+	}
+	return out, nil
+}
+
 // --- TP-5: CreateTopic ---
 
 func (kp *KafkaDataSourceMock) CreateTopic(name string, numPartitions int32, replicationFactor int16, configs map[string]*string) error {

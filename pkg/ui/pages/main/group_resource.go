@@ -149,7 +149,6 @@ func (k *KafuiContentProvider) applyGroupDetails(msg ConsumerGroupDetailsLoadedM
 		}
 	}
 	k.applyGroupSort()
-	k.allRows = convertItemsToRows(k.allItems, "", 0)
 	k.reapplyFilter()
 	if !k.isFiltered {
 		k.updateTableForCurrentPage()
@@ -233,7 +232,6 @@ func (k *KafuiContentProvider) toggleGroupSortDir() {
 
 func (k *KafuiContentProvider) applyGroupSortAndRefresh() {
 	k.applyGroupSort()
-	k.allRows = convertItemsToRows(k.allItems, "", 0)
 	k.applyFilters(true)
 }
 

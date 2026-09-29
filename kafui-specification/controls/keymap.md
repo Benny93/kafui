@@ -152,12 +152,14 @@ from the unassigned pool and are listed here in full.
 
 ### Message browsing (topic screen)
 
-| Key      | Action                              |
-| -------- | ----------------------------------- |
-| `p`      | Pause / resume consumption          |
-| `f`      | Cycle the payload display format    |
-| `m`      | Show/hide the message metadata pane |
-| `Ctrl+N` | Produce a message                   |
+| Key                 | Action                                                     |
+| ------------------- | ---------------------------------------------------------- |
+| `p`                 | Pause / resume consumption                                 |
+| `f`                 | Cycle the payload display format                           |
+| `m`                 | Show/hide the message metadata pane                        |
+| `x`                 | Expand the highlighted row inline (full, pretty value)     |
+| `Shift+↑`/`Shift+↓` | Scroll the expanded row's content (also: wheel over it)    |
+| `Ctrl+N`            | Produce a message                                          |
 
 Actions menu: seek mode, partition selection, saved filters, projections,
 reproduce message, topic settings, topic analysis, partition count, replication
@@ -267,7 +269,7 @@ Keys that must remain unbound, with the reason.
 
 Unassigned and available for future promoted bindings, in preference order:
 
-`b` `o` `t` `u` `v` `x` `z` `B` `D` `E` `F` `I` `L` `M` `O` `P` `R` `T` `U` `V` `W` `X` `Y` `Z` `F2` `F4` `F6`…`F11`
+`b` `o` `t` `u` `v` `z` `B` `D` `E` `F` `I` `L` `M` `O` `P` `R` `T` `U` `V` `W` `X` `Y` `Z` `F2` `F4` `F6`…`F11`
 
 Uppercase letters should be taken only as the `Shift` variant of an already-bound
 lowercase key, as required by the modifier-tier rule.

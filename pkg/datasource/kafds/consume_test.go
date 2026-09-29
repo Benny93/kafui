@@ -1,7 +1,6 @@
 package kafds
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -12,8 +11,6 @@ import (
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/config"
-	"github.com/spf13/cobra"
-	prettyjson "github.com/hokaccha/go-prettyjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -526,27 +523,18 @@ func TestGetOffsets(t *testing.T) {
 	})
 }
 
-// TestHandleMessage tests the handleMessage function
+// TestHandleMessage tests the handleMessageWithConfig function
 func TestHandleMessage(t *testing.T) {
+	config := DefaultConsumeConfig()
+
 	t.Run("basic_message_handling", func(t *testing.T) {
 		var receivedMessage api.Message
 		var mu sync.Mutex
-		
-		// Set up test handler
-		testHandler := func(msg api.Message) {
+
+		handler := func(msg api.Message) {
 			receivedMessage = msg
 		}
-		
-		// Set up global handler for backward compatibility
-		var originalHandler api.MessageHandlerFunc
-		if handler != nil {
-			originalHandler = handler
-		}
-		handler = testHandler
-		defer func() {
-			handler = originalHandler
-		}()
-		
+
 		saramaMsg := &sarama.ConsumerMessage{
 			Key:       []byte("test-key"),
 			Value:     []byte("test-value"),
@@ -559,7 +547,7 @@ func TestHandleMessage(t *testing.T) {
 			},
 		}
 		
-		handleMessage(saramaMsg, &mu)
+		handleMessageWithConfig(saramaMsg, &mu, config, handler)
 		
 		assert.Equal(t, "test-key", receivedMessage.Key)
 		assert.Equal(t, "test-value", receivedMessage.Value)
@@ -574,7 +562,7 @@ func TestHandleMessage(t *testing.T) {
 		var receivedMessage api.Message
 		var mu sync.Mutex
 		
-		handler = func(msg api.Message) {
+		handler := func(msg api.Message) {
 			receivedMessage = msg
 		}
 		
@@ -586,7 +574,7 @@ func TestHandleMessage(t *testing.T) {
 			Offset:    0,
 		}
 		
-		handleMessage(saramaMsg, &mu)
+		handleMessageWithConfig(saramaMsg, &mu, config, handler)
 		
 		assert.Empty(t, receivedMessage.Key)
 		assert.Empty(t, receivedMessage.Value)
@@ -598,7 +586,7 @@ func TestHandleMessage(t *testing.T) {
 		var receivedMessage api.Message
 		var mu sync.Mutex
 		
-		handler = func(msg api.Message) {
+		handler := func(msg api.Message) {
 			receivedMessage = msg
 		}
 		
@@ -615,7 +603,7 @@ func TestHandleMessage(t *testing.T) {
 			},
 		}
 		
-		handleMessage(saramaMsg, &mu)
+		handleMessageWithConfig(saramaMsg, &mu, config, handler)
 		
 		assert.Len(t, receivedMessage.Headers, 3)
 		assert.Equal(t, "content-type", receivedMessage.Headers[0].Key)
@@ -768,8 +756,6 @@ func TestConsumerGroupHandler(t *testing.T) {
 		mockClaim := &MockConsumerGroupClaim{messages: msgChan}
 		
 		// Test without group commit
-		groupCommitFlag = false
-		
 		config := DefaultConsumeConfig()
 		consumerHandler := &consumerGroupHandler{config: config, handler: testHandler}
 		err := consumerHandler.ConsumeClaim(mockSession, mockClaim)
@@ -809,8 +795,6 @@ func TestConsumerGroupHandler(t *testing.T) {
 		mockClaim := &MockConsumerGroupClaim{messages: msgChan}
 		
 		// Test with group commit
-		groupCommitFlag = true
-		
 		config := DefaultConsumeConfig()
 		config.GroupCommitFlag = true
 		consumerHandler := &consumerGroupHandler{config: config, handler: testHandler}
@@ -820,9 +804,6 @@ func TestConsumerGroupHandler(t *testing.T) {
 		assert.Len(t, receivedMessages, 1)
 		assert.True(t, mockSession.markMessageCalled, "MarkMessage should be called when groupCommitFlag is true")
 		assert.Equal(t, testMessage, mockSession.markedMessage, "Marked message should match the consumed message")
-		
-		// Reset flag
-		groupCommitFlag = false
 	})
 }
 
@@ -880,189 +861,6 @@ func TestWithoutConsumerGroup(t *testing.T) {
 		follow = true
 		shouldExit = !follow && offsets.newest == offsets.oldest
 		assert.False(t, shouldExit, "Should not exit early when following")
-	})
-}
-
-// TestFormatMessage tests message formatting functionality
-func TestFormatMessage(t *testing.T) {
-	t.Run("format_message_raw", func(t *testing.T) {
-		msg := &sarama.ConsumerMessage{
-			Key:       []byte("test-key"),
-			Value:     []byte("test-value"),
-			Partition: 1,
-			Offset:    123,
-			Timestamp: time.Now(),
-		}
-		
-		rawMessage := []byte("raw content")
-		keyToDisplay := []byte("display key")
-		
-		// Test raw format
-		outputFormat = OutputFormatRaw
-		result := formatMessage(msg, rawMessage, keyToDisplay, nil)
-		
-		assert.Equal(t, rawMessage, result)
-	})
-	
-	t.Run("format_message_json", func(t *testing.T) {
-		msg := &sarama.ConsumerMessage{
-			Key:       []byte("test-key"),
-			Value:     []byte("test-value"),
-			Partition: 1,
-			Offset:    123,
-			Timestamp: time.Now(),
-			Headers: []*sarama.RecordHeader{
-				{Key: []byte("header1"), Value: []byte("value1")},
-			},
-		}
-		
-		rawMessage := []byte(`{"field": "value"}`)
-		keyToDisplay := []byte(`{"keyField": "keyValue"}`)
-		
-		// Test JSON format
-		outputFormat = OutputFormatJSON
-		result := formatMessage(msg, rawMessage, keyToDisplay, nil)
-		
-		assert.NotEmpty(t, result)
-		assert.Contains(t, string(result), "partition")
-		assert.Contains(t, string(result), "offset")
-		assert.Contains(t, string(result), "timestamp")
-	})
-	
-	t.Run("format_message_default", func(t *testing.T) {
-		msg := &sarama.ConsumerMessage{
-			Key:       []byte("test-key"),
-			Value:     []byte("test-value"),
-			Partition: 1,
-			Offset:    123,
-			Timestamp: time.Now(),
-		}
-		
-		rawMessage := []byte("test content")
-		keyToDisplay := []byte("test key")
-		
-		// Test default format
-		outputFormat = OutputFormatDefault
-		result := formatMessage(msg, rawMessage, keyToDisplay, nil)
-		
-		resultStr := string(result)
-		assert.Contains(t, resultStr, "Partition:")
-		assert.Contains(t, resultStr, "Offset:")
-		assert.Contains(t, resultStr, "Timestamp:")
-		assert.Contains(t, resultStr, "test content")
-	})
-}
-
-// TestHelperFunctions tests various helper functions
-func TestHelperFunctions(t *testing.T) {
-	t.Run("is_json_valid", func(t *testing.T) {
-		validJSON := []byte(`{"key": "value"}`)
-		assert.True(t, isJSON(validJSON))
-		
-		invalidJSON := []byte(`{invalid json}`)
-		assert.False(t, isJSON(invalidJSON))
-		
-		emptyData := []byte(``)
-		assert.False(t, isJSON(emptyData))
-	})
-	
-	t.Run("format_json", func(t *testing.T) {
-		validJSON := []byte(`{"key": "value"}`)
-		result := formatJSON(validJSON)
-		
-		// Should return a map for valid JSON
-		resultMap, ok := result.(map[string]interface{})
-		assert.True(t, ok)
-		assert.Equal(t, "value", resultMap["key"])
-		
-		invalidJSON := []byte(`invalid`)
-		result = formatJSON(invalidJSON)
-		
-		// Should return string for invalid JSON
-		resultStr, ok := result.(string)
-		assert.True(t, ok)
-		assert.Equal(t, "invalid", resultStr)
-	})
-	
-	t.Run("format_key", func(t *testing.T) {
-		// Initialize keyfmt to avoid nil pointer panic
-		originalKeyfmt := keyfmt
-		keyfmt = &prettyjson.Formatter{
-			Indent:    2,
-			Newline:   "\n",
-		}
-		defer func() {
-			keyfmt = originalKeyfmt
-		}()
-		
-		validJSON := []byte(`{"keyField": "keyValue"}`)
-		result := formatKey(validJSON)
-		
-		// Should format valid JSON
-		assert.NotEqual(t, validJSON, result)
-		
-		invalidJSON := []byte(`invalid`)
-		result = formatKey(invalidJSON)
-		
-		// Should return original for invalid JSON
-		assert.Equal(t, invalidJSON, result)
-	})
-	
-	t.Run("format_value", func(t *testing.T) {
-		validJSON := []byte(`{"field": "value"}`)
-		result := formatValue(validJSON)
-		
-		// Should format valid JSON
-		assert.NotEqual(t, validJSON, result)
-		
-		invalidJSON := []byte(`invalid`)
-		result = formatValue(invalidJSON)
-		
-		// Should return original for invalid JSON
-		assert.Equal(t, invalidJSON, result)
-	})
-}
-
-// TestOutputFormat tests the OutputFormat type and its methods
-func TestOutputFormat(t *testing.T) {
-	t.Run("output_format_string", func(t *testing.T) {
-		format := OutputFormatJSON
-		assert.Equal(t, "json", format.String())
-		
-		format = OutputFormatRaw
-		assert.Equal(t, "raw", format.String())
-		
-		format = OutputFormatDefault
-		assert.Equal(t, "default", format.String())
-	})
-	
-	t.Run("output_format_set_valid", func(t *testing.T) {
-		var format OutputFormat
-		
-		err := format.Set("json")
-		assert.NoError(t, err)
-		assert.Equal(t, OutputFormatJSON, format)
-		
-		err = format.Set("raw")
-		assert.NoError(t, err)
-		assert.Equal(t, OutputFormatRaw, format)
-		
-		err = format.Set("default")
-		assert.NoError(t, err)
-		assert.Equal(t, OutputFormatDefault, format)
-	})
-	
-	t.Run("output_format_set_invalid", func(t *testing.T) {
-		var format OutputFormat
-		
-		err := format.Set("invalid")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "must be one of: default, raw, json")
-	})
-	
-	t.Run("output_format_type", func(t *testing.T) {
-		var format OutputFormat
-		assert.Equal(t, "OutputFormat", format.Type())
 	})
 }
 
@@ -1207,7 +1005,7 @@ func TestWithConsumerGroupFunction(t *testing.T) {
 		
 		// This will fail because we don't have a real client
 		// but we can test that the function handles the error
-		err := withConsumerGroup(ctx, nil, "test-topic", "test-group")
+		err := withConsumerGroupWithDeps(ctx, nil, "test-topic", "test-group", &DefaultConsumer{}, DefaultConsumeConfig(), nil)
 		
 		if err == nil {
 			t.Error("Expected error when creating consumer group with nil client")
@@ -1232,7 +1030,7 @@ func TestWithoutConsumerGroupDirectly(t *testing.T) {
 		}
 		
 		// Use a goroutine to avoid blocking the test
-		go withoutConsumerGroup(ctx, nil, "test-topic", 0, onError)
+		go withoutConsumerGroupWithDeps(ctx, nil, "test-topic", 0, onError, DefaultConsumeConfig(), nil)
 		
 		// Wait for either error or timeout
 		<-ctx.Done()
@@ -1249,145 +1047,9 @@ func TestWithoutConsumerGroupDirectly(t *testing.T) {
 	})
 }
 
-// TestProtoDecode tests the protobuf decoding functionality
-func TestProtoDecodeFunction(t *testing.T) {
-	t.Run("nil_registry", func(t *testing.T) {
-		data := []byte("test data")
-		result, err := protoDecode(nil, data, "test.Message")
-		
-		if err != nil {
-			t.Errorf("Expected no error with nil registry, got: %v", err)
-		}
-		
-		if !bytes.Equal(result, data) {
-			t.Error("Expected original data to be returned when registry is nil")
-		}
-	})
-	
-	t.Run("empty_data", func(t *testing.T) {
-		data := []byte{}
-		result, err := protoDecode(nil, data, "test.Message")
-		
-		if err != nil {
-			t.Errorf("Expected no error with empty data, got: %v", err)
-		}
-		
-		if !bytes.Equal(result, data) {
-			t.Error("Expected original data to be returned")
-		}
-	})
-}
-
-// TestAvroDecodeFunction tests the Avro decoding functionality
-func TestAvroDecodeFunction(t *testing.T) {
-	t.Run("nil_schema_cache", func(t *testing.T) {
-		// Save original schemaCache
-		originalSchemaCache := schemaCache
-		defer func() {
-			schemaCache = originalSchemaCache
-		}()
-		
-		schemaCache = nil
-		
-		data := []byte("test avro data")
-		result, err := avroDecode(data)
-		
-		if err != nil {
-			t.Errorf("Expected no error with nil schema cache, got: %v", err)
-		}
-		
-		if !bytes.Equal(result, data) {
-			t.Error("Expected original data to be returned when schema cache is nil")
-		}
-	})
-}
-
-// TestFormatFunctions tests the formatting helper functions
-func TestFormatHelperFunctions(t *testing.T) {
-	t.Run("format_key", func(t *testing.T) {
-		// Save original keyfmt
-		originalKeyfmt := keyfmt
-		defer func() {
-			keyfmt = originalKeyfmt
-		}()
-		
-		// Test with nil formatter
-		keyfmt = nil
-		key := []byte(`{"key": "value"}`)
-		result := formatKey(key)
-		
-		if !bytes.Equal(result, key) {
-			t.Error("Expected original key when formatter is nil")
-		}
-	})
-	
-	t.Run("format_value", func(t *testing.T) {
-		validJSON := []byte(`{"test": "value"}`)
-		result := formatValue(validJSON)
-		
-		// Should return formatted JSON or original if formatting fails
-		if len(result) == 0 {
-			t.Error("Expected non-empty result from formatValue")
-		}
-	})
-	
-	t.Run("format_json_valid", func(t *testing.T) {
-		validJSON := []byte(`{"test": "value"}`)
-		result := formatJSON(validJSON)
-		
-		// Should return parsed JSON object
-		if result == nil {
-			t.Error("Expected non-nil result for valid JSON")
-		}
-	})
-	
-	t.Run("format_json_invalid", func(t *testing.T) {
-		invalidJSON := []byte(`invalid json`)
-		result := formatJSON(invalidJSON)
-		
-		// Should return original string
-		if result != string(invalidJSON) {
-			t.Errorf("Expected original string for invalid JSON, got: %v", result)
-		}
-	})
-	
-	t.Run("is_json_valid", func(t *testing.T) {
-		validJSON := []byte(`{"test": "value"}`)
-		if !isJSON(validJSON) {
-			t.Error("Expected true for valid JSON")
-		}
-	})
-	
-	t.Run("is_json_invalid", func(t *testing.T) {
-		invalidJSON := []byte(`invalid json`)
-		if isJSON(invalidJSON) {
-			t.Error("Expected false for invalid JSON")
-		}
-	})
-}
-
-// TestCompleteOutputFormat tests the shell completion function
-func TestCompleteOutputFormatFunction(t *testing.T) {
-	t.Run("completion_options", func(t *testing.T) {
-		cmd := &cobra.Command{}
-		args := []string{}
-		toComplete := ""
-		
-		options, directive := completeOutputFormat(cmd, args, toComplete)
-		
-		expectedOptions := []string{"default", "raw", "json"}
-		if len(options) != len(expectedOptions) {
-			t.Errorf("Expected %d options, got %d", len(expectedOptions), len(options))
-		}
-		
-		for i, expected := range expectedOptions {
-			if i < len(options) && options[i] != expected {
-				t.Errorf("Expected option %d to be %s, got %s", i, expected, options[i])
-			}
-		}
-		
-		if directive != cobra.ShellCompDirectiveNoFileComp {
-			t.Errorf("Expected NoFileComp directive, got %v", directive)
-		}
-	})
+func TestAvroDecodeWithCache_NilCachePassesThrough(t *testing.T) {
+	data := []byte("test avro data")
+	result, err := avroDecodeWithCache(data, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, data, result)
 }

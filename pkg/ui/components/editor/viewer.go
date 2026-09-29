@@ -91,10 +91,41 @@ func (v *Viewer) ToggleWrap() {
 // Wrapped reports whether soft-wrap is currently on.
 func (v *Viewer) Wrapped() bool { return v.wrap }
 
+// SetWrap turns soft-wrapping of long lines on or off.
+func (v *Viewer) SetWrap(on bool) {
+	if v.wrap != on {
+		v.wrap = on
+		v.render()
+	}
+}
+
+// ScrollBy scrolls the view n lines down (negative: up), clamped to the content.
+func (v *Viewer) ScrollBy(n int) {
+	v.viewport.SetYOffset(v.viewport.YOffset + n)
+}
+
+// ScrollToTop scrolls back to the first line.
+func (v *Viewer) ScrollToTop() { v.viewport.GotoTop() }
+
+// LineCount is the number of rendered lines at the current width, soft-wrap
+// included — the height at which the content needs no scrolling.
+func (v *Viewer) LineCount() int { return v.viewport.TotalLineCount() }
+
+// ScrollInfo reports the first visible line (0-based), how many lines are
+// visible, and the total number of rendered lines.
+func (v *Viewer) ScrollInfo() (top, visible, total int) {
+	return v.viewport.YOffset, v.viewport.Height, v.viewport.TotalLineCount()
+}
+
 // Searching reports whether the in-content `/` search prompt is currently open.
 // Callers that add their own single-key hotkeys should defer to the viewer while
 // this is true so keystrokes reach the search field unmodified.
 func (v *Viewer) Searching() bool { return v.searching }
+
+// HasStatusLine reports whether View appends a line below the viewport (the
+// search prompt, or the match status of an active query). Callers budgeting
+// an exact height subtract it from the viewport.
+func (v *Viewer) HasStatusLine() bool { return v.searching || v.query != "" }
 
 // Search sets the active query, computes matching lines and jumps to the first
 // match. An empty query clears the search.

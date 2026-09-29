@@ -13,9 +13,8 @@ func (p *contentProvider) RenderContent(width, height int) string {
 func (p *contentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd { return p.model.handle(msg) }
 func (p *contentProvider) InitContent() tea.Cmd                    { return nil }
 
-// IsInputMode reports the config-edit sub-state so the shell stops intercepting
-// hotkeys while the JSON editor is focused.
-func (p *contentProvider) IsInputMode() bool { return p.model.editing }
+// IsInputMode delegates to the page model, the single source of truth.
+func (p *contentProvider) IsInputMode() bool { return p.model.IsInputMode() }
 
 func (p *contentProvider) GetContentSize(width int) int {
 	return len(p.model.details.Tasks) + len(p.model.details.Config) + 10

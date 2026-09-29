@@ -26,6 +26,11 @@ type Model struct {
 	message    api.Message
 	dataSource api.KafkaDataSource
 	schemaInfo *api.MessageSchemaInfo
+	// schemaLoading is set while a LoadSchemaInfoAsync cmd is in flight, and
+	// schemaAttempted once one has finished, so a failed lookup is not
+	// repeated on every focus.
+	schemaLoading   bool
+	schemaAttempted bool
 
 	// State
 	dimensions core.Dimensions
@@ -265,52 +270,69 @@ func (m *Model) CopyContentWithFeedback() string {
 	return status
 }
 
-// GetSchemaInfo returns schema information, loading it lazily if needed
+// GetSchemaInfo returns the schema information loaded so far, or nil. It never
+// fetches: it is called from View, and a schema-registry lookup there would
+// block rendering. Loading goes through LoadSchemaInfoAsync.
 func (m *Model) GetSchemaInfo() *api.MessageSchemaInfo {
-	if m.schemaInfo == nil && (m.message.KeySchemaID != "" || m.message.ValueSchemaID != "") {
-		m.loadSchemaInfo()
-	}
 	return m.schemaInfo
 }
 
-// loadSchemaInfo loads schema information for the message (lazy loading)
-func (m *Model) loadSchemaInfo() {
-	if m.dataSource == nil {
-		return
-	}
-
-	// Only load if schema IDs are present
-	if m.message.KeySchemaID == "" && m.message.ValueSchemaID == "" {
-		return
-	}
-
-	// Load schema information from data source
-	schemaInfo, err := m.dataSource.GetMessageSchemaInfo(m.message.KeySchemaID, m.message.ValueSchemaID)
-	if err != nil {
-		// Log error but don't fail - schema info is optional
-		return
-	}
-
-	m.schemaInfo = schemaInfo
-}
-
-// LoadSchemaInfoAsync loads schema information asynchronously for better UX
+// LoadSchemaInfoAsync fetches the message's schema information in a tea.Cmd.
+// The result comes back as a SchemaLoadedMsg and is applied in Update, so the
+// cmd goroutine never touches the model. A load runs at most once per page
+// (successful or not) unless ReloadSchemaInfoAsync asks again.
 func (m *Model) LoadSchemaInfoAsync() tea.Cmd {
-	// Only load if we have schema IDs and haven't loaded yet
-	if m.schemaInfo != nil || (m.message.KeySchemaID == "" && m.message.ValueSchemaID == "") {
+	if m.dataSource == nil || m.schemaLoading || m.schemaAttempted ||
+		(m.message.KeySchemaID == "" && m.message.ValueSchemaID == "") {
 		return nil
 	}
+	m.schemaLoading = true
 
+	ds := m.dataSource
+	keyID, valueID := m.message.KeySchemaID, m.message.ValueSchemaID
 	return func() tea.Msg {
-		m.loadSchemaInfo()
-		// Return a custom message to trigger UI refresh
-		return SchemaLoadedMsg{Success: m.schemaInfo != nil}
+		info, err := ds.GetMessageSchemaInfo(keyID, valueID)
+		return SchemaLoadedMsg{
+			KeySchemaID:   keyID,
+			ValueSchemaID: valueID,
+			Info:          info,
+			Err:           err,
+			Success:       err == nil && info != nil,
+		}
 	}
 }
 
-// SchemaLoadedMsg indicates that schema loading has completed
+// ReloadSchemaInfoAsync re-fetches schema information on explicit request,
+// even when an earlier load already ran.
+func (m *Model) ReloadSchemaInfoAsync() tea.Cmd {
+	if m.schemaLoading {
+		return nil
+	}
+	m.schemaAttempted = false
+	return m.LoadSchemaInfoAsync()
+}
+
+// applySchemaLoaded stores a load result. A result for other schema IDs (a
+// load started by another message's page) is ignored. A failed load keeps
+// what was already shown; schema info is optional.
+func (m *Model) applySchemaLoaded(msg SchemaLoadedMsg) {
+	if msg.KeySchemaID != m.message.KeySchemaID || msg.ValueSchemaID != m.message.ValueSchemaID {
+		return
+	}
+	m.schemaLoading = false
+	m.schemaAttempted = true
+	if msg.Err == nil && msg.Info != nil {
+		m.schemaInfo = msg.Info
+	}
+}
+
+// SchemaLoadedMsg carries the result of LoadSchemaInfoAsync.
 type SchemaLoadedMsg struct {
-	Success bool
+	KeySchemaID   string
+	ValueSchemaID string
+	Info          *api.MessageSchemaInfo
+	Err           error
+	Success       bool
 }
 
 // SetDimensions sets the model dimensions
@@ -325,10 +347,8 @@ func (m *Model) GetID() string {
 
 // GetTitle returns the page title
 func (m *Model) GetTitle() string {
-	if m.topicName != "" {
-		return fmt.Sprintf("Message Detail: %s", m.topicName)
-	}
-	return "Message Detail"
+	// The topic is already the previous breadcrumb; name the message itself.
+	return fmt.Sprintf("Message p%d @ %d", m.message.Partition, m.message.Offset)
 }
 
 // OnFocus handles focus gain
@@ -336,8 +356,10 @@ func (m *Model) OnFocus() tea.Cmd {
 	return m.LoadSchemaInfoAsync()
 }
 
-// OnBlur handles focus loss
+// OnBlur handles focus loss. A load still in flight reports to whichever page
+// is current when it finishes, so forget it; the next OnFocus starts another.
 func (m *Model) OnBlur() tea.Cmd {
+	m.schemaLoading = false
 	return nil
 }
 
@@ -461,17 +483,10 @@ func (m *MessageDetailPageModel) GetHelp() []key.Binding {
 	return GetHelpKeyBindings()
 }
 
-// HandleNavigation implements the Page interface
+// HandleNavigation implements the Page interface. Esc is the shell's: it
+// unwinds and navigates back, and only reaches this page while the search
+// prompt is open, where it must close the prompt rather than leave the page.
 func (m *MessageDetailPageModel) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) {
-	// Handle navigation messages
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc":
-			// Go back to previous page without adding to history
-			return m, func() tea.Msg { return core.BackMsg{} }
-		}
-	}
 	return m, nil
 }
 

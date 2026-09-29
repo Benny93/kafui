@@ -8,6 +8,7 @@ import (
 	"github.com/Benny93/kafui/pkg/datasource/mock"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestMain initializes the bubblezone global manager (required by zone.Mark calls
@@ -383,10 +384,16 @@ func TestSchemaInfoLazyLoading(t *testing.T) {
 	// Schema info should be nil initially (lazy loading)
 	assert.Nil(t, model.schemaInfo)
 
-	// Accessing schema info should trigger lazy loading
-	schemaInfo := model.GetSchemaInfo()
+	// The getter is pure: rendering must not fetch.
+	assert.Nil(t, model.GetSchemaInfo())
 
-	// Now schema info should be loaded
+	// The async load delivers a message that Update applies.
+	cmd := model.LoadSchemaInfoAsync()
+	require.NotNil(t, cmd)
+	assert.Nil(t, model.LoadSchemaInfoAsync(), "no second load while one is in flight")
+	pageModel1.Update(cmd())
+
+	schemaInfo := model.GetSchemaInfo()
 	assert.NotNil(t, schemaInfo)
 	assert.NotNil(t, model.schemaInfo) // Should be cached now
 
@@ -406,6 +413,66 @@ func TestSchemaInfoLazyLoading(t *testing.T) {
 	// Should remain nil for messages without schema IDs
 	assert.Nil(t, schemaInfoNoSchema)
 	assert.Nil(t, modelNoSchema.schemaInfo)
+	assert.Nil(t, modelNoSchema.LoadSchemaInfoAsync())
+}
+
+// failingSchemaDS counts schema lookups and fails every one.
+type failingSchemaDS struct {
+	*mock.KafkaDataSourceMock
+	calls int
+}
+
+func (f *failingSchemaDS) GetMessageSchemaInfo(string, string) (*api.MessageSchemaInfo, error) {
+	f.calls++
+	return nil, fmt.Errorf("registry unreachable")
+}
+
+func TestSchemaInfoFailureNotRetriedOnRender(t *testing.T) {
+	ds := &failingSchemaDS{KafkaDataSourceMock: &mock.KafkaDataSourceMock{}}
+	msg := api.Message{Key: "k", Value: "v", KeySchemaID: "1", ValueSchemaID: "2"}
+	page := NewMessageDetailPageModel(ds, "t", msg)
+	page.SetDimensions(160, 40)
+	model := page.GetDetailModel()
+
+	page.Update(model.LoadSchemaInfoAsync()())
+	require.Equal(t, 1, ds.calls)
+
+	// Rendering and refocusing do not fetch again after a failed attempt.
+	_ = page.View()
+	_ = page.View()
+	assert.Nil(t, page.OnFocus())
+	assert.Equal(t, 1, ds.calls)
+	assert.Nil(t, model.GetSchemaInfo())
+
+	// An explicit reload does.
+	cmd := model.ReloadSchemaInfoAsync()
+	require.NotNil(t, cmd)
+	page.Update(cmd())
+	assert.Equal(t, 2, ds.calls)
+}
+
+// TestSchemaLoadStartsOnceOnCreation: the router runs Init and then OnFocus
+// on a new page; only OnFocus may start the schema lookup.
+func TestSchemaLoadStartsOnceOnCreation(t *testing.T) {
+	ds := &failingSchemaDS{KafkaDataSourceMock: &mock.KafkaDataSourceMock{}}
+	msg := api.Message{Key: "k", Value: "v", KeySchemaID: "1", ValueSchemaID: "2"}
+	page := NewMessageDetailPageModel(ds, "t", msg)
+
+	_ = page.Init()
+	assert.False(t, page.GetDetailModel().schemaLoading, "Init must not start a schema load")
+
+	cmd := page.OnFocus()
+	require.NotNil(t, cmd, "first OnFocus starts the schema load")
+	page.Update(cmd())
+	assert.Equal(t, 1, ds.calls)
+}
+
+func TestSchemaLoadedForOtherMessageIgnored(t *testing.T) {
+	msg := api.Message{KeySchemaID: "1", ValueSchemaID: "2"}
+	model := NewModel(&mock.KafkaDataSourceMock{}, "t", msg)
+	model.applySchemaLoaded(SchemaLoadedMsg{KeySchemaID: "9", ValueSchemaID: "9", Info: &api.MessageSchemaInfo{}})
+	assert.Nil(t, model.GetSchemaInfo())
+	assert.False(t, model.schemaAttempted)
 }
 
 // TestGetID tests the unique page ID generation
@@ -491,6 +558,6 @@ func TestGetTitle(t *testing.T) {
 	pageModel := NewMessageDetailPageModel(mockDS, "my-topic", testMessage)
 	title := pageModel.GetTitle()
 
-	assert.NotEmpty(t, title)
-	assert.Contains(t, title, "my-topic")
+	// The topic is the previous breadcrumb; the title names the message.
+	assert.Equal(t, "Message p0 @ 123", title)
 }

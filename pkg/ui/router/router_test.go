@@ -191,6 +191,10 @@ func (m *mockDataSource) GetTopicDetails(topicName string) (api.TopicDetails, er
 func (m *mockDataSource) GetTopicSizes(topicNames []string) (map[string]int64, error) {
 	return nil, nil
 }
+
+func (m *mockDataSource) GetTopicHealth(topicNames []string) (map[string]api.TopicHealth, error) {
+	return nil, nil
+}
 func (m *mockDataSource) CreateTopic(name string, numPartitions int32, replicationFactor int16, configs map[string]*string) error {
 	return nil
 }
@@ -227,11 +231,11 @@ func (m *mockDataSource) CreateConnector(connect, name string, config map[string
 func (m *mockDataSource) UpdateConnectorConfig(connect, name string, config map[string]string) (api.Connector, error) {
 	return api.Connector{}, nil
 }
-func (m *mockDataSource) DeleteConnector(connect, name string) error            { return nil }
-func (m *mockDataSource) PauseConnector(connect, name string) error             { return nil }
-func (m *mockDataSource) ResumeConnector(connect, name string) error            { return nil }
-func (m *mockDataSource) StopConnector(connect, name string) error              { return nil }
-func (m *mockDataSource) RestartConnector(connect, name string) error           { return nil }
+func (m *mockDataSource) DeleteConnector(connect, name string) error  { return nil }
+func (m *mockDataSource) PauseConnector(connect, name string) error   { return nil }
+func (m *mockDataSource) ResumeConnector(connect, name string) error  { return nil }
+func (m *mockDataSource) StopConnector(connect, name string) error    { return nil }
+func (m *mockDataSource) RestartConnector(connect, name string) error { return nil }
 func (m *mockDataSource) RestartConnectorTask(connect, name string, taskID int) error {
 	return nil
 }

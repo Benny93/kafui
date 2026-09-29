@@ -34,6 +34,18 @@ type Router struct {
 	width       int
 	height      int
 
+	// gens numbers each page instance so results addressed to an evicted or
+	// replaced instance are dropped (CONC-4); pending holds results for cached
+	// pages that are not showing until they are shown again.
+	gens    map[string]uint64
+	nextGen uint64
+	pending map[string][]tea.Msg
+
+	// context is the active cluster the cached pages were built against; a
+	// change evicts them (see syncContext).
+	context      string
+	contextKnown bool
+
 	// initialPageID/initialData deep-link the first render to a page other than
 	// "main" (UI-9); "main" is seeded beneath it so esc/back behaves normally.
 	initialPageID string
@@ -66,11 +78,14 @@ func NewRouter(com *core.Common) *Router {
 		pages:       make(map[string]core.Page),
 		history:     make([]string, 0),
 		currentPage: "main",
+		gens:        make(map[string]uint64),
+		pending:     make(map[string][]tea.Msg),
 	}
 }
 
 // NavigateTo switches to a specific page with optional data
 func (r *Router) NavigateTo(pageID string, data interface{}) tea.Cmd {
+	r.syncContext()
 	r.pushHistory(pageID)
 	return tea.Batch(r.navigateToWithoutHistory(pageID, data), r.updateBreadcrumbs())
 }
@@ -120,13 +135,21 @@ func (r *Router) getBreadcrumbs() []string {
 	return breadcrumbs
 }
 
-// navigateToWithoutHistory switches to a specific page without adding to history
+// navigateToWithoutHistory switches to a specific page without adding to history.
+//
+// Lifecycle contract: Init runs once, when the page is created; OnFocus runs
+// on every activation, including the first. Returning to a cached page (Back,
+// or navigating to it again) therefore keeps its state: a topic page keeps
+// its loaded batches and position instead of refetching. Work that must be
+// redone on every visit belongs in OnFocus.
 func (r *Router) navigateToWithoutHistory(pageID string, data interface{}) tea.Cmd {
 	// Initialize page if needed
+	created := false
 	if _, exists := r.pages[pageID]; !exists {
 		page := r.createPage(pageID, data)
 		if page != nil {
-			r.pages[pageID] = page
+			r.register(pageID, page)
+			created = true
 
 			// Set dimensions if we have them
 			if r.width > 0 && r.height > 0 {
@@ -138,35 +161,33 @@ func (r *Router) navigateToWithoutHistory(pageID string, data interface{}) tea.C
 		}
 	}
 
+	var cmds []tea.Cmd
+
 	// Blur current page
 	if r.currentPage != "" {
 		if currentPage, exists := r.pages[r.currentPage]; exists {
-			currentPage.OnBlur()
+			cmds = append(cmds, r.tag(r.currentPage, currentPage.OnBlur()))
 		}
 	}
 
 	r.currentPage = pageID
 
-	// Initialize and focus the new page
+	// Initialize a new page, focus it, then hand it the results that arrived
+	// while it was not showing.
 	if page, exists := r.pages[pageID]; exists {
-		initCmd := page.Init()
-		focusCmd := page.OnFocus()
-
-		// Return both commands batched together
-		if initCmd != nil && focusCmd != nil {
-			return tea.Batch(initCmd, focusCmd)
-		} else if initCmd != nil {
-			return initCmd
-		} else if focusCmd != nil {
-			return focusCmd
+		if created {
+			cmds = append(cmds, r.tag(pageID, page.Init()))
 		}
+		cmds = append(cmds, r.tag(pageID, page.OnFocus()), r.flushPending(pageID))
 	}
+	r.prune()
 
-	return nil
+	return tea.Batch(cmds...)
 }
 
 // Back navigates to the previous page
 func (r *Router) Back() tea.Cmd {
+	r.syncContext()
 	if len(r.history) > 0 {
 		lastPage := r.history[len(r.history)-1]
 		r.history = r.history[:len(r.history)-1]
@@ -326,6 +347,10 @@ func (r *Router) createPage(pageID string, data interface{}) core.Page {
 
 // Update handles router-level updates and delegates to current page
 func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if pm, ok := msg.(core.PageMsg); ok {
+		return r, r.routePageMsg(pm)
+	}
+
 	currentPage := r.GetCurrentPage()
 	if currentPage == nil {
 		return r, nil
@@ -409,15 +434,16 @@ func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			r.pushHistory(newPageID)
 
 			// Blur current page
+			var blurCmd tea.Cmd
 			if r.currentPage != "" {
 				if currentPageObj, exists := r.pages[r.currentPage]; exists {
-					currentPageObj.OnBlur()
+					blurCmd = r.tag(r.currentPage, currentPageObj.OnBlur())
 				}
 			}
 
 			// Update router state
 			r.currentPage = newPageID
-			r.pages[newPageID] = newPage
+			r.register(newPageID, newPage)
 
 			// Set dimensions if we have them
 			if r.width > 0 && r.height > 0 {
@@ -425,20 +451,22 @@ func (r *Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Focus the new page
-			focusCmd := newPage.OnFocus()
-			return r, focusCmd
+			focusCmd := r.tag(newPageID, newPage.OnFocus())
+			r.prune()
+			return r, tea.Batch(blurCmd, focusCmd)
 		}
 	}
 
 	// Delegate to current page
+	pageID := r.currentPage
 	updatedPage, cmd := currentPage.Update(msg)
 
 	// Update the page in our map if it changed
 	if updatedPage != nil {
-		r.pages[r.currentPage] = updatedPage.(core.Page)
+		r.pages[pageID] = updatedPage.(core.Page)
 	}
 
-	return r, cmd
+	return r, r.tag(pageID, cmd)
 }
 
 // View renders the current page

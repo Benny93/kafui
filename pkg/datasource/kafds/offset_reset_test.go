@@ -221,3 +221,90 @@ func TestResetOffsets_ExplicitClamping(t *testing.T) {
 	assert.Equal(t, int64(100), r.committed[1])
 	assert.Equal(t, int64(10), r.committed[2])
 }
+
+// --- DS-1: the real resetter lands on the target in either direction ---
+
+// newMockBrokerResetter builds a saramaOffsetResetter for group "g" against a
+// mock broker whose committed offset for t1/0 is `committed` (-1 = none).
+func newMockBrokerResetter(t *testing.T, committed int64, commitErr sarama.KError) (*saramaOffsetResetter, *sarama.MockBroker) {
+	t.Helper()
+	broker := sarama.NewMockBroker(t, 1)
+	t.Cleanup(broker.Close)
+	broker.SetHandlerByMap(map[string]sarama.MockResponse{
+		"MetadataRequest": sarama.NewMockMetadataResponse(t).
+			SetBroker(broker.Addr(), broker.BrokerID()).
+			SetLeader("t1", 0, broker.BrokerID()),
+		"FindCoordinatorRequest": sarama.NewMockFindCoordinatorResponse(t).
+			SetCoordinator(sarama.CoordinatorGroup, "g", broker),
+		"OffsetFetchRequest": sarama.NewMockOffsetFetchResponse(t).
+			SetOffset("g", "t1", 0, committed, "", sarama.ErrNoError),
+		"OffsetCommitRequest": sarama.NewMockOffsetCommitResponse(t).
+			SetError("g", "t1", 0, commitErr),
+	})
+
+	cfg := sarama.NewConfig()
+	configureOffsetReset(cfg)
+	cfg.Metadata.Retry.Max = 0
+	cfg.Metadata.Retry.Backoff = time.Millisecond
+	client, err := sarama.NewClient([]string{broker.Addr()}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := newSaramaOffsetResetter("g", client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	return r, broker
+}
+
+// lastCommitted returns the offset for t1/0 in the last commit the broker saw.
+func lastCommitted(t *testing.T, broker *sarama.MockBroker) (int64, bool) {
+	t.Helper()
+	var (
+		off   int64
+		found bool
+	)
+	for _, rr := range broker.History() {
+		if req, ok := rr.Request.(*sarama.OffsetCommitRequest); ok {
+			if o, _, err := req.Offset("t1", 0); err == nil {
+				off, found = o, true
+			}
+		}
+	}
+	return off, found
+}
+
+func TestSaramaOffsetResetter_Commit(t *testing.T) {
+	tests := []struct {
+		name      string
+		committed int64
+		target    int64
+	}{
+		{"no committed offset", -1, 42},
+		{"forward reset", 10, 50},
+		{"backward reset", 100, 5},
+		{"same offset", 7, 7},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, broker := newMockBrokerResetter(t, tt.committed, sarama.ErrNoError)
+
+			err := r.Commit("g", "t1", map[int32]int64{0: tt.target})
+
+			assert.NoError(t, err)
+			got, ok := lastCommitted(t, broker)
+			assert.True(t, ok, "an OffsetCommitRequest must be sent")
+			assert.Equal(t, tt.target, got)
+		})
+	}
+
+	t.Run("commit failure is returned", func(t *testing.T) {
+		r, _ := newMockBrokerResetter(t, 10, sarama.ErrOffsetMetadataTooLarge)
+
+		err := r.Commit("g", "t1", map[int32]int64{0: 50})
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, sarama.ErrOffsetMetadataTooLarge)
+	})
+}

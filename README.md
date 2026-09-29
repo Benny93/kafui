@@ -42,6 +42,17 @@ mask sensitive fields, export, produce, and reproduce a browsed message.
 
 ![Message browsing](vhs/gifs/messages.gif)
 
+#### Expand a message inline
+
+Press `x` to expand the highlighted message in place: its full value,
+pretty-printed and syntax-highlighted when it is JSON, opens right under its
+row, so you can read a payload without leaving the list. The panel follows the
+cursor as you move, content taller than the panel scrolls (`Shift+↑`/`Shift+↓`
+or the mouse wheel over it), `c` copies exactly what the panel shows, `Enter`
+still opens the full detail view, and `x` collapses it again.
+
+![Expand a message inline](vhs/gifs/row-expand.gif)
+
 ### Consumer groups & offsets
 
 Group list enriched with state, members, topics, coordinator, and total lag,

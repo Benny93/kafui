@@ -34,7 +34,7 @@ if [ "$#" -gt 0 ]; then
   tapes=("$@")
 else
   tapes=(
-    cluster-management brokers topics messages consumer-groups
+    cluster-management brokers topics messages row-expand consumer-groups
     schema-registry kafka-connect ksql acls-and-quotas
     application-config metrics-and-monitoring auth-rbac-audit
     ui-shell command-palette

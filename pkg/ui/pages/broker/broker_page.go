@@ -7,9 +7,6 @@ package broker
 
 import (
 	"fmt"
-	"sort"
-	"strconv"
-	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/components/editor"
@@ -17,8 +14,6 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/components/tabstrip"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/keys"
-	"github.com/Benny93/kafui/pkg/ui/shared"
-	stylesPkg "github.com/Benny93/kafui/pkg/ui/styles"
 	templateui "github.com/Benny93/kafui/pkg/ui/template/ui"
 	"github.com/Benny93/kafui/pkg/ui/template/ui/providers"
 	"github.com/charmbracelet/bubbles/key"
@@ -37,8 +32,6 @@ type Model struct {
 	info       api.BrokerInfo
 	infoLoaded bool
 	notFound   bool
-	stats      api.BrokerStats
-	statsOK    bool
 
 	active tab
 	// tabStrip owns the tab bar's click and hover zones.
@@ -121,35 +114,17 @@ func newModel(common *core.Common, brokerID int32, info api.BrokerInfo, haveInfo
 
 // --- column definitions ---
 
-func logDirColumns() []table.Column {
-	return []table.Column{
-		{Title: "Directory", Width: 34},
-		{Title: "Error", Width: 22},
-		{Title: "Topics", Width: 8},
-		{Title: "Partitions", Width: 12},
-	}
+// Init runs once, when the router creates the page, and kicks off the initial
+// data load: broker list (for found/not-found + summary) and the default tab's
+// data. The summary strip's disk usage is derived from the log dirs, so no
+// separate GetBrokerStats (a second DescribeLogDirs, cluster-wide) is issued.
+func (m *Model) Init() tea.Cmd {
+	return tea.Batch(m.reusableApp.Init(), m.initialLoad())
 }
 
-func partitionColumns() []table.Column {
-	return []table.Column{
-		{Title: "Topic", Width: 28},
-		{Title: "Partition", Width: 10},
-		{Title: "Size", Width: 14},
-		{Title: "Offset Lag", Width: 12},
-	}
+func (m *Model) initialLoad() tea.Cmd {
+	return tea.Batch(m.loadInfo(), m.loadTab(tabLogDirs))
 }
-
-func configColumns() []table.Column {
-	return []table.Column{
-		{Title: "Key", Width: 34},
-		{Title: "Value", Width: 26},
-		{Title: "Source", Width: 26},
-	}
-}
-
-// --- core.Page ---
-
-func (m *Model) Init() tea.Cmd { return m.reusableApp.Init() }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	updated, cmd := m.reusableApp.Update(msg)
@@ -177,7 +152,8 @@ func (m *Model) SetDimensions(width, height int) {
 	m.reusableApp.Update(tea.WindowSizeMsg{Width: width, Height: height})
 }
 
-func (m *Model) GetID() string    { return fmt.Sprintf("broker:%d", m.brokerID) }
+func (m *Model) GetID() string { return fmt.Sprintf("broker:%d", m.brokerID) }
+
 func (m *Model) GetTitle() string { return fmt.Sprintf("Broker %d", m.brokerID) }
 
 func (m *Model) GetHelp() []key.Binding {
@@ -185,13 +161,12 @@ func (m *Model) GetHelp() []key.Binding {
 }
 
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) { return m, nil }
-func (m *Model) OnBlur() tea.Cmd                                   { return nil }
 
-// OnFocus kicks off the initial data load: broker list (for found/not-found +
-// summary), stats (for the summary strip) and the default tab's data.
-func (m *Model) OnFocus() tea.Cmd {
-	return tea.Batch(m.loadInfo(), m.loadStats(), m.loadTab(tabLogDirs))
-}
+func (m *Model) OnBlur() tea.Cmd { return nil }
+
+// OnFocus loads nothing: Init did the initial load, and a return keeps the
+// loaded state (r refreshes the active tab).
+func (m *Model) OnFocus() tea.Cmd { return nil }
 
 // --- loads ---
 
@@ -209,19 +184,6 @@ func (m *Model) loadInfo() tea.Cmd {
 			}
 		}
 		return brokerInfoLoadedMsg{brokerID: id, found: false}
-	}
-}
-
-func (m *Model) loadStats() tea.Cmd {
-	ds := m.common.DataSource
-	id := m.brokerID
-	return func() tea.Msg {
-		stats, _, err := ds.GetBrokerStats()
-		if err != nil {
-			return brokerStatsLoadedMsg{brokerID: id}
-		}
-		s, ok := stats[id]
-		return brokerStatsLoadedMsg{brokerID: id, stats: s, ok: ok}
 	}
 }
 
@@ -300,12 +262,6 @@ func (m *Model) handle(msg tea.Msg) tea.Cmd {
 		if v.found {
 			m.info = v.info
 			m.infoLoaded = true
-		}
-		return nil
-	case brokerStatsLoadedMsg:
-		if v.brokerID == m.brokerID {
-			m.stats = v.stats
-			m.statsOK = v.ok
 		}
 		return nil
 	case logDirsLoadedMsg:
@@ -445,504 +401,3 @@ func (m *Model) retry() tea.Cmd {
 }
 
 // --- Log Dirs tab ---
-
-func (m *Model) handleLogDirsKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "enter":
-		if m.expanded >= 0 {
-			m.expanded = -1 // collapse
-			return nil
-		}
-		i := m.logTable.Cursor()
-		if i >= 0 && i < len(m.logDirs) {
-			m.expanded = i
-			m.rebuildPartTable()
-		}
-		return nil
-	case "esc":
-		if m.expanded >= 0 {
-			m.expanded = -1
-			return nil
-		}
-	}
-	return m.forwardToActive(msg)
-}
-
-func (m *Model) rebuildLogTable() {
-	rows := make([]table.Row, 0, len(m.logDirs))
-	for _, d := range m.logDirs {
-		parts := 0
-		for _, t := range d.Topics {
-			parts += len(t.Partitions)
-		}
-		rows = append(rows, table.Row{d.Path, d.Error, strconv.Itoa(len(d.Topics)), strconv.Itoa(parts)})
-	}
-	m.logTable.SetRows(rows)
-}
-
-func (m *Model) rebuildPartTable() {
-	if m.expanded < 0 || m.expanded >= len(m.logDirs) {
-		m.partTable.SetRows(nil)
-		return
-	}
-	var rows []table.Row
-	for _, t := range m.logDirs[m.expanded].Topics {
-		for _, p := range t.Partitions {
-			rows = append(rows, table.Row{
-				t.Topic,
-				strconv.FormatInt(int64(p.Partition), 10),
-				shared.FormatBytes2dp(p.Size),
-				strconv.FormatInt(p.OffsetLag, 10),
-			})
-		}
-	}
-	m.partTable.SetRows(rows)
-	m.partTable.SetCursor(0)
-}
-
-// selectedPartition returns the topic/partition currently highlighted in the
-// expanded partition table.
-func (m *Model) selectedPartition() (topic string, partition int32, ok bool) {
-	if m.expanded < 0 || m.expanded >= len(m.logDirs) {
-		return "", 0, false
-	}
-	idx := 0
-	cursor := m.partTable.Cursor()
-	for _, t := range m.logDirs[m.expanded].Topics {
-		for _, p := range t.Partitions {
-			if idx == cursor {
-				return t.Topic, p.Partition, true
-			}
-			idx++
-		}
-	}
-	return "", 0, false
-}
-
-// --- Reassignment form (BR-17) ---
-
-func (m *Model) openMoveForm() tea.Cmd {
-	topic, part, ok := m.selectedPartition()
-	if !ok {
-		return core.NewNotification(core.StatusWarning, "Move replica", "no partition selected")
-	}
-	// Offer the broker's other log directories as targets.
-	var targets []string
-	for i, d := range m.logDirs {
-		if i == m.expanded {
-			continue
-		}
-		targets = append(targets, d.Path)
-	}
-	def := ""
-	if len(targets) > 0 {
-		def = targets[0]
-	}
-	m.moveForm = form.New([]form.Field{
-		{Name: "topic", Label: "Topic", Type: form.Text, Default: topic},
-		{Name: "partition", Label: "Partition", Type: form.Text, Default: strconv.FormatInt(int64(part), 10)},
-		{Name: "logdir", Label: "Target log dir", Type: form.Text, Required: true, Default: def, Options: targets},
-	})
-	m.moveForm.SetDimensions(m.dims.Width, m.dims.Height)
-	return m.moveForm.Focus()
-}
-
-func (m *Model) handleMoveSubmit(msg form.FormSubmitMsg) tea.Cmd {
-	m.moveForm = nil
-	topic := msg.Values["topic"]
-	logDir := msg.Values["logdir"]
-	part, _ := strconv.ParseInt(msg.Values["partition"], 10, 32)
-	partition := int32(part)
-	id := m.brokerID
-	ds := m.common.DataSource
-	return func() tea.Msg {
-		return core.ShowConfirmMsg{
-			Title:        "Move replica",
-			Message:      fmt.Sprintf("Move %s-%d to %s?", topic, partition, logDir),
-			ConfirmLabel: "Move",
-			OnConfirm: func() tea.Msg {
-				err := ds.AlterReplicaLogDir(id, topic, partition, logDir)
-				return replicaMovedMsg{brokerID: id, topic: topic, partition: partition, logDir: logDir, err: err}
-			},
-		}
-	}
-}
-
-func (m *Model) handleReplicaMoved(v replicaMovedMsg) tea.Cmd {
-	if v.err != nil {
-		return func() tea.Msg { return shared.NewUIError("reassign", "Replica move failed", v.err) }
-	}
-	m.logDirsLoaded = false
-	m.expanded = -1
-	return tea.Batch(core.NewNotification(core.StatusSuccess, "Replica moved", fmt.Sprintf("%s-%d → %s", v.topic, v.partition, v.logDir)), m.loadLogDirs())
-}
-
-// --- Configs tab (BR-15/BR-16) ---
-
-func (m *Model) handleConfigsKey(msg tea.KeyMsg) tea.Cmd {
-	// Search and edit are registry actions handled in handleKey; this tab has
-	// nothing of its own left.
-	return m.forwardToActive(msg)
-}
-
-func (m *Model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "enter":
-		m.searching = false
-		m.cfgFilter = m.searchInput.Value()
-		m.searchInput.Blur()
-		m.rebuildConfigTable()
-		return nil
-	case "esc":
-		m.searching = false
-		m.searchInput.Blur()
-		return nil
-	}
-	var cmd tea.Cmd
-	m.searchInput, cmd = m.searchInput.Update(msg)
-	return cmd
-}
-
-func (m *Model) selectedConfig() (api.BrokerConfigEntry, bool) {
-	i := m.cfgTable.Cursor()
-	if i < 0 || i >= len(m.cfgVisible) {
-		return api.BrokerConfigEntry{}, false
-	}
-	return m.cfgVisible[i], true
-}
-
-func (m *Model) beginEdit() tea.Cmd {
-	entry, ok := m.selectedConfig()
-	if !ok {
-		return nil
-	}
-	if entry.ReadOnly {
-		return core.NewNotification(core.StatusWarning, "Config", "Property is read-only")
-	}
-	m.editing = true
-	m.editKey = entry.Name
-	m.editOld = entry.Value
-	m.editInput.SetValue(entry.Value)
-	return m.editInput.Focus()
-}
-
-func (m *Model) handleEditKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "esc":
-		m.cancelEdit()
-		return nil
-	case "enter":
-		return m.commitEdit()
-	}
-	var cmd tea.Cmd
-	m.editInput, cmd = m.editInput.Update(msg)
-	return cmd
-}
-
-func (m *Model) cancelEdit() {
-	m.editing = false
-	m.editInput.Blur()
-	m.editKey = ""
-}
-
-// commitEdit implements the save state machine: unchanged value is a no-op;
-// a changed value asks for confirmation before calling AlterBrokerConfig.
-func (m *Model) commitEdit() tea.Cmd {
-	newVal := m.editInput.Value()
-	if newVal == m.editOld {
-		m.cancelEdit()
-		return nil
-	}
-	key := m.editKey
-	id := m.brokerID
-	ds := m.common.DataSource
-	// Keep edit mode open until the change is confirmed + applied.
-	m.editInput.Blur()
-	return func() tea.Msg {
-		return core.ShowConfirmMsg{
-			Title:        "Change config",
-			Message:      "Are you sure you want to change the value?",
-			Danger:       true,
-			ConfirmLabel: "Change",
-			OnConfirm: func() tea.Msg {
-				err := ds.AlterBrokerConfig(id, key, newVal)
-				return configAlteredMsg{brokerID: id, key: key, value: newVal, err: err}
-			},
-		}
-	}
-}
-
-func (m *Model) handleConfigAltered(v configAlteredMsg) tea.Cmd {
-	if v.brokerID != m.brokerID {
-		return nil
-	}
-	if v.err != nil {
-		// Stay in edit mode and surface the cluster's rejection message.
-		m.editing = true
-		m.editInput.SetValue(v.value)
-		var invalid api.InvalidConfigError
-		msg := v.err.Error()
-		if ok := asInvalidConfig(v.err, &invalid); ok {
-			msg = invalid.Error()
-		}
-		return tea.Batch(
-			func() tea.Msg { return shared.NewUIError("config", msg, nil) },
-			m.editInput.Focus(),
-		)
-	}
-	m.cancelEdit()
-	m.configsLoaded = false
-	return tea.Batch(core.NewNotification(core.StatusSuccess, "Config updated", v.key), m.loadConfigs())
-}
-
-func (m *Model) rebuildConfigTable() {
-	entries := sortedFilteredConfigs(m.configs, m.cfgFilter)
-	m.cfgVisible = entries
-	rows := make([]table.Row, 0, len(entries))
-	for _, e := range entries {
-		val := shared.FormatConfigValue(e.Name, e.Value, e.Sensitive)
-		rows = append(rows, table.Row{e.Name, val, e.Source})
-	}
-	m.cfgTable.SetRows(rows)
-	if m.cfgTable.Cursor() >= len(rows) {
-		m.cfgTable.SetCursor(0)
-	}
-}
-
-// --- rendering ---
-
-func (m *Model) render(width, height int) string {
-	// Size the tables to the actual content area (minus the frame border) so
-	// they fill the pane and never overflow it. height budget: summary(1) +
-	// tabbar(1) + blank(1) + hint(1) + frame(2) ≈ 6, plus slack.
-	innerW := width - 2
-	if innerW < 20 {
-		innerW = 20
-	}
-	th := height - 8
-	if th < 3 {
-		th = 3
-	}
-	m.logTable.SetWidth(innerW)
-	m.cfgTable.SetWidth(innerW)
-	if m.expanded >= 0 {
-		half := th/2 - 1
-		if half < 2 {
-			half = 2
-		}
-		m.logTable.SetHeight(half)
-		m.partTable.SetWidth(innerW)
-		m.partTable.SetHeight(half)
-	} else {
-		m.logTable.SetHeight(th)
-	}
-	m.cfgTable.SetHeight(th)
-
-	var b strings.Builder
-	b.WriteString(m.summaryStrip())
-	b.WriteString("\n")
-	b.WriteString(m.tabBar())
-	b.WriteString("\n\n")
-
-	if m.notFound {
-		b.WriteString(m.common.Styles.Error.Render(fmt.Sprintf("Broker %d not found.", m.brokerID)))
-		b.WriteString("\n")
-		b.WriteString(m.common.Styles.Muted.Render("Press r to retry."))
-		return b.String()
-	}
-
-	if m.moveForm != nil {
-		b.WriteString(m.common.Styles.Header.Render("Move replica log directory"))
-		b.WriteString("\n\n")
-		b.WriteString(m.moveForm.View())
-		return b.String()
-	}
-
-	switch m.active {
-	case tabConfigs:
-		b.WriteString(m.renderConfigs())
-	case tabMetrics:
-		b.WriteString(m.renderMetrics())
-	default:
-		b.WriteString(m.renderLogDirs())
-	}
-	return b.String()
-}
-
-func (m *Model) summaryStrip() string {
-	host := m.info.Host
-	port := strconv.FormatInt(int64(m.info.Port), 10)
-	seg := "N/A"
-	if m.statsOK {
-		seg = shared.FormatDiskUsage(m.stats.SegmentSize, m.stats.SegmentCount)
-	}
-	parts := []string{
-		m.common.Styles.Header.Render(fmt.Sprintf("Broker %d", m.brokerID)),
-		"Host: " + host,
-		"Port: " + port,
-		"Disk: " + seg,
-	}
-	if m.info.IsController {
-		parts = append(parts, m.common.Styles.StatusStyle.Success.Render("★ Active Controller"))
-	}
-	return strings.Join(parts, "   ")
-}
-
-// tabBar renders the shared, click-and-hover-aware tab strip.
-func (m *Model) tabBar() string {
-	m.tabs().SetActive(int(m.active))
-	return m.tabs().View()
-}
-
-// tabs lazily builds this screen's tab strip. Its zone ids must stay stable
-// across renders, so the strip is created once and reused.
-func (m *Model) tabs() *tabstrip.Model {
-	if m.tabStrip == nil {
-		titles := make([]string, 0, len(tabTitles))
-		for _, t := range tabTitles {
-			titles = append(titles, t.String())
-		}
-		m.tabStrip = tabstrip.New("broker", titles)
-	}
-	return m.tabStrip
-}
-
-func (m *Model) renderLogDirs() string {
-	if !m.logDirsLoaded {
-		return m.common.Styles.Muted.Render("Loading log directories…")
-	}
-	if m.logDirsErr != nil {
-		return m.common.Styles.Error.Render("Error: "+m.logDirsErr.Error()) + "\n" + m.common.Styles.Muted.Render("Press r to retry.")
-	}
-	if len(m.logDirs) == 0 {
-		return m.common.Styles.Muted.Render("Log dir data not available")
-	}
-	var b strings.Builder
-	b.WriteString(stylesPkg.FrameTable(m.logTable.View()))
-	if m.expanded >= 0 && m.expanded < len(m.logDirs) {
-		b.WriteString("\n\n")
-		b.WriteString(m.common.Styles.Header.Render("Partitions in " + m.logDirs[m.expanded].Path))
-		b.WriteString("\n")
-		b.WriteString(stylesPkg.FrameTable(m.partTable.View()))
-		b.WriteString("\n")
-		b.WriteString(m.common.Styles.Muted.Render(keys.Hint(keys.ScopeListContent, keys.ActionActivate, "collapse") + "  (move a replica from the actions menu)"))
-	} else {
-		b.WriteString("\n")
-		b.WriteString(m.common.Styles.Muted.Render(keys.Hint(keys.ScopeListContent, keys.ActionActivate, "expand directory")))
-	}
-	return b.String()
-}
-
-func (m *Model) renderConfigs() string {
-	if !m.configsLoaded {
-		return m.common.Styles.Muted.Render("Loading configs…")
-	}
-	if m.configsErr != nil {
-		return m.common.Styles.Error.Render("Error: "+m.configsErr.Error()) + "\n" + m.common.Styles.Muted.Render("Press r to retry.")
-	}
-	var b strings.Builder
-	b.WriteString(stylesPkg.FrameTable(m.cfgTable.View()))
-	b.WriteString("\n")
-	if m.searching {
-		b.WriteString(m.searchInput.View())
-		return b.String()
-	}
-	if m.editing {
-		b.WriteString(m.common.Styles.Header.Render("Edit " + m.editKey + ": "))
-		b.WriteString(m.editInput.View())
-		b.WriteString("\n")
-		b.WriteString(m.common.Styles.Muted.Render(keys.Hint(keys.ScopeListContent, keys.ActionActivate, "save", keys.ActionCancel, "cancel")))
-		return b.String()
-	}
-	b.WriteString(m.configFooter())
-	return b.String()
-}
-
-// configFooter shows the source-category hint and sensitive/exact-byte hints for
-// the selected row (the TUI adaptation of the hover tooltips).
-func (m *Model) configFooter() string {
-	entry, ok := m.selectedConfig()
-	if !ok {
-		return m.common.Styles.Muted.Render(keys.Default.KeyFor(keys.ActionEdit) + ": edit • " + keys.Default.KeyFor(keys.ActionSearch) + ": search")
-	}
-	hint := m.common.Styles.Muted.Render(sourceExplanation(entry.Source))
-	extra := ""
-	if entry.Sensitive {
-		extra = "  •  Sensitive Value"
-	} else if n, err := strconv.ParseInt(entry.Value, 10, 64); err == nil && n > 0 && strings.HasSuffix(entry.Name, ".bytes") {
-		extra = fmt.Sprintf("  •  %d bytes", n)
-	}
-	return hint + m.common.Styles.Muted.Render(extra) + "\n" + m.common.Styles.Muted.Render(keys.Default.KeyFor(keys.ActionEdit)+": edit • "+keys.Default.KeyFor(keys.ActionSearch)+": search")
-}
-
-func (m *Model) renderMetrics() string {
-	if !m.metricsLoaded {
-		return m.common.Styles.Muted.Render("Loading metrics…")
-	}
-	if m.metricsErr != nil {
-		return m.common.Styles.Muted.Render("Metrics data not available")
-	}
-	return m.metricsViewer.View()
-}
-
-// --- ordering / filtering helpers (pure) ---
-
-// sourceRank orders config sources: dynamic* first, then static broker, default,
-// then unknown/other.
-func sourceRank(source string) int {
-	switch source {
-	case "Dynamic broker config":
-		return 0
-	case "Dynamic default broker config":
-		return 1
-	case "Static broker config":
-		return 2
-	case "Default config":
-		return 3
-	case "Unknown":
-		return 4
-	default:
-		return 5
-	}
-}
-
-func sourceExplanation(source string) string {
-	switch source {
-	case "Dynamic broker config":
-		return "Dynamic broker config: set per-broker at runtime"
-	case "Dynamic default broker config":
-		return "Dynamic default broker config: cluster-wide runtime default"
-	case "Static broker config":
-		return "Static broker config: from server.properties (needs restart)"
-	case "Default config":
-		return "Default config: Kafka built-in default"
-	default:
-		return "Unknown config source"
-	}
-}
-
-// sortedFilteredConfigs returns entries filtered by a case-insensitive substring
-// match on key OR value, ordered by source priority (stable within groups).
-func sortedFilteredConfigs(entries []api.BrokerConfigEntry, filter string) []api.BrokerConfigEntry {
-	out := make([]api.BrokerConfigEntry, 0, len(entries))
-	q := strings.ToLower(filter)
-	for _, e := range entries {
-		if q == "" || strings.Contains(strings.ToLower(e.Name), q) || strings.Contains(strings.ToLower(e.Value), q) {
-			out = append(out, e)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return sourceRank(out[i].Source) < sourceRank(out[j].Source)
-	})
-	return out
-}
-
-// asInvalidConfig reports whether err is (or wraps) an api.InvalidConfigError,
-// copying it into dst when so.
-func asInvalidConfig(err error, dst *api.InvalidConfigError) bool {
-	if ic, ok := err.(api.InvalidConfigError); ok {
-		*dst = ic
-		return true
-	}
-	return false
-}

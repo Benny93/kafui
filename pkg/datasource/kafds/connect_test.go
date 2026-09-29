@@ -1,12 +1,26 @@
 package kafds
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
+	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/appconfig"
@@ -361,4 +375,143 @@ func TestValidateConnectorConfig(t *testing.T) {
 	require.Len(t, res.Configs, 1)
 	assert.Equal(t, "topics", res.Configs[0].Name)
 	assert.Equal(t, []string{"Missing required configuration"}, res.Configs[0].Errors)
+}
+
+func TestNewConnectClient_ReusesHTTPClientPerConfig(t *testing.T) {
+	cc := appconfig.ConnectCluster{Name: "reuse", Address: "http://reuse.invalid:8083"}
+	a, err := newConnectClient(cc)
+	require.NoError(t, err)
+	b, err := newConnectClient(cc)
+	require.NoError(t, err)
+	assert.Same(t, a.http, b.http, "same config must share one http.Client/Transport")
+
+	tr, ok := a.http.Transport.(*http.Transport)
+	require.True(t, ok)
+	assert.NotZero(t, tr.IdleConnTimeout, "idle keep-alive connections must expire")
+
+	edited := cc
+	edited.Address = "http://other.invalid:8083"
+	c, err := newConnectClient(edited)
+	require.NoError(t, err)
+	assert.NotSame(t, a.http, c.http, "an edited config gets its own client")
+}
+
+func TestGetConnectors_FetchesTopicsConcurrently(t *testing.T) {
+	const n = 16
+	var (
+		mu                sync.Mutex
+		inFlight, maxSeen int
+		releaseOnce       sync.Once
+	)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/connectors" {
+			parts := make([]string, 0, n)
+			for i := 0; i < n; i++ {
+				parts = append(parts, fmt.Sprintf(`"c%02d":{"info":{"config":{},"type":"source"}}`, i))
+			}
+			_, _ = w.Write([]byte("{" + strings.Join(parts, ",") + "}"))
+			return
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/connectors/"), "/topics")
+		mu.Lock()
+		inFlight++
+		if inFlight > maxSeen {
+			maxSeen = inFlight
+		}
+		if maxSeen >= 2 {
+			releaseOnce.Do(func() { close(release) })
+		}
+		mu.Unlock()
+		// Serial fetching never has a second request in flight: wait (bounded)
+		// for one so the test proves the requests overlap.
+		select {
+		case <-release:
+		case <-time.After(2 * time.Second):
+		}
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"` + name + `":{"topics":["` + name + `-t"]}}`))
+	}))
+	defer srv.Close()
+	withConnect(t, appconfig.ConnectCluster{Name: "many", Address: srv.URL})
+
+	conns, err := KafkaDataSourceKaf{}.GetConnectors()
+	require.NoError(t, err)
+	require.Len(t, conns, n)
+	for _, c := range conns {
+		assert.Equal(t, []string{c.Name + "-t"}, c.Topics)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Greater(t, maxSeen, 1)
+	assert.LessOrEqual(t, maxSeen, connectTopicsFanout)
+}
+
+// A CA rotated in place (same path, so the same config) must be picked up:
+// the cached client is rebuilt from the new file and trusts the new server.
+func TestConnectHTTPClient_ReloadsRotatedCA(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	oldSrv := httptest.NewTLSServer(handler)
+	defer oldSrv.Close()
+	// httptest's servers all share one built-in cert, so the rotated-to
+	// server gets its own self-signed one.
+	newSrv := httptest.NewUnstartedServer(handler)
+	newSrv.TLS = &tls.Config{Certificates: []tls.Certificate{selfSignedCert(t)}}
+	newSrv.StartTLS()
+	defer newSrv.Close()
+
+	caPath := filepath.Join(t.TempDir(), "ca.pem")
+	writeCA := func(srv *httptest.Server, mod time.Time) {
+		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+		require.NoError(t, os.WriteFile(caPath, pemBytes, 0o600))
+		require.NoError(t, os.Chtimes(caPath, mod, mod))
+	}
+	cc := appconfig.ConnectCluster{Name: "rotate", Address: newSrv.URL, TLSCAPath: caPath}
+	t.Cleanup(func() {
+		connectHTTPClientsMu.Lock()
+		delete(connectHTTPClients, cc)
+		connectHTTPClientsMu.Unlock()
+	})
+
+	writeCA(oldSrv, time.Now().Add(-time.Hour))
+	before, err := connectHTTPClient(cc)
+	require.NoError(t, err)
+	again, err := connectHTTPClient(cc)
+	require.NoError(t, err)
+	assert.Same(t, before, again, "unchanged files keep the cached client")
+	_, err = before.Get(newSrv.URL)
+	require.Error(t, err, "the old CA does not trust the new server")
+
+	writeCA(newSrv, time.Now())
+	after, err := connectHTTPClient(cc)
+	require.NoError(t, err)
+	assert.NotSame(t, before, after, "a rotated CA rebuilds the client")
+	resp, err := after.Get(newSrv.URL)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+}
+
+// selfSignedCert returns a self-signed CA certificate for 127.0.0.1.
+func selfSignedCert(t *testing.T) tls.Certificate {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "rotated"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	leaf, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}
 }

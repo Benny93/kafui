@@ -32,9 +32,9 @@ func (f *fakeDS) GetClusterCapabilities(_ context.Context, name string) ([]api.C
 }
 
 // Unused interface methods (collector only calls the four above + GetContexts).
-func (f *fakeDS) Init(string)                              {}
-func (f *fakeDS) GetTopics() (map[string]api.Topic, error) { return nil, nil }
-func (f *fakeDS) GetTopicNames() ([]string, error)         { return f.topicNames, f.topicsErr }
+func (f *fakeDS) Init(string)                                       {}
+func (f *fakeDS) GetTopics() (map[string]api.Topic, error)          { return nil, nil }
+func (f *fakeDS) GetTopicNames() ([]string, error)                  { return f.topicNames, f.topicsErr }
 func (f *fakeDS) GetContext() string                                { return "" }
 func (f *fakeDS) SetContext(string) error                           { return nil }
 func (f *fakeDS) GetClusterDetails(string) (api.ClusterInfo, error) { return api.ClusterInfo{}, nil }
@@ -72,7 +72,7 @@ func (f *fakeDS) GetMessageSchemaInfo(string, string) (*api.MessageSchemaInfo, e
 	return nil, nil
 }
 func (f *fakeDS) DecodeMessage(_ context.Context, m api.Message) (api.Message, error) { return m, nil }
-func (f *fakeDS) ListSerdes() []string { return []string{"string", "hex", "json"} }
+func (f *fakeDS) ListSerdes() []string                                                { return []string{"string", "hex", "json"} }
 func (f *fakeDS) ValidateClusterConnection(context.Context, string) ([]api.ValidationResult, error) {
 	return nil, nil
 }
@@ -96,6 +96,9 @@ func (f *fakeDS) GetTopicDetails(topicName string) (api.TopicDetails, error) {
 	return api.TopicDetails{}, nil
 }
 func (f *fakeDS) GetTopicSizes(topicNames []string) (map[string]int64, error) { return nil, nil }
+func (f *fakeDS) GetTopicHealth(topicNames []string) (map[string]api.TopicHealth, error) {
+	return nil, nil
+}
 func (f *fakeDS) CreateTopic(name string, numPartitions int32, replicationFactor int16, configs map[string]*string) error {
 	return nil
 }
@@ -122,13 +125,13 @@ func (f *fakeDS) CreateConnector(connect, name string, config map[string]string)
 func (f *fakeDS) UpdateConnectorConfig(connect, name string, config map[string]string) (api.Connector, error) {
 	return api.Connector{}, nil
 }
-func (f *fakeDS) DeleteConnector(connect, name string) error            { return nil }
-func (f *fakeDS) PauseConnector(connect, name string) error             { return nil }
-func (f *fakeDS) ResumeConnector(connect, name string) error            { return nil }
-func (f *fakeDS) StopConnector(connect, name string) error              { return nil }
-func (f *fakeDS) RestartConnector(connect, name string) error           { return nil }
+func (f *fakeDS) DeleteConnector(connect, name string) error                  { return nil }
+func (f *fakeDS) PauseConnector(connect, name string) error                   { return nil }
+func (f *fakeDS) ResumeConnector(connect, name string) error                  { return nil }
+func (f *fakeDS) StopConnector(connect, name string) error                    { return nil }
+func (f *fakeDS) RestartConnector(connect, name string) error                 { return nil }
 func (f *fakeDS) RestartConnectorTask(connect, name string, taskID int) error { return nil }
-func (f *fakeDS) ResetConnectorOffsets(connect, name string) error      { return nil }
+func (f *fakeDS) ResetConnectorOffsets(connect, name string) error            { return nil }
 func (f *fakeDS) GetConnectorPlugins(connect string) ([]api.ConnectorPlugin, error) {
 	return nil, nil
 }
@@ -198,6 +201,28 @@ func TestOfflineIsolation(t *testing.T) {
 	assert.Equal(t, api.ClusterOnline, byName["a"].Status, "one failure must not affect others")
 	assert.Equal(t, api.ClusterOffline, byName["b"].Status)
 	assert.Contains(t, byName["b"].LastError, "connection refused")
+}
+
+// A datasource that cannot collect a cluster (the real one only connects to the
+// active cluster) must not make it look offline, nor overwrite what is cached.
+func TestNotSupportedLeavesClusterUntouched(t *testing.T) {
+	f := newFake()
+	c := New(f, 0, nil)
+	c.CollectAll(context.Background())
+	require.Equal(t, api.ClusterOnline, mustOverview(t, c, "b").Status)
+
+	f.statsErr["b"] = api.NotSupportedError{Operation: "statistics for inactive cluster"}
+	c.CollectAll(context.Background())
+	ov := mustOverview(t, c, "b")
+	assert.Equal(t, api.ClusterOnline, ov.Status, "last known stats kept")
+	assert.Equal(t, 1, ov.BrokerCount)
+
+	f2 := newFake()
+	f2.statsErr["b"] = api.NotSupportedError{Operation: "statistics for inactive cluster"}
+	c2 := New(f2, 0, nil)
+	c2.CollectAll(context.Background())
+	assert.Equal(t, api.ClusterInitializing, mustOverview(t, c2, "b").Status, "never collected stays initializing")
+	assert.Equal(t, api.ClusterOnline, mustOverview(t, c2, "a").Status)
 }
 
 func TestRefreshSingleCluster(t *testing.T) {

@@ -201,11 +201,24 @@ type Model struct {
 **Message consumption and display for specific Kafka topics with real-time streaming:**
 
 **File Structure:**
-- `topic_page.go` - Core topic page logic and Page interface implementation
-- `handlers.go` - Message and event handling logic
-- `keys.go` - Topic-specific key bindings and controls
-- `view.go` - Topic view rendering with message table and info panels
-- `consumption.go` - Message consumption controller and streaming logic
+- `topic_page.go` - Core `Model` struct, constructor and Page interface implementation
+- `page_wrapper.go` - `TopicPageModel` (the routed page wrapping `Model`) and `View`
+- `live_stream.go` - Fetch generations, live stream start/stop, consume flags per mode
+- `message_buffer.go` - Adding, sorting and filtering messages; pause buffering
+- `table_render.go` - Message table sizing and rendering
+- `handlers.go` - Message dispatch (`Handlers.Handle`) plus search, selection and error handlers
+- `fetch_handlers.go` - Batch fetch results, progress start and lazy decode results
+- `live_handlers.go` - Live stream messages, retries, disconnects and stream errors
+- `mouse_handlers.go` - Wheel, hover and click handling on the message table
+- `keys.go` - Key dispatch (`Keys.HandleKey`), search-mode input and per-action handlers
+- `key_navigation.go` - Cursor movement across rows and batch pages
+- `clipboard.go` - Copying the selected message's key or value
+- `topic_providers.go` - Template content provider: table, search bar, loading/error/empty states
+- `header_provider.go` - Template header provider
+- `sidebar_sections.go` - Sidebar sections: topic info, selected message, consumption, shortcuts
+- `consumption.go` - `ConsumptionController`: live stream start/stop and listeners
+- `batch_fetch.go` - Bounded batch fetches, progress/result channels, lazy decode
+- `consumption_retry.go` - Retry policy, backoff and reconnect scheduling
 - `types.go` - Topic-specific data structures and configurations
 - `topic_page_test.go` - Comprehensive testing including real-time scenarios
 

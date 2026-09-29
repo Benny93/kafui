@@ -41,6 +41,7 @@ type (
 // queryStartedMsg is emitted when ExecuteKsql returns its result channel. The
 // channel is the single-use "pipe"; Cancel terminates the server-side query.
 type queryStartedMsg struct {
+	gen    int
 	ch     <-chan api.KsqlResultTable
 	cancel context.CancelFunc
 }
@@ -48,10 +49,11 @@ type queryStartedMsg struct {
 // ksqlResultMsg carries one result table drained from the channel. ok is false
 // when the channel has closed (query complete / aborted / errored).
 type ksqlResultMsg struct {
+	gen   int
 	table api.KsqlResultTable
 	ok    bool
 }
 
 // queryTickMsg re-arms the channel drain when no table arrived within the
 // listen window (keeps the Update loop responsive without busy-waiting).
-type queryTickMsg struct{}
+type queryTickMsg struct{ gen int }

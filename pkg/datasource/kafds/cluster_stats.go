@@ -2,6 +2,7 @@ package kafds
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -15,7 +16,16 @@ import (
 // ponytail: KRaft/ZooKeeper quorum detection is not wrapped by
 // ClusterAdminInterface, so CoordinationType is best-effort "unknown". Byte
 // throughput isn't available from Sarama admin APIs (metrics feature owns it).
-func (kp KafkaDataSourceKaf) GetClusterStatistics(_ context.Context, _ string) (api.ClusterStatistics, error) {
+//
+// Only the active cluster has a connection, so for any other clusterName it
+// returns api.NotSupportedError instead of reporting (and paying for) the
+// active cluster's statistics under the other cluster's name.
+func (kp KafkaDataSourceKaf) GetClusterStatistics(_ context.Context, clusterName string) (api.ClusterStatistics, error) {
+	if clusterName != "" && clusterName != kp.GetContext() {
+		return api.ClusterStatistics{}, api.NotSupportedError{
+			Operation: fmt.Sprintf("statistics for cluster %q (only the active cluster is connected)", clusterName),
+		}
+	}
 	perBroker, summary, err := kp.GetBrokerStats()
 	if err != nil {
 		return api.ClusterStatistics{}, err
@@ -86,7 +96,6 @@ func (kp KafkaDataSourceKaf) GetClusterCapabilities(_ context.Context, clusterNa
 			}); err == nil {
 				caps = append(caps, api.CapACLView)
 			}
-			_ = admin.Close()
 		}
 	}
 

@@ -8,6 +8,13 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/keys"
 )
 
+// IsInputMode implements core.InputModeReporter: an active text-input sub-state
+// (topic filter or the reset form) makes the shell stop intercepting hotkeys,
+// so typing q, a or : goes to the field.
+func (m *Model) IsInputMode() bool {
+	return m.searching || m.resetForm != nil
+}
+
 // KeyScope implements core.KeyScoper.
 func (m *Model) KeyScope() keys.Scope { return keys.ScopeListContent }
 

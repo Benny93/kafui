@@ -3,6 +3,7 @@ package kafds
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,27 +11,12 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // MockConsumer implements ConsumerInterface for testing
 type MockConsumer struct {
 	mock.Mock
-}
-
-func (m *MockConsumer) GetOffsets(client sarama.Client, topic string, partition int32) (*offsets, error) {
-	args := m.Called(client, topic, partition)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*offsets), args.Error(1)
-}
-
-func (m *MockConsumer) CreateConsumerFromClient(client sarama.Client, topic string, partition int32) (sarama.PartitionConsumer, error) {
-	args := m.Called(client, topic, partition)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(sarama.PartitionConsumer), args.Error(1)
 }
 
 func (m *MockConsumer) CreateConsumerGroupFromClient(group string, client sarama.Client) (sarama.ConsumerGroup, error) {
@@ -39,11 +25,6 @@ func (m *MockConsumer) CreateConsumerGroupFromClient(group string, client sarama
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(sarama.ConsumerGroup), args.Error(1)
-}
-
-// MockMessageProcessor implements MessageProcessorInterface for testing
-type MockMessageProcessor struct {
-	mock.Mock
 }
 
 type MockSaramaClient struct {
@@ -227,31 +208,6 @@ func (m *MockSaramaClient) Closed() bool {
 	return args.Bool(0)
 }
 
-func (m *MockMessageProcessor) ProcessMessage(msg *sarama.ConsumerMessage, handler api.MessageHandlerFunc) error {
-	args := m.Called(msg, handler)
-	return args.Error(0)
-}
-
-func (m *MockMessageProcessor) FormatKey(key []byte) []byte {
-	args := m.Called(key)
-	return args.Get(0).([]byte)
-}
-
-func (m *MockMessageProcessor) FormatValue(value []byte) []byte {
-	args := m.Called(value)
-	return args.Get(0).([]byte)
-}
-
-func (m *MockMessageProcessor) DecodeAvro(data []byte) ([]byte, error) {
-	args := m.Called(data)
-	return args.Get(0).([]byte), args.Error(1)
-}
-
-func (m *MockMessageProcessor) DecodeProto(data []byte, protoType string) ([]byte, error) {
-	args := m.Called(data, protoType)
-	return args.Get(0).([]byte), args.Error(1)
-}
-
 // MockConfigProvider implements ConfigProviderInterface for testing
 type MockConfigProvider struct {
 	mock.Mock
@@ -316,7 +272,6 @@ func (m *MockConsumerGroup) ResumeAll() {
 func TestDoConsumeWithDeps_ConfigError(t *testing.T) {
 	mockConfigProvider := &MockConfigProvider{}
 	mockConsumer := &MockConsumer{}
-	mockProcessor := &MockMessageProcessor{}
 
 	mockConfigProvider.On("GetConsumerConfig").Return(nil, errors.New("config error"))
 
@@ -331,7 +286,7 @@ func TestDoConsumeWithDeps_ConfigError(t *testing.T) {
 	flags := api.ConsumeFlags{Follow: true, Tail: 10}
 	handler := func(msg api.Message) {}
 
-	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer, mockProcessor)
+	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer)
 
 	assert.True(t, errorCalled)
 	assert.Contains(t, errorMsg.(error).Error(), "config error")
@@ -341,7 +296,6 @@ func TestDoConsumeWithDeps_ConfigError(t *testing.T) {
 func TestDoConsumeWithDeps_ClientError(t *testing.T) {
 	mockConfigProvider := &MockConfigProvider{}
 	mockConsumer := &MockConsumer{}
-	mockProcessor := &MockMessageProcessor{}
 
 	config := sarama.NewConfig()
 	mockConfigProvider.On("GetConsumerConfig").Return(config, nil)
@@ -358,7 +312,7 @@ func TestDoConsumeWithDeps_ClientError(t *testing.T) {
 	flags := api.ConsumeFlags{Follow: true, Tail: 10}
 	handler := func(msg api.Message) {}
 
-	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer, mockProcessor)
+	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer)
 
 	assert.True(t, errorCalled)
 	assert.Contains(t, errorMsg.(error).Error(), "client error")
@@ -368,12 +322,12 @@ func TestDoConsumeWithDeps_ClientError(t *testing.T) {
 func TestDoConsumeWithDeps_OffsetParsing(t *testing.T) {
 	mockConfigProvider := &MockConfigProvider{}
 	mockConsumer := &MockConsumer{}
-	mockProcessor := &MockMessageProcessor{}
 	mockClient := &MockSaramaClient{}
 
 	config := sarama.NewConfig()
 	mockConfigProvider.On("GetConsumerConfig").Return(config, nil)
 	mockConfigProvider.On("GetClientFromConfig", config).Return(mockClient, nil)
+	mockClient.On("Close").Return(nil)
 
 	var errorCalled bool
 	var errorMsg interface{}
@@ -390,17 +344,144 @@ func TestDoConsumeWithDeps_OffsetParsing(t *testing.T) {
 	}
 	handler := func(msg api.Message) {}
 
-	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer, mockProcessor)
+	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer)
 
 	assert.True(t, errorCalled)
 	assert.Contains(t, errorMsg.(error).Error(), "invalid syntax")
 	mockConfigProvider.AssertExpectations(t)
+	// The client is closed even when consumption bails out early.
+	mockClient.AssertCalled(t, "Close")
+}
+
+// brokerConfigProvider builds real sarama clients against a mock broker and
+// remembers the last one so a test can check it was closed.
+type brokerConfigProvider struct {
+	addr   string
+	client sarama.Client
+}
+
+func (p *brokerConfigProvider) GetConsumerConfig() (*sarama.Config, error) {
+	cfg := sarama.NewConfig()
+	cfg.Metadata.Retry.Max = 0
+	return cfg, nil
+}
+
+func (p *brokerConfigProvider) GetClientFromConfig(cfg *sarama.Config) (sarama.Client, error) {
+	c, err := sarama.NewClient([]string{p.addr}, cfg)
+	p.client = c
+	return c, err
+}
+
+// Regression (CONC-1/DS-2): a completed fetch must close the client it
+// created instead of leaking it with its broker connections.
+func TestDoConsumeWithConfig_ClosesClientAfterFetch(t *testing.T) {
+	broker := sarama.NewMockBroker(t, 1)
+	defer broker.Close()
+	broker.SetHandlerByMap(map[string]sarama.MockResponse{
+		"MetadataRequest": sarama.NewMockMetadataResponse(t).
+			SetBroker(broker.Addr(), broker.BrokerID()).
+			SetLeader("t", 0, broker.BrokerID()),
+		"OffsetRequest": sarama.NewMockOffsetResponse(t).
+			SetOffset("t", 0, sarama.OffsetOldest, 0).
+			SetOffset("t", 0, sarama.OffsetNewest, 2),
+		"FetchRequest": sarama.NewMockFetchResponse(t, 1).
+			SetMessage("t", 0, 0, sarama.StringEncoder("a")).
+			SetMessage("t", 0, 1, sarama.StringEncoder("b")).
+			SetHighWaterMark("t", 0, 2),
+	})
+
+	provider := &brokerConfigProvider{addr: broker.Addr()}
+	var (
+		mu   sync.Mutex
+		got  []string
+		errs []any
+	)
+	handle := func(m api.Message) {
+		mu.Lock()
+		got = append(got, m.Value)
+		mu.Unlock()
+	}
+	onError := func(err any) {
+		mu.Lock()
+		errs = append(errs, err)
+		mu.Unlock()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	DoConsumeWithConfig(ctx, "t", api.ConsumeFlags{OffsetFlag: "oldest"}, handle, onError,
+		provider, &MockConsumer{}, DefaultConsumeConfig())
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Empty(t, errs)
+	assert.Equal(t, []string{"a", "b"}, got)
+	require.NotNil(t, provider.client)
+	assert.True(t, provider.client.Closed(), "client must be closed once the fetch completes")
+}
+
+// Regression (DS-11): the consumer-group path reports errors, rejoins after a
+// rebalance until ctx is done, and always closes the group.
+func TestWithConsumerGroupWithDeps(t *testing.T) {
+	t.Run("consume error is returned and group closed", func(t *testing.T) {
+		cg := &MockConsumerGroup{}
+		cg.On("Consume", mock.Anything, []string{"t"}, mock.Anything).Return(errors.New("boom"))
+		cg.On("Close").Return(nil)
+		consumer := &MockConsumer{}
+		consumer.On("CreateConsumerGroupFromClient", "g", mock.Anything).Return(cg, nil)
+
+		err := withConsumerGroupWithDeps(context.Background(), &MockClient{}, "t", "g", consumer, DefaultConsumeConfig(), nil)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
+		cg.AssertCalled(t, "Close")
+	})
+
+	t.Run("rejoins after rebalance until ctx is cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		calls := 0
+		cg := &MockConsumerGroup{}
+		cg.On("Consume", mock.Anything, []string{"t"}, mock.Anything).Return(nil).Run(func(mock.Arguments) {
+			calls++
+			if calls == 2 {
+				cancel()
+			}
+		})
+		cg.On("Close").Return(nil)
+		consumer := &MockConsumer{}
+		consumer.On("CreateConsumerGroupFromClient", "g", mock.Anything).Return(cg, nil)
+
+		err := withConsumerGroupWithDeps(ctx, &MockClient{}, "t", "g", consumer, DefaultConsumeConfig(), nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, 2, calls)
+		cg.AssertCalled(t, "Close")
+	})
+
+	t.Run("DoConsume forwards group errors to onError", func(t *testing.T) {
+		provider := &MockConfigProvider{}
+		client := &MockSaramaClient{}
+		cfg := sarama.NewConfig()
+		provider.On("GetConsumerConfig").Return(cfg, nil)
+		provider.On("GetClientFromConfig", cfg).Return(client, nil)
+		client.On("Close").Return(nil)
+		consumer := &MockConsumer{}
+		consumer.On("CreateConsumerGroupFromClient", "g", client).Return(nil, errors.New("no group"))
+
+		var got any
+		DoConsumeWithDeps(context.Background(), "t", api.ConsumeFlags{GroupFlag: "g"}, func(api.Message) {},
+			func(err any) { got = err }, provider, consumer)
+
+		require.NotNil(t, got)
+		assert.Contains(t, got.(error).Error(), "no group")
+		client.AssertCalled(t, "Close")
+	})
 }
 
 func TestDoConsumeWithDeps_Success_OldestOffset(t *testing.T) {
 	mockConfigProvider := &MockConfigProvider{}
 	mockConsumer := &MockConsumer{}
-	mockProcessor := &MockMessageProcessor{}
 	mockClient := &MockSaramaClient{}
 
 	config := sarama.NewConfig()
@@ -438,7 +519,7 @@ func TestDoConsumeWithDeps_Success_OldestOffset(t *testing.T) {
 	mockClient.On("Partitions", "test-topic").Return([]int32{0}, nil)
 
 	// This will call withoutConsumerGroupWithDeps since groupFlag is empty
-	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer, mockProcessor)
+	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer)
 
 	if errorCalled {
 		t.Logf("Error occurred: %v", errorMsg)
@@ -451,7 +532,6 @@ func TestDoConsumeWithDeps_Success_OldestOffset(t *testing.T) {
 func TestDoConsumeWithDeps_Success_NewestOffset(t *testing.T) {
 	mockConfigProvider := &MockConfigProvider{}
 	mockConsumer := &MockConsumer{}
-	mockProcessor := &MockMessageProcessor{}
 	mockClient := &MockSaramaClient{}
 
 	config := sarama.NewConfig()
@@ -486,7 +566,7 @@ func TestDoConsumeWithDeps_Success_NewestOffset(t *testing.T) {
 	}
 	handler := func(msg api.Message) {}
 
-	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer, mockProcessor)
+	DoConsumeWithDeps(ctx, "test-topic", flags, handler, onError, mockConfigProvider, mockConsumer)
 
 	if errorCalled {
 		t.Logf("Error occurred: %v", errorMsg)
@@ -498,9 +578,6 @@ func TestDoConsumeWithDeps_Success_NewestOffset(t *testing.T) {
 }
 
 func TestWithoutConsumerGroupWithDeps_NilClient(t *testing.T) {
-	mockConsumer := &MockConsumer{}
-	mockProcessor := &MockMessageProcessor{}
-
 	var errorCalled bool
 	var errorMsg interface{}
 	onError := func(err interface{}) {
@@ -510,82 +587,8 @@ func TestWithoutConsumerGroupWithDeps_NilClient(t *testing.T) {
 
 	ctx := context.Background()
 	config := DefaultConsumeConfig()
-	withoutConsumerGroupWithDeps(ctx, nil, "test-topic", sarama.OffsetOldest, onError, mockConsumer, mockProcessor, config, nil)
+	withoutConsumerGroupWithDeps(ctx, nil, "test-topic", sarama.OffsetOldest, onError, config, nil)
 
 	assert.True(t, errorCalled)
 	assert.Contains(t, errorMsg.(string), "client is nil")
-}
-
-// Test formatting functions
-
-func TestFormatJSON_ValidJSON(t *testing.T) {
-	jsonData := []byte(`{"key": "value"}`)
-	result := formatJSON(jsonData)
-
-	assert.IsType(t, map[string]interface{}{}, result)
-}
-
-func TestFormatJSON_InvalidJSON(t *testing.T) {
-	invalidData := []byte(`invalid json`)
-	result := formatJSON(invalidData)
-
-	assert.Equal(t, "invalid json", result)
-}
-
-func TestIsJSON_ValidJSON(t *testing.T) {
-	jsonData := []byte(`{"key": "value"}`)
-	result := isJSON(jsonData)
-
-	assert.True(t, result)
-}
-
-func TestIsJSON_InvalidJSON(t *testing.T) {
-	invalidData := []byte(`invalid json`)
-	result := isJSON(invalidData)
-
-	assert.False(t, result)
-}
-
-// Test OutputFormat
-
-func TestOutputFormat_String(t *testing.T) {
-	format := OutputFormatJSON
-	assert.Equal(t, "json", format.String())
-}
-
-func TestOutputFormat_Set_Valid(t *testing.T) {
-	var format OutputFormat
-
-	err := format.Set("json")
-	assert.NoError(t, err)
-	assert.Equal(t, OutputFormatJSON, format)
-
-	err = format.Set("raw")
-	assert.NoError(t, err)
-	assert.Equal(t, OutputFormatRaw, format)
-
-	err = format.Set("default")
-	assert.NoError(t, err)
-	assert.Equal(t, OutputFormatDefault, format)
-}
-
-func TestOutputFormat_Set_Invalid(t *testing.T) {
-	var format OutputFormat
-
-	err := format.Set("invalid")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must be one of")
-}
-
-func TestOutputFormat_Type(t *testing.T) {
-	var format OutputFormat
-	assert.Equal(t, "OutputFormat", format.Type())
-}
-
-func TestCompleteOutputFormat(t *testing.T) {
-	completions, directive := completeOutputFormat(nil, nil, "")
-
-	assert.Equal(t, []string{"default", "raw", "json"}, completions)
-	// Just check that directive is returned (specific value may vary)
-	assert.NotNil(t, directive)
 }

@@ -159,3 +159,34 @@ func TestGuardSetContextReResolvesGate(t *testing.T) {
 	assert.Equal(t, "stg-admin", gate.ActiveProfileName(), "context switch re-resolves the active profile")
 	assert.True(t, gate.Allowed(authz.ActionDelete, authz.ResourceTopic, "x"), "staging admin can delete")
 }
+
+// reloadingSpy is an inner datasource that supports an in-place Reload, which
+// (like kafds when the active cluster was removed) changes the active cluster.
+type reloadingSpy struct {
+	*spyDS
+	reloaded bool
+}
+
+func (s *reloadingSpy) Reload(appconfig.Config) error {
+	s.reloaded = true
+	s.ctx = "staging"
+	return nil
+}
+
+// The UI finds Reload by type assertion on the datasource it holds, which is
+// the Guard, so the Guard must forward it and re-resolve the gate's cluster.
+func TestGuardForwardsReload(t *testing.T) {
+	inner := &reloadingSpy{spyDS: newSpy()}
+	gate := adminGate(t, false)
+	var ds api.KafkaDataSource = NewGuard(inner, gate, nil)
+	require.Equal(t, "admin", gate.ActiveProfileName())
+
+	r, ok := ds.(interface{ Reload(appconfig.Config) error })
+	require.True(t, ok, "the guarded datasource must expose Reload")
+	require.NoError(t, r.Reload(appconfig.Config{}))
+	assert.True(t, inner.reloaded)
+	assert.Empty(t, gate.ActiveProfileName(), "the gate follows the cluster the reload switched to")
+
+	// An inner datasource without Reload (the mock) is a no-op.
+	require.NoError(t, NewGuard(newSpy(), nil, nil).Reload(appconfig.Config{}))
+}

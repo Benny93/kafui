@@ -181,6 +181,10 @@ func (m *MockDataSource) GetTopicDetails(topicName string) (api.TopicDetails, er
 func (m *MockDataSource) GetTopicSizes(topicNames []string) (map[string]int64, error) {
 	return nil, nil
 }
+
+func (m *MockDataSource) GetTopicHealth(topicNames []string) (map[string]api.TopicHealth, error) {
+	return nil, nil
+}
 func (m *MockDataSource) CreateTopic(name string, numPartitions int32, replicationFactor int16, configs map[string]*string) error {
 	return nil
 }
@@ -456,7 +460,6 @@ func TestSetError(t *testing.T) {
 
 	assert.Equal(t, testError, model.error)
 	assert.Equal(t, testError, model.lastError)
-	assert.Len(t, model.errorHistory, 1)
 	assert.Equal(t, "failed", model.connectionStatus)
 	assert.Contains(t, model.statusMessage, "Error:")
 }

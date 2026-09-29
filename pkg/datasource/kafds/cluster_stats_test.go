@@ -1,6 +1,8 @@
 package kafds
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -12,6 +14,17 @@ func TestCoordinationType(t *testing.T) {
 	assert.Equal(t, "zookeeper", coordinationType("ZooKeeper"))
 	assert.Equal(t, "unknown", coordinationType(""))
 	assert.Equal(t, "unknown", coordinationType("something-else"))
+}
+
+// Statistics for a cluster other than the active one must not be the active
+// cluster's statistics under another name.
+func TestGetClusterStatistics_InactiveClusterNotSupported(t *testing.T) {
+	factory := withTwoClusters(t)
+
+	_, err := KafkaDataSourceKaf{configManager: &DefaultConfigManager{}}.GetClusterStatistics(context.Background(), "b")
+	var ns api.NotSupportedError
+	assert.True(t, errors.As(err, &ns))
+	assert.Equal(t, 0, factory.CreateClusterAdminCalls, "no broker traffic for an inactive cluster")
 }
 
 // TestClusterStatisticsShape is a compile+shape guard that ClusterStatistics

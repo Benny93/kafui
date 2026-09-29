@@ -12,9 +12,12 @@ type MockKafkaClientFactory struct {
 	ShouldFailClient       bool
 	MockClusterAdmin       ClusterAdminInterface
 	MockClient             sarama.Client
+	// CreateClusterAdminCalls counts CreateClusterAdmin invocations.
+	CreateClusterAdminCalls int
 }
 
 func (m *MockKafkaClientFactory) CreateClusterAdmin(brokers []string, config *sarama.Config) (ClusterAdminInterface, error) {
+	m.CreateClusterAdminCalls++
 	if m.ShouldFailClusterAdmin {
 		return nil, errors.New("mock cluster admin creation failed")
 	}
@@ -56,6 +59,8 @@ type MockClusterAdmin struct {
 	MockTopics                   map[string]sarama.TopicDetail
 	MockConsumerGroups           map[string]string
 	MockGroupDescriptions        []*sarama.GroupDescription
+	// ListTopicsCalls counts ListTopics invocations.
+	ListTopicsCalls int
 
 	// Broker-management fields (BR-2..BR-7).
 	MockBrokers               []*sarama.Broker
@@ -65,8 +70,10 @@ type MockClusterAdmin struct {
 	ShouldFailDescribeConfig  bool
 	MockLogDirs               map[int32][]sarama.DescribeLogDirsResponseDirMetadata
 	ShouldFailDescribeLogDirs bool
-	MockTopicMetadata         []*sarama.TopicMetadata
-	ShouldFailDescribeTopics  bool
+	// DescribeLogDirsCalls records the broker IDs of each DescribeLogDirs call.
+	DescribeLogDirsCalls     [][]int32
+	MockTopicMetadata        []*sarama.TopicMetadata
+	ShouldFailDescribeTopics bool
 	// AlterConfigErr, when set, is returned from IncrementalAlterConfig.
 	AlterConfigErr error
 	// IncrementalAlterConfigCalls records (name, key, value) of each SET.
@@ -162,6 +169,7 @@ type AlterConfigCall struct {
 }
 
 func (m *MockClusterAdmin) ListTopics() (map[string]sarama.TopicDetail, error) {
+	m.ListTopicsCalls++
 	if m.ShouldFailListTopics {
 		return nil, errors.New("mock list topics failed")
 	}
@@ -241,6 +249,7 @@ func (m *MockClusterAdmin) IncrementalAlterConfig(resourceType sarama.ConfigReso
 }
 
 func (m *MockClusterAdmin) DescribeLogDirs(brokers []int32) (map[int32][]sarama.DescribeLogDirsResponseDirMetadata, error) {
+	m.DescribeLogDirsCalls = append(m.DescribeLogDirsCalls, brokers)
 	if m.ShouldFailDescribeLogDirs {
 		return nil, errors.New("mock describe log dirs failed")
 	}

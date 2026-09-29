@@ -135,9 +135,12 @@ func (p *SchemaDetailContentProvider) InitContent() tea.Cmd {
 
 // IsInputMode reports true when the page owns a text/selection sub-view so the
 // framework must not intercept keystrokes as app-level hotkeys.
+// The viewer's in-content search prompt counts too: its keystrokes must reach
+// the search field, not the shell.
 func (p *SchemaDetailContentProvider) IsInputMode() bool {
 	return p.model.mode == modeRegister || p.model.mode == modePicker ||
-		p.model.mode == modeVersions || p.model.mode == modeDiff
+		p.model.mode == modeVersions || p.model.mode == modeDiff ||
+		(p.model.viewer != nil && p.model.viewer.Searching())
 }
 
 func (p *SchemaDetailContentProvider) GetContentSize(width int) int {

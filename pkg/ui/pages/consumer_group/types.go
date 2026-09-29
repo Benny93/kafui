@@ -21,6 +21,7 @@ type (
 	autoRefreshTickMsg struct {
 		groupID  string
 		interval time.Duration
+		gen      uint64 // tick chain generation; see Model.tickGen
 	}
 
 	// groupDeletedMsg is dispatched after a confirmed group deletion.

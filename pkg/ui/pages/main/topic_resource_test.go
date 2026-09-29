@@ -193,7 +193,7 @@ func TestToggleHideInternal_ExcludesAndResetsPage(t *testing.T) {
 	k.pagination.Page = 1 // simulate being off the first page
 
 	cmd := k.toggleHideInternal()
-	assert.Nil(t, cmd)
+	assert.NotNil(t, cmd, "the rows now on the page are enriched")
 	assert.True(t, k.hideInternal)
 	assert.True(t, k.isFiltered)
 	assert.Len(t, k.filteredItems, 2, "internal topics excluded from the filtered view")
@@ -267,7 +267,10 @@ func TestOpenCloneTopicForm_Prefill(t *testing.T) {
 	loadTopicsInto(t, k)
 	highlightTopic(t, k, "clone-src")
 
-	k.openCloneTopicForm()
+	cmd := k.openCloneTopicForm()
+	require.NotNil(t, cmd)
+	assert.False(t, k.showTopicForm, "the form opens once the lookups return, not in Update")
+	k.HandleContentUpdate(cmd())
 	require.True(t, k.showTopicForm)
 	require.NotNil(t, k.topicForm)
 
@@ -396,7 +399,7 @@ func TestPurgeSelectedTopic_CompactPolicyHint(t *testing.T) {
 	loadTopicsInto(t, k)
 	highlightTopic(t, k, "compact-topic")
 
-	assert.False(t, k.topicAllowsDelete("compact-topic"))
+	assert.False(t, topicAllowsDelete(spy, "compact-topic"))
 
 	msg := k.purgeSelectedTopics()()
 	_, isConfirm := msg.(core.ShowConfirmMsg)

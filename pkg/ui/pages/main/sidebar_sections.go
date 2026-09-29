@@ -185,7 +185,17 @@ type ClusterInfoSection struct {
 	lastUpdate  time.Time
 	clusterInfo map[string]interface{}
 	loading     bool
+
+	// fetchedContext and fetchedAt record the last broker-count fetch, so the
+	// 5s header tick only re-fetches after a context switch or once the count
+	// is brokerCountMaxAge old, rather than hitting the cluster every tick.
+	fetchedContext string
+	fetchedAt      time.Time
 }
+
+// brokerCountMaxAge is how long the sidebar's broker count is shown before
+// the timer tick fetches it again.
+const brokerCountMaxAge = 60 * time.Second
 
 func NewClusterInfoSection(dataSource api.KafkaDataSource) *ClusterInfoSection {
 	return &ClusterInfoSection{
@@ -316,7 +326,10 @@ func (c *ClusterInfoSection) HandleSectionUpdate(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case TimerTickMsg:
 		c.lastUpdate = time.Time(msg)
-		return c.RefreshSection()
+		if c.dataSource.GetContext() != c.fetchedContext || time.Since(c.fetchedAt) >= brokerCountMaxAge {
+			return c.RefreshSection()
+		}
+		return nil
 	case ClusterInfoMsg:
 		c.clusterInfo = msg.Info
 		c.loading = false
@@ -333,6 +346,8 @@ func (c *ClusterInfoSection) RefreshSection() tea.Cmd {
 		c.loading = true
 	}
 	ds := c.dataSource
+	c.fetchedContext = ds.GetContext()
+	c.fetchedAt = time.Now()
 	return func() tea.Msg {
 		info := make(map[string]interface{})
 		// GetBrokers() enumerates brokers from cluster metadata (matching the

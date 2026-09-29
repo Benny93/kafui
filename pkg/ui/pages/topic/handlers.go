@@ -1,18 +1,11 @@
 package topic
 
 import (
-	"fmt"
-	"time"
-
-	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/components"
 	formpkg "github.com/Benny93/kafui/pkg/ui/components/form"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	zone "github.com/lrstanley/bubblezone"
-
-	"github.com/Benny93/kafui/pkg/ui/core"
 )
 
 // Handlers manages event handling for the topic page
@@ -55,6 +48,13 @@ func (h *Handlers) Handle(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return h.handleStartFetch(model, msg)
 
 	case components.ProgressMsg:
+		// Progress from a fetch the bar no longer tracks: the bar is inactive
+		// after its Done, the zero value comes from a closed channel, and a
+		// superseded fetch reports on a channel other than the current one.
+		// Forwarding any of them would end or re-arm the current fetch's bar.
+		if !model.fetchProgressBar.IsActive() || !model.fetchProgressBar.Tracks(msg) || (msg.Total == 0 && !msg.Done) {
+			return model, nil
+		}
 		var cmd tea.Cmd
 		model.fetchProgressBar, cmd = model.fetchProgressBar.Update(msg)
 		model.markRenderDirty()
@@ -77,6 +77,15 @@ func (h *Handlers) Handle(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ContinuousErrorListenMsg:
 		return h.handleContinuousErrorListen(model, msg)
+
+	case streamClosedMsg:
+		return h.handleStreamClosed(model, msg)
+
+	case liveErrorMsg:
+		return h.handleLiveError(model, msg)
+
+	case topicMetaLoadedMsg:
+		return h.handleTopicMetaLoaded(model, msg)
 
 	case ConnectionStatusMsg:
 		return h.handleConnectionStatus(model, msg)
@@ -180,221 +189,6 @@ func (h *Handlers) handleKeyMsg(model *Model, msg tea.KeyMsg) (tea.Model, tea.Cm
 	return model, cmd
 }
 
-func (h *Handlers) handleMessageConsumed(model *Model, msg MessageConsumedMsg) (tea.Model, tea.Cmd) {
-	// Add the consumed message to internal storage (doesn't trigger view update)
-	model.addMessageInternal(msg.Message)
-
-	// Ensure messages are sorted for pagination
-	model.sortMessages()
-	model.updateMessageTable()
-
-	// Update total messages for pagination
-	model.pagination.SetTotalMessages(len(model.filteredMessages))
-
-	model.markRenderDirty()
-
-	// Continue listening for more messages if we're still consuming
-	if model.consuming && model.msgChan != nil {
-		return model, model.consumption.ListenForMessages(model.msgChan)
-	}
-
-	return model, nil
-}
-
-func (h *Handlers) handleMessagesFetched(model *Model, msg MessagesFetchedMsg) (tea.Model, tea.Cmd) {
-	shared.Log.Info("messages fetched", "topic", model.topicName, "count", len(msg.Messages), "pendingAppend", model.appendNextFetch)
-
-	// Treat as append if there are outstanding append-batch fetches.
-	appending := model.appendNextFetch > 0
-	if appending {
-		model.appendNextFetch--
-	}
-	// Keep loading indicator active only while further batches are still in-flight.
-	model.loading = model.appendNextFetch > 0
-
-	if !appending {
-		// Fresh fetch — clear existing messages.
-		model.mu.Lock()
-		model.messages = []api.Message{}
-		model.consumedMessages = make(map[string]api.Message)
-		model.mu.Unlock()
-	}
-
-	// Add all fetched messages
-	for _, m := range msg.Messages {
-		model.addMessageInternal(m)
-	}
-
-	// Ensure messages are sorted for pagination
-	model.sortMessages()
-
-	// Recompute browse statistics from the full loaded set (MSG-27).
-	model.browseStats = api.BrowseStats{}
-	for _, msg := range model.messages {
-		model.browseStats.AddMessage(msg)
-	}
-	if !model.browseStart.IsZero() {
-		model.browseStats.ElapsedMs = time.Since(model.browseStart).Milliseconds()
-	}
-
-	// Re-apply the active filter (substring or smart) to the new data (MSG-23/24).
-	model.applyFilter()
-
-	// Update pagination
-	model.pagination.SetTotalMessages(len(model.filteredMessages))
-
-	if appending {
-		// Navigate to the last page so the user sees the newly added messages.
-		model.pagination.LastPage()
-	} else {
-		// Reset to first page to see the newest messages.
-		model.pagination.FirstPage()
-	}
-	// Do NOT set pendingReset — preserve cursor position if still in bounds.
-	// updateMessageTable() already clamps cursorRow when it exceeds visibleCount.
-
-	// Rebuild table rows with sorted data before the first render.
-	model.updateMessageTable()
-
-	// Mark render as dirty to show the messages
-	model.markRenderDirty()
-
-	if len(model.messages) == 0 {
-		model.statusMessage = "Topic is empty — no messages found"
-	} else if appending && len(msg.Messages) == 0 {
-		model.statusMessage = "No more messages to load"
-	} else {
-		model.statusMessage = fmt.Sprintf("Loaded %d messages", len(model.messages))
-	}
-
-	// Decode ALL fetched messages in one background pass so that every page is
-	// pre-decoded before the user scrolls. A shared schema registry client
-	// (cachedSchemaCache) means only one HTTP round-trip per unique schema ID.
-	return model, model.consumption.DecodeVisibleMessages(model.messages)
-}
-
-func (h *Handlers) handleVisibleMessagesDecoded(model *Model, msg VisibleMessagesDecodedMsg) (tea.Model, tea.Cmd) {
-	if len(msg.Messages) == 0 {
-		return model, nil
-	}
-	// Build a lookup map for fast update
-	decodedByKey := make(map[string]api.Message, len(msg.Messages))
-	for _, d := range msg.Messages {
-		decodedByKey[fmt.Sprintf("%d-%d", d.Partition, d.Offset)] = d
-	}
-
-	model.mu.Lock()
-	for key, decoded := range decodedByKey {
-		if _, exists := model.consumedMessages[key]; exists {
-			model.consumedMessages[key] = decoded
-		}
-	}
-	for i, m := range model.messages {
-		key := fmt.Sprintf("%d-%d", m.Partition, m.Offset)
-		if decoded, exists := decodedByKey[key]; exists {
-			model.messages[i] = decoded
-		}
-	}
-	for i, m := range model.filteredMessages {
-		key := fmt.Sprintf("%d-%d", m.Partition, m.Offset)
-		if decoded, exists := decodedByKey[key]; exists {
-			model.filteredMessages[i] = decoded
-		}
-	}
-	model.mu.Unlock()
-
-	model.updateMessageTable()
-	model.markRenderDirty()
-	return model, nil
-}
-
-func (h *Handlers) handleStartConsuming(model *Model, msg StartConsumingMsg) (tea.Model, tea.Cmd) {
-	// Set consumption state
-	model.consuming = true
-	model.loading = false
-	model.msgChan = msg.MsgChan
-	model.errChan = msg.ErrChan
-	model.cancelConsumption = msg.Cancel
-	model.SetConnectionStatus(StatusConnected)
-
-	// Start listening for messages and errors
-	var cmds []tea.Cmd
-	if msg.MsgChan != nil {
-		cmds = append(cmds, model.consumption.ListenForMessages(msg.MsgChan))
-	}
-	if msg.ErrChan != nil {
-		cmds = append(cmds, model.consumption.ListenForErrors(msg.ErrChan))
-	}
-
-	return model, tea.Batch(cmds...)
-}
-
-func (h *Handlers) handleStopConsuming(model *Model, msg StopConsumingMsg) (tea.Model, tea.Cmd) {
-	// Stop consumption
-	model.consuming = false
-	model.paused = false
-	if model.cancelConsumption != nil {
-		model.cancelConsumption()
-		model.cancelConsumption = nil
-	}
-	model.SetConnectionStatus(StatusDisconnected)
-
-	return model, nil
-}
-
-func (h *Handlers) handleContinuousListen(model *Model, msg ContinuousListenMsg) (tea.Model, tea.Cmd) {
-	// Continue listening for messages if we're still consuming
-	if model.consuming && model.msgChan != nil {
-		return model, model.consumption.ListenForMessages(model.msgChan)
-	}
-	return model, nil
-}
-
-func (h *Handlers) handleContinuousErrorListen(model *Model, msg ContinuousErrorListenMsg) (tea.Model, tea.Cmd) {
-	// Continue listening for errors if we're still consuming
-	// Use a reasonable interval to prevent UI freezing
-	if model.consuming && model.errChan != nil {
-		return model, model.consumption.ListenForErrors(model.errChan)
-	}
-	return model, nil
-}
-
-func (h *Handlers) handleConnectionStatus(model *Model, msg ConnectionStatusMsg) (tea.Model, tea.Cmd) {
-	model.SetConnectionStatus(string(msg))
-	return model, nil
-}
-
-func (h *Handlers) handleRetryConsumption(model *Model, msg RetryConsumptionMsg) (tea.Model, tea.Cmd) {
-	model.retryCount = msg.Attempt
-	model.SetConnectionStatus(StatusRetrying)
-
-	if msg.LastError != nil {
-		shared.Log.Warn("retrying consumption", "topic", model.topicName, "attempt", msg.Attempt, "err", msg.LastError)
-		model.SetError(msg.LastError)
-	}
-
-	// Try to restart consumption
-	if model.consumption != nil {
-		return model, model.consumption.StartConsuming()
-	}
-
-	return model, nil
-}
-
-func (h *Handlers) handleConnectionFailed(model *Model, msg ConnectionFailedMsg) (tea.Model, tea.Cmd) {
-	model.retryCount = msg.Attempts
-	model.consuming = false
-	model.loading = false
-
-	if msg.LastError != nil {
-		shared.Log.Error("connection failed", "topic", model.topicName, "attempts", msg.Attempts, "err", msg.LastError)
-		model.SetError(msg.LastError)
-	}
-
-	model.SetConnectionStatus(StatusFailed)
-	return model, nil
-}
-
 func (h *Handlers) handleSearchMessages(model *Model, msg SearchMessagesMsg) (tea.Model, tea.Cmd) {
 	// Update search input and filter messages
 	model.searchInput.SetValue(string(msg))
@@ -422,12 +216,7 @@ func (h *Handlers) handleError(model *Model, msg ErrorMsg) (tea.Model, tea.Cmd) 
 	shared.Log.Error("topic page error", "topic", model.topicName, "err", error(msg))
 	model.SetError(error(msg))
 	model.loading = false
-
-	// If we're supposed to be consuming, try to retry
-	if model.consuming && model.retryCount < model.maxRetries {
-		return model, model.consumption.ScheduleRetry(error(msg))
-	}
-
+	model.markRenderDirty()
 	return model, nil
 }
 
@@ -435,85 +224,4 @@ func (h *Handlers) handleSpinnerTick(model *Model, msg spinner.TickMsg) (tea.Mod
 	var cmd tea.Cmd
 	model.spinner, cmd = model.spinner.Update(msg)
 	return model, cmd
-}
-
-func (h *Handlers) handleStartFetch(model *Model, msg StartFetchMsg) (tea.Model, tea.Cmd) {
-	model.loading = true
-	if msg.Append {
-		model.appendNextFetch++
-	} else if model.browseStart.IsZero() {
-		// Track elapsed for browse statistics (MSG-27). startForFlags sets this
-		// already; cover the normal mode fetches here.
-		model.browseStart = time.Now()
-	}
-	model.SetConnectionStatus(StatusConnecting)
-	model.markRenderDirty()
-
-	// Delegate listening to the encapsulated component; also listen for the result.
-	progressCmd := model.fetchProgressBar.StartListening(msg.ProgressCh, msg.Total)
-	return model, tea.Batch(progressCmd, listenForResult(msg.ResultCh))
-}
-
-const (
-	// tableHeaderLines is the number of non-data lines rendered above the first
-	// data row: top border + header row + separator line.
-	tableHeaderLines = 3
-)
-
-func (h *Handlers) handleMouseMsg(model *Model, msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	// Same gesture vocabulary as every other list: the wheel moves the view and
-	// never the cursor, a click selects, and a click on the already-selected
-	// row activates. This screen used to open a message on the first click,
-	// while the resource list only selected — one of the two had to be wrong.
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
-		model.pagination.PrevPage()
-		model.markRenderDirty()
-
-	case tea.MouseButtonWheelDown:
-		model.pagination.NextPage()
-		model.markRenderDirty()
-
-	case tea.MouseButtonNone:
-		// Hover feedback, same as every other list.
-		if !core.IsHover(msg) {
-			break
-		}
-		z := zone.Get("message-table")
-		if z == nil || !z.InBounds(msg) {
-			break
-		}
-		_, relY := z.Pos(msg)
-		if row := relY - tableHeaderLines; row >= 0 &&
-			row < len(model.pagination.GetVisibleMessages(model.filteredMessages)) &&
-			row != model.cursorRow {
-			model.cursorRow = row
-			model.markRenderDirty()
-		}
-
-	case tea.MouseButtonLeft:
-		if !core.IsLeftRelease(msg) {
-			break
-		}
-		z := zone.Get("message-table")
-		if z == nil || !z.InBounds(msg) {
-			break
-		}
-		_, relY := z.Pos(msg)
-		row := relY - tableHeaderLines
-		if row < 0 || row >= len(model.pagination.GetVisibleMessages(model.filteredMessages)) {
-			break
-		}
-		// Capture the previous cursor before moving it, or the
-		// already-selected test would always be true.
-		wasSelected := row == model.cursorRow
-		double := model.clicks.Click(msg)
-		model.cursorRow = row
-		model.markRenderDirty()
-		if double || wasSelected {
-			return model, model.keys.handleSelect(model)
-		}
-	}
-
-	return model, nil
 }

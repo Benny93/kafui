@@ -5,10 +5,12 @@ import (
 	"testing"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // mockKafkaDataSource is a testify mock of api.KafkaDataSource
@@ -190,6 +192,9 @@ func (m *mockKafkaDataSource) GetTopicDetails(topicName string) (api.TopicDetail
 func (m *mockKafkaDataSource) GetTopicSizes(topicNames []string) (map[string]int64, error) {
 	return nil, nil
 }
+func (m *mockKafkaDataSource) GetTopicHealth(topicNames []string) (map[string]api.TopicHealth, error) {
+	return nil, nil
+}
 func (m *mockKafkaDataSource) CreateTopic(name string, numPartitions int32, replicationFactor int16, configs map[string]*string) error {
 	return nil
 }
@@ -291,7 +296,6 @@ func TestContextSelection_WhenEnterPressedOnContextItem_FiresSelectContextMsg(t 
 		newContextResourceListItem("kafka-prod", false),
 	}
 	provider.allItems = contextItems
-	provider.allRows = convertItemsToRows(contextItems, "", 0)
 	provider.pagination.SetTotalItems(len(contextItems))
 	provider.updateTableForCurrentPage()
 
@@ -346,21 +350,24 @@ func TestSelectContextMsg_WithCorrectContextName(t *testing.T) {
 	ds.AssertCalled(t, "SetContext", "kafka-staging")
 }
 
-// TestSelectContextMsg_SetContextError_StillSwitchesToTopics verifies that even
-// when SetContext returns an error the resource view switches to Topics and a
-// command is still returned so the UI does not get stuck.
-func TestSelectContextMsg_SetContextError_StillSwitchesToTopics(t *testing.T) {
+// TestSelectContextMsg_SetContextError_ReportsAndStays verifies that a failed
+// SetContext is reported instead of silently reloading the old cluster's
+// topics while the user believes the switch happened.
+func TestSelectContextMsg_SetContextError_ReportsAndStays(t *testing.T) {
 	ds := &mockKafkaDataSource{}
 	ds.On("SetContext", "bad-context").Return(assert.AnError)
-	ds.On("GetTopics").Return(map[string]api.Topic{}, nil)
 
 	provider := newTestContentProvider(ds)
 	provider.switchResource(SwitchResourceMsg(ContextResourceType))
 
 	cmd := provider.HandleContentUpdate(SelectContextMsg{ContextName: "bad-context"})
 
-	assert.Equal(t, TopicResourceType, provider.currentResource.GetType())
-	assert.NotNil(t, cmd)
+	assert.Equal(t, ContextResourceType, provider.currentResource.GetType(), "no reload on a failed switch")
+	require.NotNil(t, cmd)
+	note, ok := cmd().(core.NotificationMsg)
+	require.True(t, ok, "expected an error notification")
+	assert.Equal(t, core.StatusError, note.Severity)
+	ds.AssertNotCalled(t, "GetTopicNames")
 }
 
 // --- helpers ---

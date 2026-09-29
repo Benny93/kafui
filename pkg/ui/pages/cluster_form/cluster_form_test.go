@@ -2,10 +2,13 @@ package cluster_form
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/appconfig"
+	"github.com/Benny93/kafui/pkg/datasource/mock"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
@@ -161,4 +164,42 @@ func TestValidateAction_InvokesService(t *testing.T) {
 	require.NotNil(t, m.results)
 	require.Len(t, m.results.Clusters, 1)
 	assert.True(t, m.results.Clusters[0].Results[0].OK)
+}
+
+// failingReloadDS is a datasource whose in-place reload fails.
+type failingReloadDS struct{ *mock.KafkaDataSourceMock }
+
+func (failingReloadDS) Reload(appconfig.Config) error { return errors.New("broker unreachable") }
+
+// A failed datasource reload used to be discarded (`_ = r.Reload(merged)`):
+// the save reported success while the live cluster connection stayed stale.
+func TestApply_ReloadFailureIsSurfaced(t *testing.T) {
+	ds := &mock.KafkaDataSourceMock{}
+	ds.Init("")
+	c := core.NewCommon(failingReloadDS{ds})
+	c.AppConfig.DynamicConfigEnabled = true
+	m := NewModelWithCommon(c, "")
+	m.savePath = filepath.Join(t.TempDir(), "kafui.yaml")
+
+	cmd := m.apply(map[string]string{fName: "c1", fBrokers: "b:9092"})
+	require.NotNil(t, cmd)
+	batch, ok := cmd().(tea.BatchMsg)
+	require.True(t, ok)
+
+	var notif core.NotificationMsg
+	var back bool
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		switch msg := c().(type) {
+		case core.NotificationMsg:
+			notif = msg
+		case core.BackMsg:
+			back = true
+		}
+	}
+	assert.Equal(t, core.StatusError, notif.Severity)
+	assert.Contains(t, notif.Message, "broker unreachable")
+	assert.True(t, back, "the config is saved, so the wizard still closes")
 }

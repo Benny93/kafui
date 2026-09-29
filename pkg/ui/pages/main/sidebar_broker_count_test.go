@@ -2,10 +2,37 @@ package mainpage
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// switchableContextDS lets a test change the active context.
+type switchableContextDS struct {
+	api.KafkaDataSource
+	ctx string
+}
+
+func (s *switchableContextDS) GetContext() string { return s.ctx }
+
+// The sidebar must not fetch broker metadata on every 5s tick: only after a
+// context switch or once the count is brokerCountMaxAge old.
+func TestSidebarBrokerCountNotRefetchedEveryTick(t *testing.T) {
+	ds := &switchableContextDS{ctx: "a"}
+	section := NewClusterInfoSection(ds)
+	require.NotNil(t, section.InitSection())
+
+	assert.Nil(t, section.HandleSectionUpdate(TimerTickMsg(time.Now())), "fresh count: no fetch")
+
+	ds.ctx = "b"
+	assert.NotNil(t, section.HandleSectionUpdate(TimerTickMsg(time.Now())), "context switched: fetch")
+	assert.Nil(t, section.HandleSectionUpdate(TimerTickMsg(time.Now())))
+
+	section.fetchedAt = time.Now().Add(-brokerCountMaxAge)
+	assert.NotNil(t, section.HandleSectionUpdate(TimerTickMsg(time.Now())), "stale count: fetch")
+}
 
 // brokerCountStubDS returns a single-entry bootstrap list from GetClusterDetails
 // (as a real ~/.kaf/config typically does) but a full broker list from

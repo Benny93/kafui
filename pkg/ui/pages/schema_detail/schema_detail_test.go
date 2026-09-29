@@ -393,3 +393,14 @@ func drainBatch(cmd tea.Cmd) []tea.Msg {
 	}
 	return []tea.Msg{msg}
 }
+
+func TestSchemaDetailPage_IsInputMode(t *testing.T) {
+	m := newTestModel(newSpy(), "orders-value", "AVRO")
+	p := &SchemaDetailPageModel{model: m, contentProvider: NewSchemaDetailContentProvider(m)}
+	var page core.Page = p
+	r, ok := page.(core.InputModeReporter)
+	require.True(t, ok, "the page model itself must report input mode")
+	assert.False(t, r.IsInputMode())
+	m.mode = modeRegister
+	assert.True(t, r.IsInputMode())
+}

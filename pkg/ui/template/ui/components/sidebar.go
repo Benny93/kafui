@@ -22,7 +22,6 @@ type Sidebar interface {
 type sidebar struct {
 	width, height int
 	focused       bool
-	compact       bool
 
 	// Provider-based sections
 	sections []providers.SidebarSection
@@ -112,14 +111,9 @@ func (s *sidebar) renderSidebarContent() string {
 		return ""
 	}
 
+	// No logo block: it repeated the first section's title and a hardcoded
+	// version, both of which the header already shows correctly.
 	var sections []string
-
-	// Logo section (CRUSH style)
-	if !s.compact || s.height >= 30 {
-		logo := s.renderLogo(availableWidth)
-		sections = append(sections, logo)
-		sections = append(sections, "")
-	}
 
 	// Calculate remaining height for sections
 	remainingHeight := availableHeight - len(sections)
@@ -145,35 +139,6 @@ func (s *sidebar) renderSidebarContent() string {
 	}
 
 	return strings.Join(sections, "\n")
-}
-
-func (s *sidebar) renderLogo(width int) string {
-	t := styles.CurrentTheme()
-	name := s.getContextName()
-	logo := styles.ApplyBoldForegroundGrad(name, t.Primary, t.Secondary)
-	version := t.S().Muted.Render("v1.0.0")
-
-	// Center the logo
-	logoWidth := lipgloss.Width(logo)
-	if logoWidth < width {
-		padding := (width - logoWidth) / 2
-		logo = strings.Repeat(" ", padding) + logo
-	}
-
-	return lipgloss.JoinVertical(lipgloss.Left, logo, version)
-}
-
-// getContextName returns the current Kafka context name from whichever section
-// implements a GetTitle() string method (e.g. ClusterInfoSection).
-func (s *sidebar) getContextName() string {
-	for _, section := range s.sections {
-		if tp, ok := section.(interface{ GetTitle() string }); ok {
-			if name := tp.GetTitle(); name != "" {
-				return name
-			}
-		}
-	}
-	return "kafui"
 }
 
 func (s *sidebar) calculateMaxItems(availableHeight, numSections int) []int {
@@ -314,6 +279,6 @@ func (s *sidebar) IsFocused() bool {
 }
 
 func (s *sidebar) SetCompactMode(compact bool) tea.Cmd {
-	s.compact = compact
+	// The sidebar has no compact variant since the logo block went away.
 	return nil
 }

@@ -23,23 +23,165 @@ var (
 	recreateDelay   = 500 * time.Millisecond
 )
 
-// fetchTopicOffsets returns earliest/latest offsets per partition. It is a seam:
-// getClient() talks to a real broker, so tests override this to inject offsets.
+// fetchTopicOffsets returns earliest/latest offsets per partition. Partitions
+// whose lookup failed are missing from the map, and the error then names them
+// (the map still holds the partitions that succeeded). It is a seam: the shared
+// client talks to a real broker, so tests override this to inject offsets.
 var fetchTopicOffsets = func(topic string, partitions []int32) (map[int32]offsets, error) {
-	client, err := getClient()
+	client, err := getSharedClient()
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
-	out := make(map[int32]offsets, len(partitions))
-	for _, p := range partitions {
-		o, err := getOffsets(client, topic, p)
-		if err != nil {
-			continue // best effort; a partition without offsets is reported as 0..0
-		}
-		out[p] = *o
+	offs, failed := fetchOffsetsBatched(client, map[string][]int32{topic: partitions})
+	out := offs[topic]
+	if out == nil {
+		out = map[int32]offsets{}
 	}
-	return out, nil
+	return out, offsetFailuresError(topic, failed[topic])
+}
+
+// offsetFailuresError summarises the partitions of topic whose offset lookup
+// failed, wrapping the error of the lowest failed partition. nil when none failed.
+func offsetFailuresError(topic string, failed map[int32]error) error {
+	if len(failed) == 0 {
+		return nil
+	}
+	ids := make([]int32, 0, len(failed))
+	for p := range failed {
+		ids = append(ids, p)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return fmt.Errorf("fetching offsets for topic %q: %d partition(s) failed %v: partition %d: %w",
+		topic, len(ids), ids, ids[0], failed[ids[0]])
+}
+
+// fetchOffsetsBatched looks up the oldest and newest offset of every requested
+// partition with one ListOffsets request per leader broker and timestamp, the
+// brokers queried in parallel. It replaces two sequential GetOffset round trips
+// per partition, which made counting a large cluster take tens of thousands of
+// round trips. Partitions whose lookup failed are absent from the result and
+// listed with their error in failed.
+func fetchOffsetsBatched(client sarama.Client, parts map[string][]int32) (map[string]map[int32]offsets, map[string]map[int32]error) {
+	result := make(map[string]map[int32]offsets, len(parts))
+	failed := make(map[string]map[int32]error)
+	var mu sync.Mutex
+	fail := func(topic string, p int32, err error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if failed[topic] == nil {
+			failed[topic] = map[int32]error{}
+		}
+		failed[topic][p] = err
+	}
+
+	// One metadata request for every requested topic, so the leader lookups
+	// below hit the client's cache instead of refreshing per topic, and see
+	// current leaders. A failure here is not fatal: Leader reports it per
+	// partition.
+	topics := make([]string, 0, len(parts))
+	for t, ps := range parts {
+		if len(ps) > 0 {
+			topics = append(topics, t)
+		}
+	}
+	if len(topics) == 0 {
+		return result, failed
+	}
+	_ = client.RefreshMetadata(topics...)
+
+	type tp struct {
+		topic     string
+		partition int32
+	}
+	byBroker := map[*sarama.Broker][]tp{}
+	for topic, ps := range parts {
+		for _, p := range ps {
+			b, err := client.Leader(topic, p)
+			if err != nil {
+				fail(topic, p, err)
+				continue
+			}
+			byBroker[b] = append(byBroker[b], tp{topic, p})
+		}
+	}
+
+	version := client.Config().Version
+	var wg sync.WaitGroup
+	for b, tps := range byBroker {
+		wg.Add(1)
+		go func(b *sarama.Broker, tps []tp) {
+			defer wg.Done()
+			var resp [2]*sarama.OffsetResponse // [0] oldest, [1] newest
+			for i, ts := range []int64{sarama.OffsetOldest, sarama.OffsetNewest} {
+				req := newOffsetRequest(version)
+				for _, x := range tps {
+					req.AddBlock(x.topic, x.partition, ts, 1)
+				}
+				r, err := b.GetAvailableOffsets(req)
+				if err != nil {
+					// Like sarama's own getOffset: drop the connection so the
+					// next request reconnects.
+					_ = b.Close()
+					for _, x := range tps {
+						fail(x.topic, x.partition, err)
+					}
+					return
+				}
+				resp[i] = r
+			}
+			for _, x := range tps {
+				oldest, err := offsetFromBlock(resp[0], x.topic, x.partition)
+				if err == nil {
+					var newest int64
+					newest, err = offsetFromBlock(resp[1], x.topic, x.partition)
+					if err == nil {
+						mu.Lock()
+						if result[x.topic] == nil {
+							result[x.topic] = map[int32]offsets{}
+						}
+						result[x.topic][x.partition] = offsets{oldest: oldest, newest: newest}
+						mu.Unlock()
+						continue
+					}
+				}
+				fail(x.topic, x.partition, err)
+			}
+		}(b, tps)
+	}
+	wg.Wait()
+	return result, failed
+}
+
+// newOffsetRequest builds a ListOffsets request at the version sarama's own
+// client.GetOffset uses for the configured Kafka version.
+func newOffsetRequest(v sarama.KafkaVersion) *sarama.OffsetRequest {
+	req := &sarama.OffsetRequest{}
+	switch {
+	case v.IsAtLeast(sarama.V2_1_0_0):
+		req.Version = 4
+	case v.IsAtLeast(sarama.V2_0_0_0):
+		req.Version = 3
+	case v.IsAtLeast(sarama.V0_11_0_0):
+		req.Version = 2
+	case v.IsAtLeast(sarama.V0_10_1_0):
+		req.Version = 1
+	}
+	return req
+}
+
+// offsetFromBlock extracts one partition's offset from a ListOffsets response.
+func offsetFromBlock(resp *sarama.OffsetResponse, topic string, partition int32) (int64, error) {
+	block := resp.GetBlock(topic, partition)
+	if block == nil {
+		return -1, sarama.ErrIncompleteResponse
+	}
+	if !errors.Is(block.Err, sarama.ErrNoError) {
+		return -1, block.Err
+	}
+	if len(block.Offsets) != 1 {
+		return -1, sarama.ErrOffsetOutOfRange
+	}
+	return block.Offsets[0], nil
 }
 
 // --- TP-2: GetTopicConfig ---
@@ -53,6 +195,18 @@ var fetchTopicOffsets = func(topic string, partitions []int32) (map[int32]offset
 // which can populate synonyms. Wiring a synonym-aware describe would need a new
 // admin method beyond the pass-through interface.
 func (kp KafkaDataSourceKaf) GetTopicConfig(topicName string) ([]api.TopicConfigEntry, error) {
+	entries, err := describeTopicConfig(topicName)
+	if err != nil && isAuthorizationError(err) {
+		return []api.TopicConfigEntry{}, nil
+	}
+	return entries, err
+}
+
+// describeTopicConfig reads a topic's config and, unlike GetTopicConfig,
+// returns an authorization failure as an error. Callers that act on the config
+// (RecreateTopic, the purge cleanup.policy guard) must not mistake "not allowed
+// to read" for "no overrides".
+func describeTopicConfig(topicName string) ([]api.TopicConfigEntry, error) {
 	admin, err := getClusterAdmin()
 	if err != nil {
 		return nil, err
@@ -62,9 +216,6 @@ func (kp KafkaDataSourceKaf) GetTopicConfig(topicName string) ([]api.TopicConfig
 		Name: topicName,
 	})
 	if err != nil {
-		if isAuthorizationError(err) {
-			return []api.TopicConfigEntry{}, nil
-		}
 		return nil, fmt.Errorf("describing config for topic %q: %w", topicName, err)
 	}
 	return topicConfigEntriesToAPI(entries), nil
@@ -104,32 +255,63 @@ func deriveDefault(e sarama.ConfigEntry) string {
 
 // --- TP-3: GetTopicDetails ---
 
-// GetTopicDetails implements api.KafkaDataSource.
+// GetTopicDetails implements api.KafkaDataSource. Offsets are best effort: a
+// partition whose offsets could not be read reports 0..0. Callers that act on
+// offsets (PurgeTopicMessages) fetch them strictly instead.
 func (kp KafkaDataSourceKaf) GetTopicDetails(topicName string) (api.TopicDetails, error) {
-	admin, err := getClusterAdmin()
+	t, err := describeTopic(topicName)
 	if err != nil {
 		return api.TopicDetails{}, err
 	}
+	offs, _ := fetchTopicOffsets(topicName, partitionIDs(t)) // best effort
+	return buildTopicDetails(t, offs), nil
+}
+
+// topicMetadataDetails is GetTopicDetails without offsets, for callers that
+// only need partitions and replicas (partition count, replication factor).
+func topicMetadataDetails(topicName string) (api.TopicDetails, error) {
+	t, err := describeTopic(topicName)
+	if err != nil {
+		return api.TopicDetails{}, err
+	}
+	return buildTopicDetails(t, nil), nil
+}
+
+// describeTopic returns one topic's metadata. Any topic-level error is
+// returned: a topic we are not authorized to see, or whose leader is
+// unavailable, must not look like a topic with zero partitions, since
+// IncreasePartitions and RecreateTopic act on the partition count.
+func describeTopic(topicName string) (*sarama.TopicMetadata, error) {
+	admin, err := getClusterAdmin()
+	if err != nil {
+		return nil, err
+	}
 	md, err := admin.DescribeTopics([]string{topicName})
 	if err != nil {
-		return api.TopicDetails{}, fmt.Errorf("describing topic %q: %w", topicName, err)
+		return nil, fmt.Errorf("describing topic %q: %w", topicName, err)
 	}
 	if len(md) == 0 || md[0] == nil {
-		return api.TopicDetails{}, api.TopicNotFoundError{TopicName: topicName}
+		return nil, api.TopicNotFoundError{TopicName: topicName}
 	}
 	t := md[0]
-	if t.Err != sarama.ErrNoError && errors.Is(t.Err, sarama.ErrUnknownTopicOrPartition) {
-		return api.TopicDetails{}, api.TopicNotFoundError{TopicName: topicName, Cause: t.Err}
+	switch {
+	case errors.Is(t.Err, sarama.ErrUnknownTopicOrPartition):
+		return nil, api.TopicNotFoundError{TopicName: topicName, Cause: t.Err}
+	case !errors.Is(t.Err, sarama.ErrNoError):
+		return nil, fmt.Errorf("describing topic %q: %w", topicName, t.Err)
 	}
+	return t, nil
+}
 
+// partitionIDs lists the IDs of a topic's partitions.
+func partitionIDs(t *sarama.TopicMetadata) []int32 {
 	ids := make([]int32, 0, len(t.Partitions))
 	for _, p := range t.Partitions {
 		if p != nil {
 			ids = append(ids, p.ID)
 		}
 	}
-	offs, _ := fetchTopicOffsets(topicName, ids) // best effort
-	return buildTopicDetails(t, offs), nil
+	return ids
 }
 
 // buildTopicDetails is the pure aggregation from topic metadata + offsets to
@@ -174,30 +356,31 @@ func buildTopicDetails(t *sarama.TopicMetadata, offs map[int32]offsets) api.Topi
 // Kafka offerings) degrades to empty sizes instead of hanging the caller — which
 // otherwise blocks the same tea.Cmd that resolves the OSR column, making both
 // spin forever in the topics table.
+//
+// Only the brokers leading a partition of the requested topics are asked for
+// their log dirs, since sizes count leader replicas only. Sizing one topic no
+// longer describes every broker in the cluster.
 func (kp KafkaDataSourceKaf) GetTopicSizes(topicNames []string) (map[string]int64, error) {
 	admin, err := getClusterAdmin()
 	if err != nil {
 		return nil, err
 	}
-	brokers, _, err := admin.DescribeCluster()
-	if err != nil {
-		return nil, fmt.Errorf("describing cluster: %w", err)
-	}
-	brokerIDs := make([]int32, 0, len(brokers))
-	for _, b := range brokers {
-		brokerIDs = append(brokerIDs, b.ID())
-	}
-
 	md, err := admin.DescribeTopics(topicNames)
 	if err != nil {
 		return nil, fmt.Errorf("describing topics: %w", err)
 	}
 	leaders := leadersByTopic(md)
+	brokerIDs := leaderBrokerIDs(leaders)
+	if len(brokerIDs) == 0 {
+		// No partition has a leader, so no broker holds a counted replica.
+		return aggregateTopicSizes(nil, leaders), nil
+	}
 
-	logDirs, timedOut := describeLogDirsWithTimeout(admin, brokerIDs)
-	if timedOut {
-		// Broker never answered: sizes are genuinely unknown, not zero. Return an
-		// empty map so callers render "N/A" rather than a misleading "0 B".
+	logDirs, unknown := describeLogDirsWithTimeout(brokerIDs)
+	if unknown {
+		// The broker never answered, or refused. Sizes are genuinely unknown,
+		// not zero: return an empty map so callers render "N/A" rather than a
+		// misleading "0 B" for every topic.
 		return map[string]int64{}, nil
 	}
 	return aggregateTopicSizes(logDirs, leaders), nil
@@ -219,6 +402,23 @@ func leadersByTopic(md []*sarama.TopicMetadata) map[string]map[int32]int32 {
 		out[t.Name] = parts
 	}
 	return out
+}
+
+// leaderBrokerIDs returns the distinct, sorted IDs of the brokers leading at
+// least one partition in leaders (a leader of -1 means none).
+func leaderBrokerIDs(leaders map[string]map[int32]int32) []int32 {
+	seen := map[int32]bool{}
+	ids := []int32{}
+	for _, parts := range leaders {
+		for _, leader := range parts {
+			if leader >= 0 && !seen[leader] {
+				seen[leader] = true
+				ids = append(ids, leader)
+			}
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids
 }
 
 // aggregateTopicSizes sums, per topic, only the sizes of partition replicas held
@@ -407,7 +607,7 @@ func (kp KafkaDataSourceKaf) UpdateTopicConfig(name string, entries map[string]*
 // IncreasePartitions implements api.KafkaDataSource. It rejects a decrease or a
 // no-op before touching the broker.
 func (kp KafkaDataSourceKaf) IncreasePartitions(name string, totalCount int32) error {
-	details, err := kp.GetTopicDetails(name)
+	details, err := topicMetadataDetails(name)
 	if err != nil {
 		return err
 	}
@@ -440,18 +640,33 @@ func (kp KafkaDataSourceKaf) PurgeTopicMessages(name string, partition int32) er
 	if !cleanupPolicyAllowsDelete(policy) {
 		return api.CleanupPolicyError{TopicName: name, Policy: policy}
 	}
-	details, err := kp.GetTopicDetails(name)
+	details, err := topicMetadataDetails(name)
 	if err != nil {
 		return err
 	}
-	offsets := make(map[int32]int64)
+	var targets []int32
 	for _, p := range details.Partitions {
 		if partition == -1 || p.ID == partition {
-			offsets[p.ID] = p.LatestOffset
+			targets = append(targets, p.ID)
 		}
 	}
-	if len(offsets) == 0 {
+	if len(targets) == 0 {
 		return api.PartitionError{Message: "partition not found", TopicName: name, PartitionID: partition}
+	}
+	// The high-watermarks are the DeleteRecords targets, so they must be
+	// exact: a partition whose offset lookup failed would be "purged" to
+	// offset 0, a silent no-op reported as success.
+	offs, err := fetchTopicOffsets(name, targets)
+	if err != nil {
+		return fmt.Errorf("purging messages for %q: %w", name, err)
+	}
+	offsets := make(map[int32]int64, len(targets))
+	for _, id := range targets {
+		o, ok := offs[id]
+		if !ok {
+			return fmt.Errorf("purging messages for %q: no offsets for partition %d", name, id)
+		}
+		offsets[id] = o.newest
 	}
 	admin, err := getClusterAdmin()
 	if err != nil {
@@ -464,11 +679,12 @@ func (kp KafkaDataSourceKaf) PurgeTopicMessages(name string, partition int32) er
 }
 
 // topicCleanupPolicy returns the effective cleanup.policy for a topic ("delete"
-// when the key is absent, matching Kafka's default).
+// when the key is absent, matching Kafka's default). A config we may not read
+// is an error, not "delete": guessing would skip the compact-topic guard.
 func (kp KafkaDataSourceKaf) topicCleanupPolicy(name string) (string, error) {
-	entries, err := kp.GetTopicConfig(name)
+	entries, err := describeTopicConfig(name)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("cannot read cleanup.policy of %q: %w", name, err)
 	}
 	for _, e := range entries {
 		if e.Name == "cleanup.policy" {
@@ -495,13 +711,16 @@ func cleanupPolicyAllowsDelete(policy string) bool {
 // with the same partition count / replication factor / non-default configs,
 // retrying while the prior instance is still propagating its deletion.
 func (kp KafkaDataSourceKaf) RecreateTopic(name string) error {
-	details, err := kp.GetTopicDetails(name)
+	details, err := topicMetadataDetails(name)
 	if err != nil {
 		return err
 	}
-	cfgEntries, err := kp.GetTopicConfig(name)
+	// Without a readable config snapshot the recreated topic would silently
+	// lose its overrides (retention, cleanup.policy=compact, ...), so abort
+	// before anything is deleted.
+	cfgEntries, err := describeTopicConfig(name)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot snapshot config for %q before recreate: %w", name, err)
 	}
 	numPartitions := int32(len(details.Partitions))
 	rf := details.ReplicationFactor
@@ -545,7 +764,7 @@ func nonDefaultConfigs(entries []api.TopicConfigEntry) map[string]*string {
 // ChangeReplicationFactor implements api.KafkaDataSource by computing a balanced
 // reassignment across online brokers and applying it.
 func (kp KafkaDataSourceKaf) ChangeReplicationFactor(name string, newFactor int16) error {
-	details, err := kp.GetTopicDetails(name)
+	details, err := topicMetadataDetails(name)
 	if err != nil {
 		return err
 	}

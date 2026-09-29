@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -245,10 +246,22 @@ func TestClassifyKsqlStatement(t *testing.T) {
 // --- statement execution + interpretation (KS-7) ---
 
 func TestExecuteKsql_StatementProperties(t *testing.T) {
-	var gotBody map[string]interface{}
+	var (
+		mu       sync.Mutex
+		lastBody map[string]interface{}
+	)
+	gotBody := func() map[string]interface{} {
+		mu.Lock()
+		defer mu.Unlock()
+		return lastBody
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(b, &gotBody)
+		var body map[string]interface{}
+		_ = json.Unmarshal(b, &body)
+		mu.Lock()
+		lastBody = body
+		mu.Unlock()
 		_, _ = w.Write([]byte(`[{"@type":"currentStatus","commandId":"stream/S/create","commandStatus":{"status":"SUCCESS","message":"Created"}}]`))
 	}))
 	defer srv.Close()
@@ -261,14 +274,14 @@ func TestExecuteKsql_StatementProperties(t *testing.T) {
 	require.Len(t, tables, 1)
 	assert.Equal(t, "Status", tables[0].Title)
 	assert.Equal(t, "SUCCESS", tables[0].Rows[0][1])
-	props, _ := gotBody["streamsProperties"].(map[string]interface{})
+	props, _ := gotBody()["streamsProperties"].(map[string]interface{})
 	assert.Equal(t, "earliest", props["auto.offset.reset"])
 
 	// Without properties -> empty streamsProperties object.
-	_, err = KafkaDataSourceKaf{}.ExecuteKsql(context.Background(), "DROP STREAM s;", nil)
+	ch, err = KafkaDataSourceKaf{}.ExecuteKsql(context.Background(), "DROP STREAM s;", nil)
 	require.NoError(t, err)
-	time.Sleep(20 * time.Millisecond)
-	props, ok := gotBody["streamsProperties"].(map[string]interface{})
+	drain(ch) // wait for the request to complete
+	props, ok := gotBody()["streamsProperties"].(map[string]interface{})
 	require.True(t, ok)
 	assert.Empty(t, props)
 }

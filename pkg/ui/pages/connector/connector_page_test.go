@@ -178,3 +178,13 @@ func TestConnectorPage_RestartFailedTasks(t *testing.T) {
 	assert.Equal(t, 1, res.total, "exactly one failed task should be restarted")
 	assert.Empty(t, res.failures)
 }
+
+func TestConnectorPage_IsInputMode(t *testing.T) {
+	m := newModel(testCommon(), "connect-primary", "orders-source")
+	var page core.Page = m
+	r, ok := page.(core.InputModeReporter)
+	require.True(t, ok, "the page model itself must report input mode")
+	assert.False(t, r.IsInputMode())
+	m.editing = true
+	assert.True(t, r.IsInputMode())
+}

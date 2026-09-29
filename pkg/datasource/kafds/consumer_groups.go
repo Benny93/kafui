@@ -106,16 +106,16 @@ func coordinatorID(reader groupOffsetReader, groupID string) int32 {
 
 // computeTotalLag sums (end - committed) across all committed partitions.
 // Returns nil (undefined) when there are no committed offsets at all; a partition
-// whose end offset cannot be read contributes 0.
-func computeTotalLag(committed map[string]map[int32]int64, reader groupOffsetReader) *int64 {
+// missing from ends (end offset unreadable) contributes 0.
+func computeTotalLag(committed map[string]map[int32]int64, ends map[api.TopicPartition]int64) *int64 {
 	if len(committed) == 0 {
 		return nil
 	}
 	var total int64
 	for topic, parts := range committed {
 		for p, off := range parts {
-			end, err := reader.GetOffset(topic, p, sarama.OffsetNewest)
-			if err != nil {
+			end, ok := ends[api.TopicPartition{Topic: topic, Partition: p}]
+			if !ok {
 				continue // contributes 0
 			}
 			if l := end - off; l > 0 {
@@ -124,6 +124,133 @@ func computeTotalLag(committed map[string]map[int32]int64, reader groupOffsetRea
 		}
 	}
 	return &total
+}
+
+// addCommitted adds every committed partition to the set.
+func addCommitted(set map[api.TopicPartition]struct{}, committed map[string]map[int32]int64) {
+	for topic, parts := range committed {
+		for p := range parts {
+			set[api.TopicPartition{Topic: topic, Partition: p}] = struct{}{}
+		}
+	}
+}
+
+// groupFanout bounds the concurrent per-group broker calls (OffsetFetch,
+// FindCoordinator) made while enriching a batch of groups.
+const groupFanout = 8
+
+// forEachBounded calls fn(i) for every i in [0, n), running at most limit calls
+// at once, and returns when all of them have finished.
+func forEachBounded(n, limit int, fn func(i int)) {
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, limit)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			fn(i)
+		}(i)
+	}
+	wg.Wait()
+}
+
+// leaderLookup is the part of sarama.Client that fetchNewestOffsets needs to
+// batch ListOffsets requests per leader broker.
+type leaderLookup interface {
+	Leader(topic string, partitionID int32) (*sarama.Broker, error)
+	Config() *sarama.Config
+}
+
+// offsetRequestVersion mirrors the ListOffsets version sarama's client.GetOffset
+// picks for the configured Kafka version.
+func offsetRequestVersion(cfg *sarama.Config) int16 {
+	switch {
+	case cfg == nil:
+		return 0
+	case cfg.Version.IsAtLeast(sarama.V2_1_0_0):
+		return 4
+	case cfg.Version.IsAtLeast(sarama.V2_0_0_0):
+		return 3
+	case cfg.Version.IsAtLeast(sarama.V0_11_0_0):
+		return 2
+	case cfg.Version.IsAtLeast(sarama.V0_10_1_0):
+		return 1
+	default:
+		return 0
+	}
+}
+
+// fetchNewestOffsets returns the log-end offset of every partition in tps. When
+// the reader is a sarama client it sends one ListOffsets request per leader
+// broker, in parallel, instead of one request per partition. Partitions the
+// batch could not resolve fall back to reader.GetOffset, which refreshes
+// metadata and retries. A partition whose end offset cannot be read is absent.
+func fetchNewestOffsets(reader groupOffsetReader, tps map[api.TopicPartition]struct{}) map[api.TopicPartition]int64 {
+	out := make(map[api.TopicPartition]int64, len(tps))
+	if len(tps) == 0 {
+		return out
+	}
+	var (
+		mu      sync.Mutex
+		pending []api.TopicPartition
+	)
+	if ll, ok := reader.(leaderLookup); ok {
+		type batch struct {
+			broker *sarama.Broker
+			req    *sarama.OffsetRequest
+			tps    []api.TopicPartition
+		}
+		version := offsetRequestVersion(ll.Config())
+		byBroker := map[int32]*batch{}
+		for tp := range tps {
+			b, err := ll.Leader(tp.Topic, tp.Partition)
+			if err != nil || b == nil {
+				pending = append(pending, tp)
+				continue
+			}
+			bt := byBroker[b.ID()]
+			if bt == nil {
+				bt = &batch{broker: b, req: &sarama.OffsetRequest{Version: version}}
+				byBroker[b.ID()] = bt
+			}
+			bt.req.AddBlock(tp.Topic, tp.Partition, sarama.OffsetNewest, 1)
+			bt.tps = append(bt.tps, tp)
+		}
+		var wg sync.WaitGroup
+		for _, bt := range byBroker {
+			wg.Add(1)
+			go func(bt *batch) {
+				defer wg.Done()
+				resp, err := bt.broker.GetAvailableOffsets(bt.req)
+				mu.Lock()
+				defer mu.Unlock()
+				for _, tp := range bt.tps {
+					var block *sarama.OffsetResponseBlock
+					if err == nil && resp != nil {
+						block = resp.GetBlock(tp.Topic, tp.Partition)
+					}
+					if block == nil || !errors.Is(block.Err, sarama.ErrNoError) || len(block.Offsets) != 1 {
+						pending = append(pending, tp)
+						continue
+					}
+					out[tp] = block.Offsets[0]
+				}
+			}(bt)
+		}
+		wg.Wait()
+	} else {
+		for tp := range tps {
+			pending = append(pending, tp)
+		}
+	}
+	for _, tp := range pending {
+		if end, err := reader.GetOffset(tp.Topic, tp.Partition, sarama.OffsetNewest); err == nil {
+			out[tp] = end
+		}
+	}
+	return out
 }
 
 // distinctTopics returns the union of committed-offset topics and member
@@ -147,7 +274,6 @@ func (kp KafkaDataSourceKaf) GetConsumerGroupDetail(groupID string) (api.Consume
 	if err != nil {
 		return api.ConsumerGroupDetail{}, err
 	}
-	defer admin.Close()
 
 	names, err := admin.ListConsumerGroups()
 	if err != nil {
@@ -197,14 +323,11 @@ func buildGroupDetail(desc *sarama.GroupDescription, offsetsResp *sarama.OffsetF
 
 	// Union of committed and assigned partitions.
 	tpSet := map[api.TopicPartition]struct{}{}
-	for topic, parts := range committed {
-		for p := range parts {
-			tpSet[api.TopicPartition{Topic: topic, Partition: p}] = struct{}{}
-		}
-	}
+	addCommitted(tpSet, committed)
 	for tp := range ownerOf {
 		tpSet[tp] = struct{}{}
 	}
+	ends := fetchNewestOffsets(reader, tpSet)
 
 	offsets := make([]api.PartitionOffset, 0, len(tpSet))
 	for tp := range tpSet {
@@ -222,13 +345,13 @@ func buildGroupDetail(desc *sarama.GroupDescription, offsetsResp *sarama.OffsetF
 		}
 		po.CommittedOffset = committedVal
 
-		end, err := reader.GetOffset(tp.Topic, tp.Partition, sarama.OffsetNewest)
-		if err == nil {
+		end, ok := ends[tp]
+		if ok {
 			po.EndOffset = end
 		}
 		if committedVal != nil {
 			var lag int64
-			if err == nil {
+			if ok {
 				if lag = end - *committedVal; lag < 0 {
 					lag = 0
 				}
@@ -264,10 +387,25 @@ type groupDetailCacheEntry struct {
 }
 
 var (
+	// groupDetailCache is keyed by groupCacheKey (cluster + group id) so a
+	// cluster switch never serves another cluster's group of the same name.
 	groupDetailCache   = map[string]groupDetailCacheEntry{}
 	groupDetailCacheMu sync.Mutex
 	groupDetailTTL     = 30 * time.Second
+	// groupDetailCacheGen is bumped by invalidateGroupCache. Enrichment runs
+	// without the lock, so a batch that started before an invalidation must
+	// not write its (possibly pre-mutation) rows back.
+	groupDetailCacheGen uint64
 )
+
+// groupCacheKey scopes a group id to the active cluster.
+func groupCacheKey(groupID string) string {
+	cluster := ""
+	if currentCluster != nil {
+		cluster = currentCluster.Name
+	}
+	return cluster + "\x00" + groupID
+}
 
 // GetConsumerGroupDetails implements api.KafkaDataSource (CG-4).
 func (kp KafkaDataSourceKaf) GetConsumerGroupDetails(groupIDs []string) ([]api.ConsumerGroup, error) {
@@ -275,18 +413,24 @@ func (kp KafkaDataSourceKaf) GetConsumerGroupDetails(groupIDs []string) ([]api.C
 		return []api.ConsumerGroup{}, nil
 	}
 
-	// Resolve cache hits first; collect misses to describe.
+	// Resolve cache hits first; collect misses to describe. Keys are fixed up
+	// front so rows are cached under the cluster they were fetched from.
+	keys := make(map[string]string, len(groupIDs))
+	for _, id := range groupIDs {
+		keys[id] = groupCacheKey(id)
+	}
 	cached := map[string]api.ConsumerGroup{}
 	var misses []string
 	groupDetailCacheMu.Lock()
 	now := time.Now()
 	for _, id := range groupIDs {
-		if e, ok := groupDetailCache[id]; ok && now.Sub(e.at) < groupDetailTTL {
+		if e, ok := groupDetailCache[keys[id]]; ok && now.Sub(e.at) < groupDetailTTL {
 			cached[id] = e.group
 		} else {
 			misses = append(misses, id)
 		}
 	}
+	gen := groupDetailCacheGen
 	groupDetailCacheMu.Unlock()
 
 	if len(misses) > 0 {
@@ -294,7 +438,6 @@ func (kp KafkaDataSourceKaf) GetConsumerGroupDetails(groupIDs []string) ([]api.C
 		if err != nil {
 			return nil, err
 		}
-		defer admin.Close()
 
 		descs, err := admin.DescribeConsumerGroups(misses)
 		if err != nil {
@@ -307,11 +450,22 @@ func (kp KafkaDataSourceKaf) GetConsumerGroupDetails(groupIDs []string) ([]api.C
 		}
 		defer reader.Close()
 
+		// Network enrichment runs without the cache lock; only the writes below
+		// take it, so concurrent callers (and cache hits) are not blocked.
+		rows := enrichGroups(misses, descs, admin, reader)
+
 		groupDetailCacheMu.Lock()
-		for _, id := range misses {
-			row := enrichGroup(id, findGroupDesc(descs, id), admin, reader)
-			cached[id] = row
-			groupDetailCache[id] = groupDetailCacheEntry{group: row, at: time.Now()}
+		at := time.Now()
+		for k, e := range groupDetailCache {
+			if at.Sub(e.at) >= groupDetailTTL {
+				delete(groupDetailCache, k)
+			}
+		}
+		for i, id := range misses {
+			cached[id] = rows[i]
+			if gen == groupDetailCacheGen {
+				groupDetailCache[keys[id]] = groupDetailCacheEntry{group: rows[i], at: at}
+			}
 		}
 		groupDetailCacheMu.Unlock()
 	}
@@ -323,31 +477,57 @@ func (kp KafkaDataSourceKaf) GetConsumerGroupDetails(groupIDs []string) ([]api.C
 	return out, nil
 }
 
-// enrichGroup builds an enriched list row for a single group. Best-effort: a
-// group that failed to describe keeps state Unknown and nil lag.
-func enrichGroup(name string, desc *sarama.GroupDescription, admin ClusterAdminInterface, reader groupOffsetReader) api.ConsumerGroup {
-	if desc == nil || desc.ErrorCode != 0 {
-		return api.ConsumerGroup{Name: name, State: api.GroupStateUnknown, CoordinatorID: -1}
+// enrichGroups builds enriched list rows for a batch of groups, index-aligned
+// with names. Per-group offset fetches run through a bounded worker pool and
+// all end offsets are read in one batched lookup. Best-effort: a group that
+// failed to describe keeps state Unknown and nil lag.
+func enrichGroups(names []string, descs []*sarama.GroupDescription, admin ClusterAdminInterface, reader groupOffsetReader) []api.ConsumerGroup {
+	type fetched struct {
+		desc      *sarama.GroupDescription
+		committed map[string]map[int32]int64
+		coord     int32
 	}
+	per := make([]fetched, len(names))
+	forEachBounded(len(names), groupFanout, func(i int) {
+		name := names[i]
+		desc := findGroupDesc(descs, name)
+		if desc == nil || desc.ErrorCode != 0 {
+			return
+		}
+		offsetsResp, err := admin.ListConsumerGroupOffsets(name, nil)
+		if err != nil {
+			shared.Log.Warn("enrichGroups: failed to list offsets", "group", name, "err", err)
+		}
+		per[i] = fetched{desc: desc, committed: committedOffsets(offsetsResp), coord: coordinatorID(reader, name)}
+	})
 
-	offsetsResp, err := admin.ListConsumerGroupOffsets(name, nil)
-	if err != nil {
-		shared.Log.Warn("enrichGroup: failed to list offsets", "group", name, "err", err)
+	tps := map[api.TopicPartition]struct{}{}
+	for _, f := range per {
+		addCommitted(tps, f.committed)
 	}
-	committed := committedOffsets(offsetsResp)
-	members := groupMembers(desc)
+	ends := fetchNewestOffsets(reader, tps)
 
-	return api.ConsumerGroup{
-		Name:              name,
-		State:             normalizeGroupState(desc.State),
-		Consumers:         len(members),
-		MemberCount:       len(members),
-		TopicCount:        distinctTopics(committed, members),
-		Lag:               computeTotalLag(committed, reader),
-		CoordinatorID:     coordinatorID(reader, name),
-		PartitionAssignor: desc.Protocol,
-		IsSimple:          desc.ProtocolType != "consumer",
+	rows := make([]api.ConsumerGroup, len(names))
+	for i, name := range names {
+		f := per[i]
+		if f.desc == nil {
+			rows[i] = api.ConsumerGroup{Name: name, State: api.GroupStateUnknown, CoordinatorID: -1}
+			continue
+		}
+		members := groupMembers(f.desc)
+		rows[i] = api.ConsumerGroup{
+			Name:              name,
+			State:             normalizeGroupState(f.desc.State),
+			Consumers:         len(members),
+			MemberCount:       len(members),
+			TopicCount:        distinctTopics(f.committed, members),
+			Lag:               computeTotalLag(f.committed, ends),
+			CoordinatorID:     f.coord,
+			PartitionAssignor: f.desc.Protocol,
+			IsSimple:          f.desc.ProtocolType != "consumer",
+		}
 	}
+	return rows
 }
 
 // --- CG-5: topic-scoped listing ---
@@ -358,7 +538,6 @@ func (kp KafkaDataSourceKaf) GetConsumerGroupsForTopic(topic string) ([]api.Cons
 	if err != nil {
 		return nil, err
 	}
-	defer admin.Close()
 
 	names, err := admin.ListConsumerGroups()
 	if err != nil {
@@ -376,8 +555,19 @@ func (kp KafkaDataSourceKaf) GetConsumerGroupsForTopic(topic string) ([]api.Cons
 	}
 	defer reader.Close()
 
+	// Only this topic's committed offsets matter, so restrict each OffsetFetch
+	// to its partitions. Without partition metadata fall back to fetching all.
+	var filter map[string][]int32
+	if parts, err := reader.Partitions(topic); err == nil && len(parts) > 0 {
+		filter = map[string][]int32{topic: parts}
+	}
+
+	type candidate struct {
+		name string
+		desc *sarama.GroupDescription
+	}
 	const chunkSize = 50
-	var result []api.ConsumerGroup
+	var cands []candidate
 	for start := 0; start < len(allNames); start += chunkSize {
 		end := start + chunkSize
 		if end > len(allNames) {
@@ -393,18 +583,50 @@ func (kp KafkaDataSourceKaf) GetConsumerGroupsForTopic(topic string) ([]api.Cons
 			if desc == nil || desc.ErrorCode != 0 {
 				continue
 			}
-			if row, ok := scopeGroupToTopic(name, desc, admin, reader, topic); ok {
-				result = append(result, row)
-			}
+			cands = append(cands, candidate{name: name, desc: desc})
 		}
+	}
+
+	type scoped struct {
+		row       api.ConsumerGroup
+		committed map[int32]int64
+		ok        bool
+	}
+	per := make([]scoped, len(cands))
+	forEachBounded(len(cands), groupFanout, func(i int) {
+		row, committed, ok := scopeGroupToTopic(cands[i].name, cands[i].desc, admin, reader, topic, filter)
+		per[i] = scoped{row: row, committed: committed, ok: ok}
+	})
+
+	// The topic's end offsets are the same for every group: read them once.
+	tps := map[api.TopicPartition]struct{}{}
+	for _, s := range per {
+		if s.ok {
+			addCommitted(tps, map[string]map[int32]int64{topic: s.committed})
+		}
+	}
+	ends := fetchNewestOffsets(reader, tps)
+
+	var result []api.ConsumerGroup
+	for _, s := range per {
+		if !s.ok {
+			continue
+		}
+		// Topic-scoped lag: nil when the group has no committed offsets for the topic.
+		if len(s.committed) > 0 {
+			s.row.Lag = computeTotalLag(map[string]map[int32]int64{topic: s.committed}, ends)
+		}
+		result = append(result, s.row)
 	}
 	return result, nil
 }
 
-// scopeGroupToTopic returns a topic-scoped list row and whether the group is
-// related to the topic (has committed offsets for it OR an assigned partition).
-func scopeGroupToTopic(name string, desc *sarama.GroupDescription, admin ClusterAdminInterface, reader groupOffsetReader, topic string) (api.ConsumerGroup, bool) {
-	offsetsResp, _ := admin.ListConsumerGroupOffsets(name, nil)
+// scopeGroupToTopic returns a topic-scoped list row (Lag left nil), the group's
+// committed offsets for the topic, and whether the group is related to the
+// topic (has committed offsets for it OR an assigned partition). filter is
+// passed to ListConsumerGroupOffsets (nil fetches every topic).
+func scopeGroupToTopic(name string, desc *sarama.GroupDescription, admin ClusterAdminInterface, reader groupOffsetReader, topic string, filter map[string][]int32) (api.ConsumerGroup, map[int32]int64, bool) {
+	offsetsResp, _ := admin.ListConsumerGroupOffsets(name, filter)
 	committed := committedOffsets(offsetsResp)
 	members := groupMembers(desc)
 
@@ -422,14 +644,7 @@ func scopeGroupToTopic(name string, desc *sarama.GroupDescription, admin Cluster
 	}
 
 	if !hasCommitted && memberCount == 0 {
-		return api.ConsumerGroup{}, false
-	}
-
-	// Topic-scoped lag: nil when the group has no committed offsets for the topic.
-	var lag *int64
-	if hasCommitted {
-		scoped := map[string]map[int32]int64{topic: committed[topic]}
-		lag = computeTotalLag(scoped, reader)
+		return api.ConsumerGroup{}, nil, false
 	}
 
 	return api.ConsumerGroup{
@@ -438,11 +653,10 @@ func scopeGroupToTopic(name string, desc *sarama.GroupDescription, admin Cluster
 		Consumers:         memberCount,
 		MemberCount:       memberCount,
 		TopicCount:        1,
-		Lag:               lag,
 		CoordinatorID:     coordinatorID(reader, name),
 		PartitionAssignor: desc.Protocol,
 		IsSimple:          desc.ProtocolType != "consumer",
-	}, true
+	}, committed[topic], true
 }
 
 // --- CG-6: deletion ---
@@ -467,7 +681,6 @@ func (kp KafkaDataSourceKaf) DeleteConsumerGroup(groupID string) error {
 	if err != nil {
 		return err
 	}
-	defer admin.Close()
 
 	invalidateGroupCache(groupID)
 	if err := admin.DeleteConsumerGroup(groupID); err != nil {
@@ -483,7 +696,6 @@ func (kp KafkaDataSourceKaf) DeleteConsumerGroupOffsets(groupID string, topic st
 	if err != nil {
 		return err
 	}
-	defer admin.Close()
 
 	offsetsResp, err := admin.ListConsumerGroupOffsets(groupID, nil)
 	if err != nil {
@@ -510,6 +722,7 @@ func (kp KafkaDataSourceKaf) DeleteConsumerGroupOffsets(groupID string, topic st
 // invalidateGroupCache drops any cached enrichment for a group after a mutation.
 func invalidateGroupCache(groupID string) {
 	groupDetailCacheMu.Lock()
-	delete(groupDetailCache, groupID)
+	delete(groupDetailCache, groupCacheKey(groupID))
+	groupDetailCacheGen++
 	groupDetailCacheMu.Unlock()
 }

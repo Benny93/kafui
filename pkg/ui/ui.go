@@ -39,6 +39,13 @@ type Model struct {
 	keycast      debug.Keycast   // Debug builds: the recent-keys strip
 	width        int
 	height       int
+
+	// metricsExposed keeps metrics collection running for the Prometheus
+	// exposition endpoint; otherwise it runs only while the metrics page shows.
+	metricsExposed bool
+	// metricsTickArmed is true while a metrics CollectTickMsg is pending, so
+	// at most one tick chain exists.
+	metricsTickArmed bool
 }
 
 // initialModelWithRouter creates a new Model using the router-based navigation
@@ -91,14 +98,34 @@ func (m *Model) Init() tea.Cmd {
 	if c := m.common.Collector; c != nil {
 		cmds = append(cmds, c.CollectCmd(), c.TickCmd())
 	}
-	// Kick off background metrics collection and its periodic tick.
-	if mc := m.common.MetricsCollector; mc != nil {
-		cmds = append(cmds, mc.CollectCmd(), mc.TickCmd())
+	// Metrics collection starts here only for the exposition endpoint; the
+	// metrics page starts it when it opens. Its tick is armed when the cycle
+	// reports back.
+	if mc := m.common.MetricsCollector; mc != nil && m.metricsExposed {
+		cmds = append(cmds, mc.CollectCmd())
 	}
 	if cmd := m.releaseCheckCmd(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 	return tea.Batch(cmds...)
+}
+
+// metricsWanted reports whether anyone reads metrics right now: the metrics
+// page is showing, or the exposition endpoint is serving.
+func (m *Model) metricsWanted() bool {
+	return m.metricsExposed || m.Router.GetCurrentPageID() == "metrics"
+}
+
+// armMetricsTick schedules the next metrics cycle, unless one is already
+// scheduled or nobody reads metrics. The chain then stops, and the metrics
+// page restarts it by collecting when it opens.
+func (m *Model) armMetricsTick() tea.Cmd {
+	mc := m.common.MetricsCollector
+	if mc == nil || m.metricsTickArmed || !m.metricsWanted() {
+		return nil
+	}
+	m.metricsTickArmed = true
+	return mc.TickCmd()
 }
 
 // currentThemeMode returns the persisted theme mode ("auto", "dark", "light").
@@ -216,9 +243,24 @@ func (m *Model) releaseCheckCmd() tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	// A page's own results arrive addressed to that page (CONC-4). The shell
+	// reacts to the payload like any other message, and hands the envelope to
+	// the router so the payload reaches the page that asked for it.
+	routed := msg
+	pm, addressed := msg.(core.PageMsg)
+	if addressed {
+		msg = pm.Msg
+	}
+
 	// Confirmation dialog: intercept the request to open it, and while it is
-	// open trap all key/mouse input so the page underneath is frozen.
+	// open trap all key/mouse input so the page underneath is frozen. A page
+	// raises it from a command that may finish after the user left the page or
+	// switched clusters; opening it then would ask about the old page over the
+	// new one, and confirming would act on the cluster active now.
 	if showMsg, ok := msg.(core.ShowConfirmMsg); ok {
+		if addressed && !m.Router.IsLive(pm) {
+			return m, nil
+		}
 		m.confirm.Show(showMsg)
 		m.confirm.SetDimensions(m.width, m.height)
 		return m, nil
@@ -244,12 +286,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Periodic metrics collection tick: run a cycle and reschedule.
+	// Periodic metrics collection tick: run a cycle if anyone reads the
+	// result. The next tick is armed when the cycle reports back, below, so
+	// a cycle slower than the interval never overlaps the next (PERF-2).
 	if _, ok := msg.(metrics.CollectTickMsg); ok {
-		if mc := m.common.MetricsCollector; mc != nil {
-			return m, tea.Batch(mc.CollectCmd(), mc.TickCmd())
+		m.metricsTickArmed = false
+		if mc := m.common.MetricsCollector; mc != nil && m.metricsWanted() {
+			return m, mc.CollectCmd()
 		}
 		return m, nil
+	}
+	if _, ok := msg.(metrics.MetricsUpdatedMsg); ok {
+		// Not consumed: the metrics page renders from it.
+		cmds = append(cmds, m.armMetricsTick())
 	}
 
 	// Config hot-reload (AC-16): apply reloadable settings (UI prefs, cluster
@@ -268,11 +317,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if tog, ok := msg.(core.SidebarToggledMsg); ok {
 		cmd := m.persistSidebarCmd(tog.Visible)
 		// Continue delegating so the page still processes any batched work.
-		if m.state != core.StateHelp {
-			_, rcmd := m.Router.Update(msg)
-			return m, tea.Batch(cmd, rcmd)
-		}
-		return m, cmd
+		_, rcmd := m.Router.Update(routed)
+		return m, tea.Batch(cmd, rcmd)
 	}
 
 	// Notification/status messages are consumed by the shell-owned notifier.
@@ -408,11 +454,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Handle router updates if not in help mode
-	if m.state != core.StateHelp {
-		_, cmd := m.Router.Update(msg)
-		cmds = append(cmds, cmd)
+	// The help overlay holds the keyboard and mouse. Everything else still
+	// reaches the pages underneath: dropping a fetch result or a listener's
+	// next message there would leave a page loading forever, or stop a live
+	// stream, once help closes (CONC-4).
+	if m.state == core.StateHelp {
+		switch msg.(type) {
+		case tea.KeyMsg, tea.MouseMsg:
+			return m, tea.Batch(cmds...)
+		}
 	}
+	_, cmd := m.Router.Update(routed)
+	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
 }

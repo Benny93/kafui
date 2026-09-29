@@ -173,3 +173,63 @@ func TestBrokerPage_MetricsLoaded(t *testing.T) {
 	assert.True(t, m.metricsLoaded)
 	assert.NoError(t, m.metricsErr)
 }
+
+// countingDS counts the broker reads the page issues on activation.
+type countingDS struct {
+	*mock.KafkaDataSourceMock
+	stats, logDirs int
+}
+
+func (c *countingDS) GetBrokerStats() (map[int32]api.BrokerStats, api.BrokerSummary, error) {
+	c.stats++
+	return c.KafkaDataSourceMock.GetBrokerStats()
+}
+
+func (c *countingDS) GetBrokerLogDirs(ids []int32) (map[int32][]api.BrokerLogDir, error) {
+	c.logDirs++
+	return c.KafkaDataSourceMock.GetBrokerLogDirs(ids)
+}
+
+// runAll executes cmd and every command a batch expands to, feeding results to m.
+func runAll(m *Model, cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			runAll(m, c)
+		}
+	case nil:
+	default:
+		m.handle(msg)
+	}
+}
+
+// Activation used to run loadStats and the log-dirs tab load, i.e. two
+// DescribeLogDirs round trips; disk usage is now derived from the log dirs.
+// Under the router contract (Init once, then OnFocus on every activation) the
+// first activation must load exactly once, and a return must not reload.
+func TestBrokerPage_ActivationLoadsLogDirsOnce(t *testing.T) {
+	ds := &countingDS{KafkaDataSourceMock: &mock.KafkaDataSourceMock{}}
+	ds.Init("")
+	m := newModel(&core.Common{DataSource: ds, Styles: stylesPkg.DefaultStyles()}, 1, api.BrokerInfo{}, false)
+
+	runAll(m, m.initialLoad())
+	runAll(m, m.OnFocus())
+	runAll(m, m.OnFocus())
+
+	assert.Equal(t, 1, ds.logDirs, "log dirs fetched once")
+	assert.Equal(t, 0, ds.stats, "no separate GetBrokerStats (second DescribeLogDirs)")
+	assert.NotContains(t, m.summaryStrip(), "N/A", "disk usage comes from the log dirs")
+}
+
+func TestBrokerPage_IsInputMode(t *testing.T) {
+	m := newModel(testCommon(), 1, api.BrokerInfo{ID: 1}, true)
+	var page core.Page = m
+	r, ok := page.(core.InputModeReporter)
+	require.True(t, ok, "the page model itself must report input mode")
+	assert.False(t, r.IsInputMode())
+	m.searching = true
+	assert.True(t, r.IsInputMode())
+}

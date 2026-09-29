@@ -311,6 +311,15 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 		return err
 	}
 
+	// Like the real datasource, stop after LimitMessages; a non-follow browse
+	// also stops at the end of a finite backlog instead of waiting for more.
+	follow := flags.Follow || flags.Seek == api.SeekLive
+	stopAfter := flags.LimitMessages
+	if stopAfter <= 0 && !follow {
+		stopAfter = mockBrowseBacklog
+	}
+	var delivered int64
+
 	// First, deliver any produced messages for this topic (MSG-30) honoring the
 	// seek/partition/limit filters (MSG-2/3/4). These are browsable in-memory.
 	for _, msg := range kp.browseProduced(topicName, flags) {
@@ -319,6 +328,7 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 			return ctx.Err()
 		default:
 			handleMessage(msg)
+			delivered++
 		}
 	}
 
@@ -332,6 +342,10 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 
 	// Simulate continuous message consumption like real Kafka
 	for {
+		if stopAfter > 0 && delivered >= stopAfter {
+			return nil
+		}
+
 		// Check if context is cancelled before processing
 		select {
 		case <-ctx.Done():
@@ -341,7 +355,7 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 		}
 
 		// Generate a realistic message based on topic name
-		msg := kp.generateMessage(topicName)
+		msg := withPartitionFilter(kp.generateMessage(topicName), flags.Partitions)
 
 		// Check context again before calling handler with panic recovery
 		select {
@@ -365,6 +379,12 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 				handleMessage(msg)
 			}()
 		}
+		delivered++
+
+		// A browse reads existing backlog, so only live mode waits between messages.
+		if !follow {
+			continue
+		}
 
 		// Simulate realistic processing time between messages (100ms - 2s)
 		delay := time.Duration(100+kp.randSource.Intn(1900)) * time.Millisecond
@@ -375,6 +395,24 @@ func (kp *KafkaDataSourceMock) ConsumeTopic(ctx context.Context, topicName strin
 			// Continue to next iteration
 		}
 	}
+}
+
+// mockBrowseBacklog is how many generated messages a non-follow browse
+// returns when no limit is set; it stands in for a partition's end offset.
+const mockBrowseBacklog = int64(api.DefaultPageSize)
+
+// withPartitionFilter moves a generated message onto one of the requested
+// partitions (round-robin by its per-topic counter), keeping the offset
+// scheme generateMessage uses. An empty filter leaves msg unchanged.
+func withPartitionFilter(msg api.Message, partitions []int32) api.Message {
+	if len(partitions) == 0 {
+		return msg
+	}
+	counter := msg.Offset - int64(msg.Partition)*1000000
+	p := partitions[int(counter%int64(len(partitions)))]
+	msg.Partition = p
+	msg.Offset = counter + int64(p)*1000000
+	return msg
 }
 
 // ProduceMessage appends a record to the in-memory store so it is browsable

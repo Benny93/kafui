@@ -37,25 +37,55 @@ func (m ConsumeMode) Next() ConsumeMode {
 	return (m + 1) % 3
 }
 
-// Custom message types for the topic page
+// Custom message types for the topic page.
+//
+// Every message produced by a fetch or a live stream carries the Topic and the
+// fetch generation (Gen) it was started for. The router delivers messages to
+// whichever page is current, and a refresh, seek or mode switch starts a new
+// generation, so handlers drop any message whose Topic or Gen is not the
+// model's current one (see Model.isCurrent).
 type (
 	// Consumption messages
 	MessageConsumedMsg struct {
 		Message api.Message
+		Topic   string
+		Gen     uint64
 	}
 
 	StartConsumingMsg struct {
 		MsgChan <-chan api.Message
 		ErrChan <-chan error
 		Cancel  func()
+		Topic   string
+		Gen     uint64
 	}
 
 	StopConsumingMsg struct{}
 
 	// Continuous listening messages
-	ContinuousListenMsg struct{}
+	ContinuousListenMsg struct {
+		Topic string
+		Gen   uint64
+	}
 
-	ContinuousErrorListenMsg struct{}
+	ContinuousErrorListenMsg struct {
+		Topic string
+		Gen   uint64
+	}
+
+	// streamClosedMsg reports that a live stream's message or error channel
+	// was closed. The handler decides whether that is an error.
+	streamClosedMsg struct {
+		Topic string
+		Gen   uint64
+	}
+
+	// liveErrorMsg carries an error reported by a live stream.
+	liveErrorMsg struct {
+		Topic string
+		Gen   uint64
+		Err   error
+	}
 
 	// Connection status messages
 	ConnectionStatusMsg string
@@ -64,6 +94,8 @@ type (
 	RetryConsumptionMsg struct {
 		Attempt   int
 		LastError error
+		Topic     string
+		Gen       uint64
 	}
 
 	ConnectionFailedMsg struct {
@@ -81,9 +113,15 @@ type (
 		Message api.Message
 	}
 
-	// Fetch messages (non-streaming)
+	// Fetch messages (non-streaming). Err is the error the fetch hit, if any;
+	// Messages may still hold what arrived before it. Append is true for
+	// batch-pagination fetches, whose results merge into the loaded set.
 	MessagesFetchedMsg struct {
 		Messages []api.Message
+		Err      error
+		Append   bool
+		Topic    string
+		Gen      uint64
 	}
 
 	// StartFetchMsg signals that a background progress-tracked fetch has started.
@@ -96,12 +134,16 @@ type (
 		ResultCh   <-chan MessagesFetchedMsg
 		Total      int
 		Append     bool // true for batch-pagination fetches
+		Topic      string
+		Gen        uint64
 	}
 
 	// VisibleMessagesDecodedMsg carries the result of lazily decoding the visible page.
 	// The handler merges decoded Key/Value back into the model's message store.
 	VisibleMessagesDecodedMsg struct {
 		Messages []api.Message
+		Topic    string
+		Gen      uint64
 	}
 
 	// Timer messages

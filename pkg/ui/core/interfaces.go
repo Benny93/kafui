@@ -21,6 +21,14 @@ type Page interface {
 	OnBlur() tea.Cmd
 }
 
+// Disposer is implemented by pages that hold resources beyond their own memory,
+// such as a running consumer. The router calls Dispose when it evicts the page
+// (it left the navigation history, or the active cluster changed), after
+// OnBlur. A disposed page is never shown again.
+type Disposer interface {
+	Dispose()
+}
+
 // StatefulPage extends Page with state management capabilities
 type StatefulPage interface {
 	Page

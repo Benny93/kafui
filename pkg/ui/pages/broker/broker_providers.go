@@ -13,11 +13,8 @@ func (p *contentProvider) RenderContent(width, height int) string {
 func (p *contentProvider) HandleContentUpdate(msg tea.Msg) tea.Cmd { return p.model.handle(msg) }
 func (p *contentProvider) InitContent() tea.Cmd                    { return nil }
 
-// IsInputMode reports an active text-input sub-state so the shell stops
-// intercepting hotkeys (search, inline config edit, or the reassignment form).
-func (p *contentProvider) IsInputMode() bool {
-	return p.model.searching || p.model.editing || p.model.moveForm != nil
-}
+// IsInputMode delegates to the page model, the single source of truth.
+func (p *contentProvider) IsInputMode() bool { return p.model.IsInputMode() }
 
 func (p *contentProvider) GetContentSize(width int) int {
 	switch p.model.active {

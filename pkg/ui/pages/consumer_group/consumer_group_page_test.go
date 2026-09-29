@@ -254,3 +254,33 @@ func assertProducesBack(t *testing.T, cmd tea.Cmd) {
 	}
 	t.Fatalf("expected BackMsg, got %T", msg)
 }
+
+// The auto-refresh chain is armed once (Init). OnFocus used to re-arm it on
+// every return while the old chain's queued tick was still delivered, doubling
+// the refresh rate each visit. A superseded chain's tick must die.
+func TestAutoRefresh_SingleTickChain(t *testing.T) {
+	m := newPage(t, newSpy(), "order-processor")
+	m.autoInterval = autoIntervals[1]
+
+	m.Init()
+	old := m.tickGen
+	assert.NotNil(t, m.OnFocus(), "activation loads the detail")
+	assert.Equal(t, old, m.tickGen, "OnFocus must not start another tick chain")
+
+	// Cycling the interval back to the same value starts a new chain.
+	m.startTicks()
+	stale := autoRefreshTickMsg{groupID: m.groupID, interval: m.autoInterval, gen: old}
+	assert.Nil(t, m.handleAutoTick(stale), "tick from a superseded chain is dropped")
+	current := autoRefreshTickMsg{groupID: m.groupID, interval: m.autoInterval, gen: m.tickGen}
+	assert.NotNil(t, m.handleAutoTick(current))
+}
+
+func TestPage_IsInputMode(t *testing.T) {
+	m := newPage(t, newSpy(), "order-processor")
+	var page core.Page = m
+	r, ok := page.(core.InputModeReporter)
+	require.True(t, ok, "the page model itself must report input mode")
+	assert.False(t, r.IsInputMode())
+	m.searching = true
+	assert.True(t, r.IsInputMode())
+}

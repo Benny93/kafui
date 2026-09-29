@@ -104,7 +104,7 @@ func TestFirstCycleRatesUnknown(t *testing.T) {
 
 func TestRateFromDeltaAcrossCycles(t *testing.T) {
 	f := newFake()
-	c := New(f, time.Second, nil)
+	c := New(f, 10*time.Second, nil)
 
 	now := time.Unix(0, 0)
 	c.now = func() time.Time { return now }
@@ -272,4 +272,67 @@ func TestSnapshotUnknownCluster(t *testing.T) {
 	c := New(newFake(), time.Second, nil)
 	_, ok := c.Snapshot("does-not-exist")
 	assert.False(t, ok)
+}
+
+// Collection pauses while the metrics page is closed. The first cycle after
+// the pause must not report the average over the whole pause as the current
+// rate, nor add it to the history (router-2).
+func TestRateNotDerivedAcrossPause(t *testing.T) {
+	f := newFake()
+	c := New(f, 5*time.Second, nil)
+	now := time.Unix(0, 0)
+	c.now = func() time.Time { return now }
+
+	c.CollectAll(context.Background()) // baseline
+	now = now.Add(5 * time.Second)
+	f.setCount("orders", 1500) // +100/s
+	c.CollectAll(context.Background())
+	cm, _ := c.Active()
+	require.InDelta(t, 100.0, cm.MessagesInPerSec, 1e-9)
+
+	// Page closed for 30 minutes; 1800 messages arrive meanwhile.
+	now = now.Add(30 * time.Minute)
+	f.setCount("orders", 3300)
+	c.CollectAll(context.Background())
+	cm, _ = c.Active()
+	assert.Equal(t, api.RateUnknown, cm.MessagesInPerSec, "a rate across the pause is not the current rate")
+	for _, tm := range cm.Topics {
+		assert.Equal(t, api.RateUnknown, tm.MessagesInPerSec, "topic %s", tm.Name)
+	}
+	assert.Len(t, c.ActiveMessagesInHistory().Points, 1, "the pause must not add a point")
+
+	// The next regular cycle measures from the post-pause sample.
+	now = now.Add(5 * time.Second)
+	f.setCount("orders", 3550) // +50/s
+	c.CollectAll(context.Background())
+	cm, _ = c.Active()
+	assert.InDelta(t, 50.0, cm.MessagesInPerSec, 1e-9)
+	assert.Len(t, c.ActiveMessagesInHistory().Points, 2)
+}
+
+// A cycle slower than the interval is not a pause: the gap is measured from
+// the previous sample to the start of this cycle.
+func TestSlowCycleIsNotAPause(t *testing.T) {
+	f := &slowDS{fakeDS: newFake()}
+	c := New(f, 5*time.Second, nil)
+	now := time.Unix(0, 0)
+	c.now = func() time.Time { return now }
+	f.onFetch = func() { now = now.Add(20 * time.Second) } // the fetch takes 20s
+
+	c.CollectAll(context.Background())
+	now = now.Add(5 * time.Second)
+	f.setCount("orders", 3500) // +2500 over 25s since the last sample
+	c.CollectAll(context.Background())
+	cm, _ := c.Active()
+	assert.InDelta(t, 100.0, cm.MessagesInPerSec, 1e-9)
+}
+
+type slowDS struct {
+	*fakeDS
+	onFetch func()
+}
+
+func (s *slowDS) GetTopics() (map[string]api.Topic, error) {
+	s.onFetch()
+	return s.fakeDS.GetTopics()
 }

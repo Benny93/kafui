@@ -53,6 +53,10 @@ type Model struct {
 
 	// Refresh / auto-refresh (CG-15).
 	autoInterval time.Duration // 0 = off
+	// tickGen identifies the live auto-refresh tick chain. Starting a chain
+	// bumps it, so ticks from an older chain are dropped instead of re-arming
+	// and at most one chain runs.
+	tickGen uint64
 	// trendBaseline holds the previous per-topic aggregate lag captured at the
 	// last auto-refresh tick; nil means no baseline (no trend arrows shown).
 	trendBaseline map[string]int64
@@ -111,7 +115,12 @@ func partitionColumns() []table.Column {
 
 // --- core.Page ---
 
-func (m *Model) Init() tea.Cmd { return m.reusableApp.Init() }
+// Init runs once, when the page is created. It arms the persisted auto-refresh
+// loop; the tick chain then survives the page being hidden (the router queues
+// its ticks), so OnFocus must not arm another one.
+func (m *Model) Init() tea.Cmd {
+	return tea.Batch(m.reusableApp.Init(), m.startTicks())
+}
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	updated, cmd := m.reusableApp.Update(msg)
@@ -149,15 +158,9 @@ func (m *Model) GetHelp() []key.Binding {
 func (m *Model) HandleNavigation(msg tea.Msg) (core.Page, tea.Cmd) { return m, nil }
 func (m *Model) OnBlur() tea.Cmd                                   { return nil }
 
-// OnFocus kicks off the initial detail load (and re-arms auto-refresh if it was
-// previously enabled and persisted).
-func (m *Model) OnFocus() tea.Cmd {
-	cmds := []tea.Cmd{m.loadDetail()}
-	if m.autoInterval > 0 {
-		cmds = append(cmds, m.scheduleTick())
-	}
-	return tea.Batch(cmds...)
-}
+// OnFocus loads the detail on every activation: the first one (Init does not
+// load) and each return, so lags are fresh after being away.
+func (m *Model) OnFocus() tea.Cmd { return m.loadDetail() }
 
 // --- loads ---
 

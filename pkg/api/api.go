@@ -445,8 +445,15 @@ type KafkaDataSource interface {
 	// metrics. It returns a TopicNotFoundError when the topic does not exist.
 	GetTopicDetails(topicName string) (TopicDetails, error)
 	// GetTopicSizes returns the on-disk size (leader replicas only) per topic.
-	// Best-effort: topics that fail are omitted from the result map.
+	// Best-effort: topics that fail are omitted from the result map. A broker
+	// that cannot answer yields an empty map — sizes are unknown, not zero.
 	GetTopicSizes(topicNames []string) (map[string]int64, error)
+	// GetTopicHealth returns replication health for a batch of topics from a
+	// single metadata request. It exists because a list view needs only these
+	// few fields for many topics at once; calling GetTopicDetails per topic
+	// costs one connection and one offset round-trip per partition each, none
+	// of which a list column uses.
+	GetTopicHealth(topicNames []string) (map[string]TopicHealth, error)
 	// CreateTopic creates a topic. A replicationFactor of -1 requests the
 	// cluster default. Empty-valued config entries must be stripped by the
 	// caller. It polls metadata until the topic is visible.

@@ -9,15 +9,11 @@ packages superseded them.
 
 ## Live components
 
-- **`search_bar.go`** — `SearchBarModel`, a text-input search/filter bar with
-  fuzzy suggestions and history.
 - **`fuzzy.go`** — `FuzzyMatcher` used for suggestion ranking and filtering.
 - **`fetch_progress_bar.go`** — `FetchProgressBar`, a determinate animated
   progress bar for counted batch fetches (channel-driven `ProgressMsg` stream).
 - **`loading.go`** — `Spinner` wrapper over `bubbles/spinner` plus
   `CenteredLoading`, the shared indeterminate loading indicator (UI-12).
-- **`json_content_view.go`** — read-only JSON content view (also see the richer
-  `editor/` subpackage).
 - **`sparkline.go`** — inline sparkline renderer for the metrics page.
 - **`styles.go`** — small shared lipgloss style helpers for the above.
 

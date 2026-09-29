@@ -60,15 +60,78 @@ type connectClient struct {
 	http     *http.Client
 }
 
+// connectTopicsFanout bounds the concurrent per-connector /topics requests made
+// while listing one Connect cluster. It also sizes the per-host idle pool so
+// those requests reuse their connections.
+const connectTopicsFanout = 8
+
+// connectHTTPClients caches one *http.Client (and so one Transport and its
+// keep-alive pool) per Connect cluster config. Keying by the whole config means
+// an edited cluster (or a same-named cluster of another context) gets its own
+// client; idle connections of an unused one close after IdleConnTimeout.
+//
+// Each entry also remembers the size and modification time of the cluster's
+// TLS files. A CA or client certificate rotated in place (same paths, so the
+// same config) changes the stamp, and the client is rebuilt from the new files.
+var (
+	connectHTTPClientsMu sync.Mutex
+	connectHTTPClients   = map[appconfig.ConnectCluster]connectHTTPEntry{}
+)
+
+type connectHTTPEntry struct {
+	stamp  connectTLSStamp
+	client *http.Client
+}
+
+// connectTLSStamp identifies the on-disk state of a cluster's CA, cert and
+// key files. A missing file stamps as zero.
+type connectTLSStamp [3]struct{ size, modNanos int64 }
+
+func connectTLSFilesStamp(cc appconfig.ConnectCluster) connectTLSStamp {
+	var st connectTLSStamp
+	for i, path := range [3]string{cc.TLSCAPath, cc.TLSCertPath, cc.TLSKeyPath} {
+		if path == "" {
+			continue
+		}
+		if fi, err := os.Stat(path); err == nil {
+			st[i].size, st[i].modNanos = fi.Size(), fi.ModTime().UnixNano()
+		}
+	}
+	return st
+}
+
+// connectHTTPClient returns the cached HTTP client for cc, building it on
+// first use or when its TLS files changed on disk.
+func connectHTTPClient(cc appconfig.ConnectCluster) (*http.Client, error) {
+	stamp := connectTLSFilesStamp(cc)
+	connectHTTPClientsMu.Lock()
+	defer connectHTTPClientsMu.Unlock()
+	old, ok := connectHTTPClients[cc]
+	if ok && old.stamp == stamp {
+		return old.client, nil
+	}
+	transport, err := connectTransport(cc)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		old.client.CloseIdleConnections()
+	}
+	c := &http.Client{Timeout: 10 * time.Second, Transport: transport}
+	connectHTTPClients[cc] = connectHTTPEntry{stamp: stamp, client: c}
+	return c, nil
+}
+
 // newConnectClient builds a client for a single configured Connect cluster,
-// wiring basic auth and TLS from its config fields.
+// wiring basic auth and TLS from its config fields. The underlying HTTP client
+// is shared per cluster so connections are reused across calls.
 func newConnectClient(cc appconfig.ConnectCluster) (*connectClient, error) {
 	base := strings.TrimRight(strings.TrimSpace(cc.Address), "/")
 	if base == "" {
 		return nil, fmt.Errorf("connect cluster %q has no address", cc.Name)
 	}
 
-	transport, err := connectTLSTransport(cc)
+	httpClient, err := connectHTTPClient(cc)
 	if err != nil {
 		return nil, err
 	}
@@ -78,18 +141,18 @@ func newConnectClient(cc appconfig.ConnectCluster) (*connectClient, error) {
 		baseURL:  base,
 		username: cc.Username,
 		password: cc.Password,
-		http: &http.Client{
-			Timeout:   10 * time.Second,
-			Transport: transport,
-		},
+		http:     httpClient,
 	}, nil
 }
 
-// connectTLSTransport builds an http.RoundTripper honoring the cluster's TLS
-// settings. It returns nil (use http defaults) when no TLS fields are set.
-func connectTLSTransport(cc appconfig.ConnectCluster) (http.RoundTripper, error) {
+// connectTransport builds the http.Transport for one Connect cluster: the
+// http.DefaultTransport settings (proxy, dial and idle timeouts) plus the
+// cluster's TLS settings when any are set.
+func connectTransport(cc appconfig.ConnectCluster) (*http.Transport, error) {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConnsPerHost = connectTopicsFanout
 	if cc.TLSCAPath == "" && cc.TLSCertPath == "" && cc.TLSKeyPath == "" {
-		return nil, nil
+		return t, nil
 	}
 	tlsCfg := &tls.Config{}
 	if cc.TLSCAPath != "" {
@@ -110,7 +173,8 @@ func connectTLSTransport(cc appconfig.ConnectCluster) (http.RoundTripper, error)
 		}
 		tlsCfg.Certificates = []tls.Certificate{cert}
 	}
-	return &http.Transport{TLSClientConfig: tlsCfg}, nil
+	t.TLSClientConfig = tlsCfg
+	return t, nil
 }
 
 // do executes a request against the Connect cluster. An HTTP response — even
@@ -407,12 +471,15 @@ func (kp KafkaDataSourceKaf) connectorsForCluster(cc appconfig.ConnectCluster) (
 				conn.Type = connectorTypeOf(entry.Status.Type)
 			}
 		}
-		conn.Topics = kp.connectorTopics(client, name)
 		if conn.Type == api.ConnectorTypeSink {
 			conn.ConsumerGroup = consumerGroupFor(cc, name)
 		}
 		out = append(out, conn)
 	}
+	// /topics is a separate request per connector: fetch them concurrently.
+	forEachBounded(len(out), connectTopicsFanout, func(i int) {
+		out[i].Topics = kp.connectorTopics(client, out[i].Name)
+	})
 	return out, nil
 }
 

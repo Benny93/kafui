@@ -35,7 +35,7 @@ func (m *MessageDetailPageModel) ContextActions() []menu.Entry {
 		}},
 		{Label: "Toggle soft wrap", Key: keyOf(keys.ActionWrap)},
 		{Label: "Reload schema info", Key: keyOf(keys.ActionRefresh), Run: func() tea.Cmd {
-			return p.model.LoadSchemaInfoAsync()
+			return p.model.ReloadSchemaInfoAsync()
 		}},
 	}
 }

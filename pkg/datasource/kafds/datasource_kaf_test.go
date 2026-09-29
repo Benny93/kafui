@@ -2,8 +2,10 @@ package kafds
 
 import (
 	"context"
+	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Simple tests that focus on basic functionality without complex mocking
@@ -37,13 +40,20 @@ func TestKafkaDataSourceKaf_Init(t *testing.T) {
 }
 
 func TestKafkaDataSourceKaf_GetTopics_Integration(t *testing.T) {
-	// This is an integration test that would require a real Kafka connection
-	// For now, we'll just test that the method exists and can be called
-	kds := &KafkaDataSourceKaf{}
+	// GetTopics against a cluster nothing listens on must fail. The cluster is
+	// set here rather than read from ~/.kaf/config, so the result does not
+	// depend on whether the developer's own cluster is reachable. Success
+	// against a broker is covered by TestSharedAdmin_RecoversAfterBrokerRestart.
+	origFactory, origCluster := kafkaClientFactory, currentCluster
+	resetSharedClients()
+	t.Cleanup(func() {
+		resetSharedClients()
+		kafkaClientFactory, currentCluster = origFactory, origCluster
+	})
+	kafkaClientFactory = &DefaultKafkaClientFactory{}
+	currentCluster = &config.Cluster{Name: "unreachable", Brokers: []string{"127.0.0.1:1"}}
 
-	// This will likely fail due to no Kafka connection, but tests the method signature
-	_, err := kds.GetTopics()
-	// We expect an error since there's no real Kafka cluster
+	_, err := (&KafkaDataSourceKaf{}).GetTopics()
 	assert.Error(t, err)
 }
 
@@ -709,4 +719,276 @@ func TestDefaultConfigManager(t *testing.T) {
 	cluster = manager.GetActiveCluster(cfg)
 	// This may return nil or the cluster depending on the implementation
 	// We just test that it doesn't panic
+}
+
+// withTwoClusters installs clusters "a" (active) and "b" plus a counting mock
+// factory, restoring the globals and dropping the shared clients afterwards.
+func withTwoClusters(t *testing.T) *MockKafkaClientFactory {
+	t.Helper()
+	origFactory, origCluster, origCfg := kafkaClientFactory, currentCluster, cfg
+	resetSharedClients()
+	t.Cleanup(func() {
+		resetSharedClients()
+		kafkaClientFactory, currentCluster, cfg = origFactory, origCluster, origCfg
+	})
+	a := &config.Cluster{Name: "a", Brokers: []string{"a:9092"}}
+	b := &config.Cluster{Name: "b", Brokers: []string{"b:9092"}}
+	cfg = config.Config{Clusters: []*config.Cluster{a, b}, CurrentCluster: "a"}
+	currentCluster = a
+	factory := &MockKafkaClientFactory{MockClusterAdmin: &MockClusterAdmin{}}
+	kafkaClientFactory = factory
+	return factory
+}
+
+func TestGetClusterAdmin_SharedAndResetOnSwitch(t *testing.T) {
+	factory := withTwoClusters(t)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			admin, err := getClusterAdmin()
+			if assert.NoError(t, err) {
+				assert.NoError(t, admin.Close(), "Close on the shared admin is a no-op")
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, 1, factory.CreateClusterAdminCalls, "concurrent callers share one admin")
+
+	require.NoError(t, NewKafkaDataSourceKaf().SetContext("b"))
+	_, err := getClusterAdmin()
+	require.NoError(t, err)
+	assert.Equal(t, 2, factory.CreateClusterAdminCalls, "a cluster switch builds a new admin")
+}
+
+func TestSetContext_ClearsClusterOverride(t *testing.T) {
+	withTwoClusters(t)
+	cfg.ClusterOverride = "a" // as set by `kafui --cluster a`
+
+	kds := NewKafkaDataSourceKafWithDeps(&MockKafkaClientFactory{}, &DefaultConfigManager{})
+	require.Equal(t, "a", kds.GetContext())
+	require.NoError(t, kds.SetContext("b"))
+	assert.Equal(t, "b", kds.GetContext(), "GetContext must follow the switch, not the override")
+}
+
+func TestGetConfig_SecurityMisconfigurationReturnsError(t *testing.T) {
+	origCluster := currentCluster
+	t.Cleanup(func() { currentCluster = origCluster })
+
+	tests := []struct {
+		name    string
+		cluster *config.Cluster
+		wantErr string
+	}{
+		{
+			name:    "SASL protocol without a sasl block",
+			cluster: &config.Cluster{Name: "x", SecurityProtocol: "SASL_PLAINTEXT"},
+			wantErr: "no SASL configuration",
+		},
+		{
+			name: "SASL_SSL with an unreadable CA file",
+			cluster: &config.Cluster{Name: "x", SecurityProtocol: "SASL_SSL",
+				SASL: &config.SASL{Mechanism: "PLAIN"}, TLS: &config.TLS{Cafile: "/nonexistent/ca.pem"}},
+			wantErr: "unable to read TLS CA file",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			currentCluster = tt.cluster
+			_, err := getConfig()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+// closeTrackingAdmin records whether Close was called.
+type closeTrackingAdmin struct {
+	*MockClusterAdmin
+	closed atomic.Bool
+}
+
+func (a *closeTrackingAdmin) Close() error { a.closed.Store(true); return nil }
+
+// gatedFactory blocks every CreateClusterAdmin until gate is closed, like a
+// dial to an unreachable cluster.
+type gatedFactory struct {
+	MockKafkaClientFactory
+	gate    chan struct{}
+	started chan struct{}
+	calls   atomic.Int32
+	mu      sync.Mutex
+	admins  []*closeTrackingAdmin
+}
+
+func (f *gatedFactory) CreateClusterAdmin([]string, *sarama.Config) (ClusterAdminInterface, error) {
+	f.calls.Add(1)
+	select {
+	case f.started <- struct{}{}:
+	default:
+	}
+	<-f.gate
+	a := &closeTrackingAdmin{MockClusterAdmin: &MockClusterAdmin{}}
+	f.mu.Lock()
+	f.admins = append(f.admins, a)
+	f.mu.Unlock()
+	return a, nil
+}
+
+// A cluster switch must not wait for a dial that is still connecting, and
+// the admin that dial builds for the old cluster must be closed, not cached.
+func TestGetClusterAdmin_ResetDoesNotWaitForDial(t *testing.T) {
+	withTwoClusters(t)
+	f := &gatedFactory{gate: make(chan struct{}), started: make(chan struct{}, 1)}
+	kafkaClientFactory = f
+
+	dialErr := make(chan error, 1)
+	go func() {
+		_, err := getClusterAdmin()
+		dialErr <- err
+	}()
+	<-f.started
+
+	switched := make(chan error, 1)
+	go func() { switched <- NewKafkaDataSourceKaf().SetContext("b") }()
+	select {
+	case err := <-switched:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		close(f.gate)
+		t.Fatal("SetContext blocked on a dial in flight")
+	}
+
+	close(f.gate)
+	assert.ErrorIs(t, <-dialErr, errClusterChangedWhileConnecting)
+	f.mu.Lock()
+	stale := f.admins[0]
+	f.mu.Unlock()
+	assert.Eventually(t, stale.closed.Load, time.Second, 5*time.Millisecond, "the old cluster's admin is closed")
+
+	admin, err := getClusterAdmin()
+	require.NoError(t, err)
+	assert.NotSame(t, stale, admin.(sharedClusterAdmin).ClusterAdminInterface)
+	assert.Equal(t, int32(2), f.calls.Load(), "the new cluster gets its own dial")
+}
+
+// Concurrent callers share the one dial in flight instead of queueing behind
+// the lock and dialing one after another.
+func TestGetClusterAdmin_ConcurrentCallersShareOneDial(t *testing.T) {
+	withTwoClusters(t)
+	f := &gatedFactory{gate: make(chan struct{}), started: make(chan struct{}, 1)}
+	kafkaClientFactory = f
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := getClusterAdmin()
+			assert.NoError(t, err)
+		}()
+	}
+	<-f.started
+	time.Sleep(20 * time.Millisecond) // let the others reach the wait
+	close(f.gate)
+	wg.Wait()
+	assert.Equal(t, int32(1), f.calls.Load())
+}
+
+// eofAdmin fails ListTopics like a dead broker connection does.
+type eofAdmin struct{ *MockClusterAdmin }
+
+func (eofAdmin) ListTopics() (map[string]sarama.TopicDetail, error) { return nil, io.EOF }
+
+// A connection error drops the cached admin so the next call reconnects, but
+// a late error from an admin that was already replaced leaves its successor.
+func TestSharedAdmin_ConnectionErrorDropsOnlyCurrentHandle(t *testing.T) {
+	factory := withTwoClusters(t)
+	factory.MockClusterAdmin = eofAdmin{&MockClusterAdmin{}}
+
+	first, err := getClusterAdmin()
+	require.NoError(t, err)
+	_, err = first.ListTopics()
+	require.ErrorIs(t, err, io.EOF)
+
+	second, err := getClusterAdmin()
+	require.NoError(t, err)
+	assert.Equal(t, 2, factory.CreateClusterAdminCalls, "a connection error forces a reconnect")
+
+	_, _ = first.ListTopics() // stale handle fails again
+	third, err := getClusterAdmin()
+	require.NoError(t, err)
+	assert.Equal(t, 2, factory.CreateClusterAdminCalls, "a stale handle's error must not drop the current admin")
+	assert.Equal(t, second.(sharedClusterAdmin).gen, third.(sharedClusterAdmin).gen)
+
+	factory.MockClusterAdmin = &MockClusterAdmin{ShouldFailListTopics: true}
+	resetSharedClients()
+	admin, err := getClusterAdmin()
+	require.NoError(t, err)
+	_, err = admin.ListTopics()
+	require.Error(t, err)
+	_, err = getClusterAdmin()
+	require.NoError(t, err)
+	assert.Equal(t, 3, factory.CreateClusterAdminCalls, "a Kafka error answer keeps the admin")
+}
+
+// After a broker restart, sarama's ListTopics and ListConsumerGroups keep
+// using the dead connection. The shared admin must be rebuilt, so the topics
+// and consumer-groups pages recover on the next poll.
+func TestSharedAdmin_RecoversAfterBrokerRestart(t *testing.T) {
+	origFactory, origCluster := kafkaClientFactory, currentCluster
+	resetSharedClients()
+	t.Cleanup(func() {
+		resetSharedClients()
+		kafkaClientFactory, currentCluster = origFactory, origCluster
+	})
+	kafkaClientFactory = &DefaultKafkaClientFactory{}
+
+	serve := func(b *sarama.MockBroker) {
+		b.SetHandlerByMap(map[string]sarama.MockResponse{
+			"MetadataRequest": sarama.NewMockMetadataResponse(t).
+				SetBroker(b.Addr(), b.BrokerID()).
+				SetController(b.BrokerID()).
+				SetLeader("t1", 0, b.BrokerID()),
+			"DescribeConfigsRequest": sarama.NewMockDescribeConfigsResponse(t),
+			"ListGroupsRequest":      sarama.NewMockListGroupsResponse(t).AddGroup("g1", "consumer"),
+		})
+	}
+	broker := sarama.NewMockBroker(t, 1)
+	addr := broker.Addr()
+	serve(broker)
+	restart := func() {
+		broker.Close()
+		broker = sarama.NewMockBrokerAddr(t, 1, addr)
+		serve(broker)
+	}
+	t.Cleanup(func() { broker.Close() })
+	currentCluster = &config.Cluster{Name: "restart", Brokers: []string{addr}}
+	ds := KafkaDataSourceKaf{}
+
+	// recovers reports whether call succeeds within a few polls: the first
+	// poll after a restart may still hit the dead connection.
+	recovers := func(call func() error) bool {
+		var err error
+		for i := 0; i < 3; i++ {
+			if err = call(); err == nil {
+				return true
+			}
+		}
+		t.Logf("last error: %v", err)
+		return false
+	}
+	getTopics := func() error { _, err := ds.GetTopics(); return err }
+	getGroups := func() error { _, err := ds.GetConsumerGroups(); return err }
+
+	require.NoError(t, getTopics())
+	require.NoError(t, getGroups())
+
+	restart()
+	assert.True(t, recovers(getTopics), "GetTopics recovers after a broker restart")
+
+	restart()
+	assert.True(t, recovers(getGroups), "GetConsumerGroups recovers after a broker restart")
 }

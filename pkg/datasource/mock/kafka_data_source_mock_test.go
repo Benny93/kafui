@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestKafkaDataSourceMock_Init tests the initialization
@@ -602,12 +604,15 @@ func TestKafkaDataSourceMock_ConsumeFlags(t *testing.T) {
 	mock.Init("")
 
 	tests := []struct {
-		name  string
-		flags api.ConsumeFlags
+		name      string
+		flags     api.ConsumeFlags
+		wantErr   bool  // follow mode runs until the ctx times out
+		wantCount int64 // exact count for a terminating browse; 0 = at least 1
 	}{
 		{
-			name:  "default flags",
-			flags: api.DefaultConsumeFlags(),
+			name:    "default flags",
+			flags:   api.DefaultConsumeFlags(),
+			wantErr: true,
 		},
 		{
 			name: "custom flags",
@@ -616,16 +621,23 @@ func TestKafkaDataSourceMock_ConsumeFlags(t *testing.T) {
 				Tail:       10,
 				OffsetFlag: "earliest",
 			},
+			wantCount: mockBrowseBacklog,
 		},
 		{
-			name:  "zero flags",
-			flags: api.ConsumeFlags{},
+			name:      "zero flags",
+			flags:     api.ConsumeFlags{},
+			wantCount: mockBrowseBacklog,
+		},
+		{
+			name:      "browse with limit",
+			flags:     api.ConsumeFlags{LimitMessages: 7},
+			wantCount: 7,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var messageCount int
+			var messageCount int64
 			handleMessage := func(msg api.Message) {
 				messageCount++
 			}
@@ -637,15 +649,62 @@ func TestKafkaDataSourceMock_ConsumeFlags(t *testing.T) {
 
 			err := mock.ConsumeTopic(ctx, "test-topic", tt.flags, handleMessage, onError)
 
-			if err == nil {
-				t.Errorf("ConsumeTopic() with %s should return timeout error", tt.name)
+			if tt.wantErr {
+				assert.Error(t, err, "follow mode should run until the ctx times out")
+			} else {
+				assert.NoError(t, err, "a browse should finish before the ctx times out")
 			}
-
-			// Should receive some messages regardless of flags
-			if messageCount < 1 {
-				t.Errorf("With %s, received %d messages, want at least 1", tt.name, messageCount)
+			if tt.wantCount > 0 {
+				assert.Equal(t, tt.wantCount, messageCount)
+			} else {
+				assert.GreaterOrEqual(t, messageCount, int64(1))
 			}
 		})
+	}
+}
+
+// Regression (DS-11): a non-follow browse terminates on its own and honors
+// the partition filter, like the real datasource.
+func TestKafkaDataSourceMock_ConsumeTopic_BrowseTerminates(t *testing.T) {
+	m := KafkaDataSourceMock{}
+	m.Init("")
+
+	var got []api.Message
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := m.ConsumeTopic(ctx, "user-events", api.ConsumeFlags{
+		LimitMessages: 20,
+		Partitions:    []int32{1, 3},
+	}, func(msg api.Message) { got = append(got, msg) }, func(any) {})
+
+	require.NoError(t, err)
+	require.NoError(t, ctx.Err(), "browse must return before the ctx deadline")
+	require.Len(t, got, 20)
+	seen := map[int32]bool{}
+	for _, msg := range got {
+		assert.Contains(t, []int32{1, 3}, msg.Partition)
+		seen[msg.Partition] = true
+	}
+	assert.Len(t, seen, 2, "both requested partitions should get messages")
+}
+
+func TestKafkaDataSourceMock_ConsumeTopic_StopsOnCancel(t *testing.T) {
+	m := KafkaDataSourceMock{}
+	m.Init("")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- m.ConsumeTopic(ctx, "user-events", api.ConsumeFlags{Follow: true}, func(api.Message) {}, func(any) {})
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("follow-mode ConsumeTopic did not return after ctx cancel")
 	}
 }
 

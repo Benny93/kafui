@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/components/form"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/shared"
@@ -79,8 +79,10 @@ func topicSizeCell(t *TopicResourceItem, placeholder string) string {
 	return placeholder
 }
 
-// topicOSRCell renders the out-of-sync (under-replicated partition) cell, styled
-// in the alert colour when > 0.
+// topicOSRCell renders the out-of-sync replica count, styled in the alert
+// colour when > 0. Zero is the healthy value and the common one: a cluster with
+// every replica in its ISR reports 0 for every topic, which is correct, not a
+// failure to load — that renders as N/A.
 func topicOSRCell(t *TopicResourceItem, placeholder string) string {
 	if t.outOfSync >= 0 {
 		s := strconv.Itoa(t.outOfSync)
@@ -134,9 +136,9 @@ func topicRowData(t *TopicResourceItem, searchQuery, placeholder string, nameMax
 
 // --- extended lazy enrichment (TP-14) ---
 
-// loadTopicDetailsExt enriches ONLY the visible page of topics with OSR and size
-// via GetTopicDetails (per topic) + GetTopicSizes (batch). Off-screen topics are
-// never fetched, preserving the visible-page-only discipline.
+// loadTopicDetailsExt enriches ONLY the visible page of topics with OSR and
+// size, using two batched calls. Off-screen topics are never fetched,
+// preserving the visible-page-only discipline.
 func (k *KafuiContentProvider) loadTopicDetailsExt() tea.Cmd {
 	pageItems := k.pagination.GetCurrentPageItems(k.activeItems())
 	names := make([]string, 0, len(pageItems))
@@ -150,39 +152,29 @@ func (k *KafuiContentProvider) loadTopicDetailsExt() tea.Cmd {
 	}
 	ds := k.dataSource
 	return func() tea.Msg {
+		// Two batched calls for the whole page. This used to be one
+		// GetTopicDetails per topic, each opening its own cluster admin AND its
+		// own client and then fetching offsets sequentially per partition — so
+		// a 50-topic page cost ~100 connections and several hundred round trips
+		// to fill two columns, neither of which needs offsets at all. On a
+		// remote cluster that was the "…" that seemed to hang forever.
 		sizes, _ := ds.GetTopicSizes(names)
+		health, _ := ds.GetTopicHealth(names)
 
-		// GetTopicDetails opens its own broker connection per call, so on a
-		// remote cluster (e.g. TLS mutual-auth over the internet) fetching a
-		// full page sequentially can take tens of seconds — long enough that
-		// the "…" placeholder reads as permanently hung (BUG-4). Fetching the
-		// page concurrently bounds the wait to one call's latency instead of
-		// page-size times that.
-		var mu sync.Mutex
-		var wg sync.WaitGroup
 		out := make(map[string]topicExtInfo, len(names))
 		for _, name := range names {
+			// -1 means "not loaded" and renders as N/A, which is what an
+			// unreachable broker must show — never a confident 0.
 			info := topicExtInfo{outOfSync: -1, size: -1}
 			if sz, ok := sizes[name]; ok {
 				info.size = sz
 			}
-			mu.Lock()
+			if h, ok := health[name]; ok {
+				info.outOfSync = h.OutOfSyncReplicas
+				info.isInternal = h.IsInternal
+			}
 			out[name] = info
-			mu.Unlock()
-
-			wg.Add(1)
-			go func(name string, info topicExtInfo) {
-				defer wg.Done()
-				if d, err := ds.GetTopicDetails(name); err == nil {
-					info.outOfSync = d.UnderReplicatedPartitions
-					info.isInternal = d.IsInternal
-				}
-				mu.Lock()
-				out[name] = info
-				mu.Unlock()
-			}(name, info)
 		}
-		wg.Wait()
 		return TopicDetailsExtLoadedMsg(out)
 	}
 }
@@ -201,7 +193,6 @@ func (k *KafuiContentProvider) applyTopicDetailsExt(msg TopicDetailsExtLoadedMsg
 			}
 		}
 	}
-	k.allRows = convertItemsToRows(k.allItems, "", k.nameColumnWidth)
 	if k.isFiltered {
 		k.reapplyFilter()
 	} else {
@@ -268,7 +259,6 @@ func (k *KafuiContentProvider) toggleTopicSortDir() {
 
 func (k *KafuiContentProvider) applyTopicSortAndRefresh() {
 	k.applyTopicSort()
-	k.allRows = convertItemsToRows(k.allItems, "", 0)
 	k.applyFilters(true)
 }
 
@@ -299,7 +289,7 @@ func (k *KafuiContentProvider) toggleHideInternal() tea.Cmd {
 	k.hideInternal = !k.hideInternal
 	_ = shared.SavePrefs(shared.Prefs{HideInternalTopics: k.hideInternal})
 	k.applyFilters(true)
-	return nil
+	return k.reloadPageDetails()
 }
 
 // --- multi-select (TP-22) ---
@@ -316,7 +306,6 @@ func (k *KafuiContentProvider) syncSelectionFlags() {
 
 func (k *KafuiContentProvider) rebuildAfterSelectionChange() {
 	k.syncSelectionFlags()
-	k.allRows = convertItemsToRows(k.allItems, "", 0)
 	if k.isFiltered {
 		k.reapplyFilter()
 	} else {
@@ -372,15 +361,35 @@ func statusHint(message string) tea.Cmd {
 
 // --- CSV export (TP-17) ---
 
+// topicShape is the partition count and replication factor of a topic; -1
+// means not loaded yet.
+type topicShape struct {
+	partitions        int32
+	replicationFactor int16
+}
+
 // exportTopicsCSV writes ALL topics in the current filtered/visibility/sort view
-// to a timestamped CSV, fetching sizes/details via a full fan-out on this explicit
-// action only. The absolute path is reported via a notification.
+// to a timestamped CSV. The absolute path is reported via a notification.
+//
+// It costs a fixed number of batched calls whatever the topic count: sizes,
+// health and message counts for all names at once, plus one GetTopics when some
+// rows have not loaded their partitions yet. (It used to call GetTopicDetails
+// per topic, a fresh admin and client each, which on a large cluster meant
+// thousands of connections for one export.)
 func (k *KafuiContentProvider) exportTopicsCSV() tea.Cmd {
 	items := k.activeItems()
 	names := make([]string, 0, len(items))
+	// Snapshot what the list knows now; the Cmd runs off the Update goroutine
+	// and must not read the live items.
+	shapes := make(map[string]topicShape, len(items))
+	missingShape := false
 	for _, item := range items {
 		if tri, _, ok := topicItemFrom(item); ok {
 			names = append(names, tri.id)
+			shapes[tri.id] = topicShape{tri.partitions, tri.replicationFactor}
+			if tri.partitions < 0 {
+				missingShape = true
+			}
 		}
 	}
 	if len(names) == 0 {
@@ -389,19 +398,41 @@ func (k *KafuiContentProvider) exportTopicsCSV() tea.Cmd {
 	ds := k.dataSource
 	ctx := ds.GetContext()
 	return func() tea.Msg {
+		if missingShape {
+			if topics, err := ds.GetTopics(); err == nil {
+				for name, s := range shapes {
+					if t, ok := topics[name]; ok && s.partitions < 0 {
+						shapes[name] = topicShape{t.NumPartitions, t.ReplicationFactor}
+					}
+				}
+			}
+		}
 		sizes, _ := ds.GetTopicSizes(names)
+		health, _ := ds.GetTopicHealth(names)
+		countInput := make(map[string]int32, len(shapes))
+		for name, s := range shapes {
+			if s.partitions > 0 {
+				countInput[name] = s.partitions
+			}
+		}
+		counts, _ := ds.GetTopicMessageCounts(countInput)
+
 		rows := make([]shared.TopicCSVRow, 0, len(names))
 		for _, name := range names {
 			row := shared.TopicCSVRow{Name: name, MessageCount: -1, Size: -1}
+			if s := shapes[name]; s.partitions >= 0 {
+				row.Partitions = s.partitions
+				row.ReplicationFactor = s.replicationFactor
+			}
+			if c, ok := counts[name]; ok {
+				row.MessageCount = c
+			}
 			if sz, ok := sizes[name]; ok {
 				row.Size = sz
 			}
-			if d, err := ds.GetTopicDetails(name); err == nil {
-				row.Partitions = int32(len(d.Partitions))
-				row.ReplicationFactor = d.ReplicationFactor
-				row.MessageCount = d.MessageCount()
-				row.OutOfSync = d.UnderReplicatedPartitions
-				row.Internal = d.IsInternal
+			if h, ok := health[name]; ok {
+				row.OutOfSync = h.UnderReplicatedPartitions
+				row.Internal = h.IsInternal
 			}
 			rows = append(rows, row)
 		}
@@ -493,6 +524,8 @@ func (k *KafuiContentProvider) openCreateTopicForm() tea.Cmd {
 
 // openCloneTopicForm opens the create form prefilled from the highlighted topic's
 // details + non-default config. Disabled (hint only) when != 1 topic is selected.
+// The lookups run in the returned Cmd, not in Update, so a slow broker does not
+// freeze the UI; the form opens when topicCloneDefaultsMsg arrives.
 func (k *KafuiContentProvider) openCloneTopicForm() tea.Cmd {
 	if len(k.selected) > 1 {
 		return statusHint("clone requires exactly one topic; clear the selection first")
@@ -503,27 +536,44 @@ func (k *KafuiContentProvider) openCloneTopicForm() tea.Cmd {
 	}
 	name := tri.id
 	defaults := topicFormDefaults{name: name}
-	if d, err := k.dataSource.GetTopicDetails(name); err == nil {
-		defaults.partitions = strconv.Itoa(len(d.Partitions))
-		defaults.replicationFactor = strconv.Itoa(int(d.ReplicationFactor))
+	// The list already knows the shape once its details have loaded, which
+	// saves a per-topic describe plus offset lookups.
+	knownShape := tri.partitions >= 0 && tri.replicationFactor >= 0
+	if knownShape {
+		defaults.partitions = strconv.Itoa(int(tri.partitions))
+		defaults.replicationFactor = strconv.Itoa(int(tri.replicationFactor))
 	}
-	if cfg, err := k.dataSource.GetTopicConfig(name); err == nil {
-		for _, e := range cfg {
-			if e.Sensitive || e.Value == e.Default {
-				continue // defaults and sensitive entries are not copied
-			}
-			switch e.Name {
-			case "cleanup.policy":
-				defaults.cleanupPolicy = e.Value
-			case "retention.ms":
-				defaults.retentionMs = e.Value
-			case "max.message.bytes":
-				defaults.maxMessageBytes = e.Value
-			case "min.insync.replicas":
-				defaults.minInsyncReplicas = e.Value
+	ds := k.dataSource
+	return func() tea.Msg {
+		if !knownShape {
+			if d, err := ds.GetTopicDetails(name); err == nil {
+				defaults.partitions = strconv.Itoa(len(d.Partitions))
+				defaults.replicationFactor = strconv.Itoa(int(d.ReplicationFactor))
 			}
 		}
+		if cfg, err := ds.GetTopicConfig(name); err == nil {
+			for _, e := range cfg {
+				if e.Sensitive || e.Value == e.Default {
+					continue // defaults and sensitive entries are not copied
+				}
+				switch e.Name {
+				case "cleanup.policy":
+					defaults.cleanupPolicy = e.Value
+				case "retention.ms":
+					defaults.retentionMs = e.Value
+				case "max.message.bytes":
+					defaults.maxMessageBytes = e.Value
+				case "min.insync.replicas":
+					defaults.minInsyncReplicas = e.Value
+				}
+			}
+		}
+		return topicCloneDefaultsMsg{defaults: defaults}
 	}
+}
+
+// openTopicFormWith shows the create form prefilled with defaults.
+func (k *KafuiContentProvider) openTopicFormWith(defaults topicFormDefaults) tea.Cmd {
 	k.topicForm = buildTopicForm(defaults)
 	k.showTopicForm = true
 	return k.topicForm.Focus()
@@ -579,11 +629,13 @@ func (k *KafuiContentProvider) deleteSelectedTopics() tea.Cmd {
 	if isInternalTopicName(name) {
 		return statusHint("internal topics cannot be deleted")
 	}
-	if enabled, err := k.dataSource.IsTopicDeletionEnabled(); err == nil && !enabled {
-		return statusHint("topic deletion is disabled on this cluster")
-	}
 	ds := k.dataSource
 	return func() tea.Msg {
+		// Checked here, not in Update: the first check per cluster is a
+		// broker round trip.
+		if enabled, err := ds.IsTopicDeletionEnabled(); err == nil && !enabled {
+			return statusHint("topic deletion is disabled on this cluster")()
+		}
 		return core.ShowConfirmMsg{
 			Title:        "Delete topic",
 			Message:      fmt.Sprintf("Delete topic %q? All data will be lost and this cannot be undone.", name),
@@ -625,11 +677,11 @@ func (k *KafuiContentProvider) purgeSelectedTopics() tea.Cmd {
 	if name == "" {
 		return nil
 	}
-	if !k.topicAllowsDelete(name) {
-		return statusHint("cleanup.policy must include 'delete' to clear messages")
-	}
 	ds := k.dataSource
 	return func() tea.Msg {
+		if !topicAllowsDelete(ds, name) {
+			return statusHint("cleanup.policy must include 'delete' to clear messages")()
+		}
 		return core.ShowConfirmMsg{
 			Title:        "Clear messages",
 			Message:      fmt.Sprintf("Clear all messages in topic %q? This cannot be undone.", name),
@@ -643,8 +695,8 @@ func (k *KafuiContentProvider) purgeSelectedTopics() tea.Cmd {
 // topicAllowsDelete reports whether a topic's cleanup.policy permits message
 // deletion. Unknown (fetch failed) is treated as allowed so the datasource can
 // reject with its typed error.
-func (k *KafuiContentProvider) topicAllowsDelete(name string) bool {
-	cfg, err := k.dataSource.GetTopicConfig(name)
+func topicAllowsDelete(ds api.KafkaDataSource, name string) bool {
+	cfg, err := ds.GetTopicConfig(name)
 	if err != nil {
 		return true
 	}
@@ -676,11 +728,11 @@ func (k *KafuiContentProvider) batchDeleteTopics() tea.Cmd {
 	if len(names) == 0 {
 		return nil
 	}
-	if enabled, err := k.dataSource.IsTopicDeletionEnabled(); err == nil && !enabled {
-		return statusHint("topic deletion is disabled on this cluster")
-	}
 	ds := k.dataSource
 	return func() tea.Msg {
+		if enabled, err := ds.IsTopicDeletionEnabled(); err == nil && !enabled {
+			return statusHint("topic deletion is disabled on this cluster")()
+		}
 		return core.ShowConfirmMsg{
 			Title:        "Delete topics",
 			Message:      fmt.Sprintf("Delete %d topics? This cannot be undone.\n%s", len(names), truncateNameList(names)),

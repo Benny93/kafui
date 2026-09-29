@@ -24,11 +24,11 @@ func (k *KafuiContentProvider) Unwind() (tea.Cmd, bool) {
 	if k.searchMode {
 		k.searchMode = false
 		k.clearSearch()
-		return nil, true
+		return k.reloadPageDetails(), true
 	}
 	if k.isFiltered || k.currentFilter != "" {
 		k.clearSearch()
-		return nil, true
+		return k.reloadPageDetails(), true
 	}
 	if len(k.selected) > 0 {
 		k.clearTopicSelection()
@@ -206,7 +206,7 @@ func (k *KafuiContentProvider) ContextActions() []menu.Entry {
 		menu.Entry{Label: "Copy row", Key: keyOf(keys.ActionCopy), Run: func() tea.Cmd { return k.handleCopyRow() }},
 		menu.Entry{Label: "Export list as CSV", Key: keyOf(keys.ActionExport), Run: func() tea.Cmd { return k.exportCurrentResourceCSV() }},
 		menu.Entry{Label: "Sort by next column", Key: keyOf(keys.ActionSort)},
-		menu.Entry{Label: "Refresh", Key: keyOf(keys.ActionRefresh), Run: func() tea.Cmd { return k.loadCurrentResource() }},
+		menu.Entry{Label: "Refresh", Key: keyOf(keys.ActionRefresh), Run: func() tea.Cmd { return k.refreshCurrentResource() }},
 	)
 	return out
 }
@@ -226,7 +226,7 @@ func (k *KafuiContentProvider) selectedResourceName() string {
 // it can be a menu entry.
 func (k *KafuiContentProvider) cycleGroupStateFilterCmd() tea.Cmd {
 	k.cycleGroupStateFilter()
-	return nil
+	return k.reloadPageDetails()
 }
 
 // columnAtX maps a pointer X offset inside the table to a column index, using

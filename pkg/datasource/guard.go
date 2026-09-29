@@ -13,6 +13,7 @@ import (
 	"context"
 
 	"github.com/Benny93/kafui/pkg/api"
+	"github.com/Benny93/kafui/pkg/appconfig"
 	"github.com/Benny93/kafui/pkg/audit"
 	"github.com/Benny93/kafui/pkg/authz"
 )
@@ -51,6 +52,24 @@ func (g *Guard) SetContext(name string) error {
 	err := g.KafkaDataSource.SetContext(name)
 	if err == nil && g.gate != nil {
 		g.gate.SetCluster(name)
+	}
+	return err
+}
+
+// Reload forwards an in-place config reload to the wrapped datasource when it
+// supports one (kafds does, the mock does not), then re-resolves the gate's
+// active cluster, which the reload may have changed. Reload is not part of
+// api.KafkaDataSource, so without this method the embedding would hide it and
+// the UI's type assertion for it would always fail. It only changes the
+// in-memory cluster list (nothing is written to Kafka), so it is not gated.
+func (g *Guard) Reload(c appconfig.Config) error {
+	r, ok := g.KafkaDataSource.(interface{ Reload(appconfig.Config) error })
+	if !ok {
+		return nil
+	}
+	err := r.Reload(c)
+	if err == nil && g.gate != nil {
+		g.gate.SetCluster(g.KafkaDataSource.GetContext())
 	}
 	return err
 }

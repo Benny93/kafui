@@ -51,14 +51,30 @@ func TestResolvePartitionSeek(t *testing.T) {
 		assert.Equal(t, int64(200), start)
 	})
 
-	t.Run("to-offset backward window", func(t *testing.T) {
-		cfg := &ConsumeConfig{Seek: api.SeekToOffset, SeekOffset: ptrInt64(150), LimitMessagesFlag: 30}
-		start, stop, backward, err := resolvePartitionSeek(&MockClient{}, "t", 0, offs, cfg, 0)
-		require.NoError(t, err)
-		assert.Equal(t, int64(120), start) // 150 - 30
-		assert.Equal(t, int64(151), stop)  // inclusive of 150
-		assert.True(t, backward)
-	})
+	// Regression (DS-7): the window [start, stop) must hold exactly `limit`
+	// offsets ending at the target, so the limit doesn't drop the target itself.
+	toOffsetTests := []struct {
+		name                string
+		target, limit       int64
+		wantStart, wantStop int64
+	}{
+		{"window ends on target", 150, 30, 121, 151},
+		{"clamped at oldest", 110, 30, 100, 111},
+		{"target above newest reads up to last record", 9999, 30, 170, 200},
+	}
+	for _, tt := range toOffsetTests {
+		t.Run("to-offset "+tt.name, func(t *testing.T) {
+			cfg := &ConsumeConfig{Seek: api.SeekToOffset, SeekOffset: ptrInt64(tt.target), LimitMessagesFlag: tt.limit}
+			start, stop, backward, err := resolvePartitionSeek(&MockClient{}, "t", 0, offs, cfg, 0)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStart, start)
+			assert.Equal(t, tt.wantStop, stop)
+			assert.True(t, backward)
+			if tt.wantStart > offs.oldest {
+				assert.Equal(t, tt.limit, stop-start, "window must hold exactly limit offsets")
+			}
+		})
+	}
 
 	t.Run("from-timestamp resolves offset", func(t *testing.T) {
 		client := &MockClient{getOffsetFunc: func(topic string, p int32, ts int64) (int64, error) {

@@ -5,6 +5,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -122,6 +123,14 @@ func (c *Collector) collectOne(ctx context.Context, name string) {
 	defer cancel()
 
 	stats, statsErr := c.ds.GetClusterStatistics(cctx, name)
+	var notSupported api.NotSupportedError
+	if errors.As(statsErr, &notSupported) {
+		// The datasource cannot collect this cluster (the real one only
+		// connects to the active cluster). That says nothing about the
+		// cluster's health, so keep what is cached (initializing, or the last
+		// stats from when it was active) rather than marking it offline.
+		return
+	}
 	caps, _ := c.ds.GetClusterCapabilities(cctx, name)
 
 	c.mu.Lock()

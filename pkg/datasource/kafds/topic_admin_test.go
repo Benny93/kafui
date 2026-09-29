@@ -128,6 +128,87 @@ func TestGetTopicDetails_NotFound(t *testing.T) {
 	assert.True(t, errors.As(err, &nf))
 }
 
+func TestGetTopicDetails_TopicLevelErrorIsReturned(t *testing.T) {
+	withOffsets(t, map[int32]offsets{})
+	admin := &MockClusterAdmin{MockTopicMetadata: []*sarama.TopicMetadata{
+		{Name: "t", Err: sarama.ErrTopicAuthorizationFailed},
+	}}
+	restore := installMockAdmin(admin)
+	defer restore()
+
+	_, err := brokerDS().GetTopicDetails("t")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sarama.ErrTopicAuthorizationFailed)
+	var nf api.TopicNotFoundError
+	assert.False(t, errors.As(err, &nf))
+
+	// A topic we cannot describe must not look like one with 0 partitions.
+	require.Error(t, brokerDS().IncreasePartitions("t", 3))
+	assert.Empty(t, admin.CreatePartitionsCalls)
+}
+
+// --- Batched offsets ---
+
+func TestFetchOffsetsBatched_OneRequestPerBrokerAndTimestamp(t *testing.T) {
+	b1 := sarama.NewMockBroker(t, 1)
+	defer b1.Close()
+	b2 := sarama.NewMockBroker(t, 2)
+	defer b2.Close()
+
+	md := sarama.NewMockMetadataResponse(t).
+		SetBroker(b1.Addr(), b1.BrokerID()).
+		SetBroker(b2.Addr(), b2.BrokerID()).
+		SetLeader("t", 0, 1).SetLeader("t", 1, 1).SetLeader("t", 2, 2).
+		SetLeader("u", 0, 2)
+	b1.SetHandlerByMap(map[string]sarama.MockResponse{
+		"MetadataRequest": md,
+		"OffsetRequest": sarama.NewMockOffsetResponse(t).
+			SetOffset("t", 0, sarama.OffsetOldest, 5).SetOffset("t", 0, sarama.OffsetNewest, 15).
+			SetOffset("t", 1, sarama.OffsetOldest, 0).SetOffset("t", 1, sarama.OffsetNewest, 7),
+	})
+	b2.SetHandlerByMap(map[string]sarama.MockResponse{
+		"MetadataRequest": md,
+		"OffsetRequest": sarama.NewMockOffsetResponse(t).
+			SetOffset("t", 2, sarama.OffsetOldest, 1).SetOffset("t", 2, sarama.OffsetNewest, 2).
+			SetOffset("u", 0, sarama.OffsetOldest, 10).SetOffset("u", 0, sarama.OffsetNewest, 40),
+	})
+
+	conf := sarama.NewConfig()
+	conf.Metadata.Full = false
+	client, err := sarama.NewClient([]string{b1.Addr()}, conf)
+	require.NoError(t, err)
+	defer client.Close()
+
+	offs, failed := fetchOffsetsBatched(client, map[string][]int32{"t": {0, 1, 2, 9}, "u": {0}})
+
+	assert.Equal(t, map[string]map[int32]offsets{
+		"t": {0: {oldest: 5, newest: 15}, 1: {oldest: 0, newest: 7}, 2: {oldest: 1, newest: 2}},
+		"u": {0: {oldest: 10, newest: 40}},
+	}, offs)
+	require.Len(t, failed, 1)
+	assert.Contains(t, failed["t"], int32(9), "a partition without a leader is reported, not zeroed")
+
+	countOffsetRequests := func(b *sarama.MockBroker) int {
+		n := 0
+		for _, rr := range b.History() {
+			if _, ok := rr.Request.(*sarama.OffsetRequest); ok {
+				n++
+			}
+		}
+		return n
+	}
+	assert.Equal(t, 2, countOffsetRequests(b1), "one oldest + one newest request for all of b1's partitions")
+	assert.Equal(t, 2, countOffsetRequests(b2), "one oldest + one newest request for all of b2's partitions")
+}
+
+func TestOffsetFailuresError(t *testing.T) {
+	assert.NoError(t, offsetFailuresError("t", nil))
+	err := offsetFailuresError("t", map[int32]error{3: sarama.ErrNotLeaderForPartition, 1: sarama.ErrLeaderNotAvailable})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sarama.ErrLeaderNotAvailable, "wraps the lowest failed partition's error")
+	assert.Contains(t, err.Error(), "[1 3]")
+}
+
 // --- TP-4: aggregateTopicSizes ---
 
 func TestAggregateTopicSizes(t *testing.T) {
@@ -382,6 +463,32 @@ func TestPurgeTopicMessages(t *testing.T) {
 		assert.True(t, errors.As(err, &e))
 		assert.Empty(t, admin.DeleteRecordsCalls)
 	})
+	t.Run("offset lookup failure aborts before DeleteRecords", func(t *testing.T) {
+		orig := fetchTopicOffsets
+		fetchTopicOffsets = func(string, []int32) (map[int32]offsets, error) {
+			return map[int32]offsets{0: {oldest: 0, newest: 100}}, errors.New("partition 1: leader not available")
+		}
+		defer func() { fetchTopicOffsets = orig }()
+		admin := &MockClusterAdmin{
+			MockTopicMetadata: metaWithPartitions("t", 2),
+			MockConfigEntries: deleteCfg,
+		}
+		restore := installMockAdmin(admin)
+		defer restore()
+
+		require.Error(t, brokerDS().PurgeTopicMessages("t", -1))
+		assert.Empty(t, admin.DeleteRecordsCalls, "a partial purge must not be reported as success")
+	})
+	t.Run("unreadable cleanup.policy aborts", func(t *testing.T) {
+		admin := &MockClusterAdmin{MockTopicMetadata: metaWithPartitions("t", 2)}
+		restore := installAdminIface(authzErrAdmin{admin})
+		defer restore()
+
+		err := brokerDS().PurgeTopicMessages("t", -1)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, sarama.ErrTopicAuthorizationFailed)
+		assert.Empty(t, admin.DeleteRecordsCalls)
+	})
 }
 
 // --- TP-10: RecreateTopic ---
@@ -427,6 +534,17 @@ func TestRecreateTopic(t *testing.T) {
 		err := brokerDS().RecreateTopic("t")
 		var e api.RecreateTimeoutError
 		assert.True(t, errors.As(err, &e))
+	})
+
+	t.Run("unreadable config aborts before delete", func(t *testing.T) {
+		admin := &MockClusterAdmin{MockTopicMetadata: metaWithPartitions("t", 2)}
+		restore := installAdminIface(authzErrAdmin{admin})
+		defer restore()
+
+		err := brokerDS().RecreateTopic("t")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, sarama.ErrTopicAuthorizationFailed)
+		assert.Empty(t, admin.DeleteTopicCalls, "the topic must not be deleted without a config snapshot")
 	})
 }
 

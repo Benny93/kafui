@@ -126,7 +126,9 @@ func (c *content) View() string {
 	return style.
 		Width(c.width-2).   // Account for border
 		Height(c.height-2). // Account for border
-		MaxHeight(c.height-2).
+		// MaxHeight clamps the final block, border included, so it is the
+		// full outer height; height-2 cut off the bottom padding and border.
+		MaxHeight(c.height).
 		Align(lipgloss.Top, lipgloss.Left).
 		Padding(1).
 		Render(content)

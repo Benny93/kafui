@@ -26,8 +26,12 @@ type (
 	}
 
 	// TopicCountsLoadedMsg carries the result of the async message-count fetch.
-	// Keys are topic names; values are total message counts across all partitions.
-	TopicCountsLoadedMsg map[string]int64
+	// Counts keys are topic names; values are total message counts across all
+	// partitions. gen is the countsGen the request was made under.
+	TopicCountsLoadedMsg struct {
+		Counts map[string]int64
+		gen    uint64
+	}
 
 	// SchemaDetailsLoadedMsg carries the result of an async schema-details fetch.
 	// Each Schema has Subject, Version, ID, and SchemaType populated.
@@ -64,6 +68,11 @@ type (
 	// TopicDetailsExtLoadedMsg carries the extended topic enrichment keyed by
 	// topic name (OSR + size), fetched only for the currently visible page.
 	TopicDetailsExtLoadedMsg map[string]topicExtInfo
+
+	// topicCloneDefaultsMsg carries the looked-up prefill for the clone form.
+	topicCloneDefaultsMsg struct {
+		defaults topicFormDefaults
+	}
 
 	// topicCreatedMsg reports the outcome of a CreateTopic call (create/clone).
 	topicCreatedMsg struct {

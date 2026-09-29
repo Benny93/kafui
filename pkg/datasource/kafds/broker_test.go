@@ -3,6 +3,7 @@ package kafds
 import (
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 	"unsafe"
@@ -11,6 +12,7 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/birdayz/kaf/pkg/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // newTestBroker builds a *sarama.Broker with a known ID (the id field is
@@ -241,8 +243,10 @@ func TestGetBrokerLogDirs_Timeout(t *testing.T) {
 	logDirTimeout = 20 * time.Millisecond
 	defer func() { logDirTimeout = orig }()
 
-	admin := blockingAdmin{MockClusterAdmin: logDirsAdmin()}
-	dirs, timedOut := describeLogDirsWithTimeout(admin, []int32{1})
+	restore := installMockAdmin(nil)
+	defer restore()
+	kafkaClientFactory = &MockKafkaClientFactory{MockClusterAdmin: blockingAdmin{MockClusterAdmin: logDirsAdmin()}}
+	dirs, timedOut := describeLogDirsWithTimeout([]int32{1})
 	assert.True(t, timedOut)
 	assert.Nil(t, dirs)
 }
@@ -374,4 +378,105 @@ func TestGetBrokerMetrics_NotAvailable(t *testing.T) {
 	var mna api.MetricsNotAvailableError
 	assert.True(t, errors.As(err, &mna))
 	assert.Equal(t, int32(1), mna.BrokerID)
+}
+
+// erroringAdmin fails DescribeLogDirs, as a broker without the permission — or
+// a managed offering that does not implement it — does.
+type erroringAdmin struct{ *MockClusterAdmin }
+
+func (e erroringAdmin) DescribeLogDirs([]int32) (map[int32][]sarama.DescribeLogDirsResponseDirMetadata, error) {
+	return nil, errors.New("CLUSTER_AUTHORIZATION_FAILED")
+}
+
+// An error means the sizes are UNKNOWN, exactly as a timeout does. Reporting it
+// as merely "no directories" made GetTopicSizes seed every topic with 0, so the
+// topics table showed a confident "0 B" for every row on a cluster that had
+// simply refused the request.
+func TestDescribeLogDirs_ErrorIsUnknownNotEmpty(t *testing.T) {
+	restore := installMockAdmin(nil)
+	defer restore()
+	kafkaClientFactory = &MockKafkaClientFactory{MockClusterAdmin: erroringAdmin{MockClusterAdmin: logDirsAdmin()}}
+	dirs, unknown := describeLogDirsWithTimeout([]int32{1})
+	assert.True(t, unknown, "an error must be reported as unknown, like a timeout")
+	assert.Nil(t, dirs)
+}
+
+// GetBrokerStats must get partition metadata without ListTopics, which adds a
+// DescribeConfigs of every topic in the cluster just to learn the names.
+func TestGetBrokerStats_NoListTopics(t *testing.T) {
+	admin := logDirsAdmin()
+	admin.MockTopicMetadata = []*sarama.TopicMetadata{{Name: "t", Err: sarama.ErrNoError, Partitions: []*sarama.PartitionMetadata{
+		{ID: 0, Leader: 1, Replicas: []int32{1, 2}, Isr: []int32{1, 2}},
+	}}}
+	restore := installMockAdmin(admin)
+	defer restore()
+
+	stats, summary, err := brokerDS().GetBrokerStats()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, admin.ListTopicsCalls)
+	assert.Equal(t, 1, summary.TotalPartitions)
+	assert.Equal(t, 1, stats[1].LeaderCount)
+	assert.Equal(t, int64(10), stats[1].SegmentSize, "disk usage still folded in from log dirs")
+	assert.Len(t, admin.DescribeLogDirsCalls, 1)
+}
+
+// Sizing a topic only needs the log dirs of the brokers leading its partitions.
+func TestGetTopicSizes_DescribesLeaderBrokersOnly(t *testing.T) {
+	admin := logDirsAdmin()
+	admin.MockTopicMetadata = []*sarama.TopicMetadata{{Name: "t", Err: sarama.ErrNoError, Partitions: []*sarama.PartitionMetadata{
+		{ID: 0, Leader: 1, Replicas: []int32{1, 2}, Isr: []int32{1, 2}},
+	}}}
+	restore := installMockAdmin(admin)
+	defer restore()
+
+	sizes, err := brokerDS().GetTopicSizes([]string{"t"})
+	assert.NoError(t, err)
+	assert.Equal(t, map[string]int64{"t": 10}, sizes)
+	assert.Equal(t, [][]int32{{1}}, admin.DescribeLogDirsCalls)
+}
+
+// logDirFactory hands out the shared admin on the first call and a fresh
+// admin on every later one, recording the config each was built with.
+type logDirFactory struct {
+	MockKafkaClientFactory
+	mu        sync.Mutex
+	shared    *MockClusterAdmin
+	dedicated []*closeTrackingAdmin
+	configs   []*sarama.Config
+}
+
+func (f *logDirFactory) CreateClusterAdmin(_ []string, cfg *sarama.Config) (ClusterAdminInterface, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.configs = append(f.configs, cfg)
+	if len(f.configs) == 1 {
+		return f.shared, nil
+	}
+	a := &closeTrackingAdmin{MockClusterAdmin: logDirsAdmin()}
+	f.dedicated = append(f.dedicated, a)
+	return a, nil
+}
+
+// DescribeLogDirs must not run on the shared admin: sarama holds the broker's
+// lock until the answer or Net.ReadTimeout, so a broker that never answers
+// would stall every other shared-admin request to it. It runs on a dedicated
+// admin with the log-dir timeout as its read timeout, closed afterwards.
+func TestDescribeLogDirs_UsesDedicatedAdmin(t *testing.T) {
+	restore := installMockAdmin(nil)
+	resetSharedClients()
+	t.Cleanup(func() { resetSharedClients(); restore() })
+	f := &logDirFactory{shared: logDirsAdmin()}
+	kafkaClientFactory = f
+
+	res, err := brokerDS().GetBrokerLogDirs([]int32{1})
+	require.NoError(t, err)
+	assert.Equal(t, "/d1", res[1][0].Path)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Empty(t, f.shared.DescribeLogDirsCalls, "the shared admin never sends DescribeLogDirs")
+	require.Len(t, f.dedicated, 1)
+	assert.Equal(t, [][]int32{{1}}, f.dedicated[0].DescribeLogDirsCalls)
+	assert.True(t, f.dedicated[0].closed.Load(), "the dedicated admin is closed")
+	assert.Equal(t, logDirTimeout, f.configs[1].Net.ReadTimeout)
 }

@@ -9,7 +9,10 @@ import (
 
 // defaultHistoryCap is the number of samples retained per series. At the
 // default 5s poll interval this is ~20 minutes of history — enough for the
-// sparklines on the metrics page. History is process-lifetime only.
+// sparklines on the metrics page. History is process-lifetime only, and holds
+// only the time collection ran: without the exposition endpoint that is the
+// time the metrics page was showing. A pause leaves a gap, never a point
+// averaged across it.
 const defaultHistoryCap = 240
 
 // ring is a fixed-capacity, O(1)-append ring buffer of time-series points.

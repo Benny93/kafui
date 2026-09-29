@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -37,7 +38,8 @@ func (e *registryError) Error() string {
 // typed error mapping. Construct via newRegistryClient.
 type registryClient struct {
 	baseURLs []string
-	lastGood int
+	// lastGood is atomic because GetSchemaVersions calls do from 20 workers.
+	lastGood atomic.Int64
 	username string
 	password string
 	http     *http.Client
@@ -88,8 +90,9 @@ func (rc *registryClient) do(method, path string, body, out interface{}) error {
 
 	var connErr error
 	n := len(rc.baseURLs)
+	start := int(rc.lastGood.Load())
 	for i := 0; i < n; i++ {
-		idx := (rc.lastGood + i) % n
+		idx := (start + i) % n
 		base := rc.baseURLs[idx]
 
 		var rdr io.Reader
@@ -114,7 +117,7 @@ func (rc *registryClient) do(method, path string, body, out interface{}) error {
 			connErr = err
 			continue
 		}
-		rc.lastGood = idx
+		rc.lastGood.Store(int64(idx))
 		respBody, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 

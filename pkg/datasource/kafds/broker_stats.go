@@ -21,21 +21,12 @@ func (kp KafkaDataSourceKaf) GetBrokerStats() (map[int32]api.BrokerStats, api.Br
 		return nil, api.BrokerSummary{}, fmt.Errorf("describing cluster: %w", err)
 	}
 
-	topicDetails, err := admin.ListTopics()
+	// A nil topic list asks for every topic's metadata in one request. This
+	// used to be ListTopics (all-topic metadata plus a DescribeConfigs of every
+	// topic, only for the names) followed by DescribeTopics(names).
+	metadata, err := admin.DescribeTopics(nil)
 	if err != nil {
-		return nil, api.BrokerSummary{}, fmt.Errorf("listing topics: %w", err)
-	}
-	names := make([]string, 0, len(topicDetails))
-	for name := range topicDetails {
-		names = append(names, name)
-	}
-
-	var metadata []*sarama.TopicMetadata
-	if len(names) > 0 {
-		metadata, err = admin.DescribeTopics(names)
-		if err != nil {
-			return nil, api.BrokerSummary{}, fmt.Errorf("describing topics: %w", err)
-		}
+		return nil, api.BrokerSummary{}, fmt.Errorf("describing topics: %w", err)
 	}
 
 	brokerIDs := make([]int32, 0, len(brokers))
@@ -49,13 +40,17 @@ func (kp KafkaDataSourceKaf) GetBrokerStats() (map[int32]api.BrokerStats, api.Br
 	summary.ControllerType = "Unknown"
 
 	// Fold disk usage from log dirs into the per-broker stats (best effort).
-	if logDirs, ldErr := kp.GetBrokerLogDirs(brokerIDs); ldErr == nil {
-		for id, dirs := range logDirs {
-			s := stats[id]
-			size, count := aggregateDiskUsage(dirs)
-			s.SegmentSize = size
-			s.SegmentCount = count
-			stats[id] = s
+	// The broker list is already known, so skip GetBrokerLogDirs' own
+	// DescribeCluster.
+	if len(brokerIDs) > 0 {
+		if raw, unknown := describeLogDirsWithTimeout(brokerIDs); !unknown {
+			for id, dirs := range logDirsToAPI(raw) {
+				s := stats[id]
+				size, count := aggregateDiskUsage(dirs)
+				s.SegmentSize = size
+				s.SegmentCount = count
+				stats[id] = s
+			}
 		}
 	}
 

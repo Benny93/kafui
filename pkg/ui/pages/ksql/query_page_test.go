@@ -145,9 +145,63 @@ func TestQueryAbortCancelsAndClearsRunning(t *testing.T) {
 			t.Fatal("mock stream did not stop after ctx cancel")
 		}
 	}
-	cmd := m.handle(ksqlResultMsg{ok: false})
+	cmd := m.handle(ksqlResultMsg{gen: m.gen, ok: false})
 	assert.False(t, m.running, "running cleared on channel close")
 	require.NotNil(t, cmd) // "consumption cancelled" notification (+ focus)
+}
+
+// ctxDS records the context ExecuteKsql was called with and hands back an
+// open channel, like a push query whose stream has just opened.
+type ctxDS struct {
+	*mock.KafkaDataSourceMock
+	ctx context.Context
+}
+
+func (f *ctxDS) ExecuteKsql(ctx context.Context, _ string, _ map[string]string) (<-chan api.KsqlResultTable, error) {
+	f.ctx = ctx
+	return make(chan api.KsqlResultTable), nil
+}
+
+func TestQueryStopBeforeStreamOpensCancels(t *testing.T) {
+	tests := []struct {
+		name string
+		stop func(m *QueryModel)
+	}{
+		{"leave page", func(m *QueryModel) { m.OnBlur() }},
+		{"abort", func(m *QueryModel) { m.abort() }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ds := &ctxDS{KafkaDataSourceMock: &mock.KafkaDataSourceMock{}}
+			m := newQuery(t, ds)
+			m.editor.SetValue("SELECT * FROM S EMIT CHANGES;")
+			start := m.execute()
+
+			// Stop before queryStartedMsg has been delivered.
+			tt.stop(m)
+			msg := start()
+			require.Error(t, ds.ctx.Err(), "the query context is cancelled")
+
+			m.handle(msg)
+			assert.False(t, m.running)
+			assert.Nil(t, m.ch, "the late stream is not listened to")
+		})
+	}
+}
+
+func TestQueryStaleMessagesIgnored(t *testing.T) {
+	ds := &ctxDS{KafkaDataSourceMock: &mock.KafkaDataSourceMock{}}
+	m := newQuery(t, ds)
+	m.editor.SetValue("SELECT * FROM S EMIT CHANGES;")
+	m.handle(m.execute()())
+	m.OnBlur()
+
+	// A second query starts; the first query's close must not finish it.
+	m.handle(m.execute()())
+	require.True(t, m.running)
+	assert.Nil(t, m.handle(ksqlResultMsg{gen: m.gen - 1, ok: false}))
+	assert.Nil(t, m.handle(queryTickMsg{gen: m.gen - 1}))
+	assert.True(t, m.running, "stale close ignored")
 }
 
 func TestQueryLeavingPageCancels(t *testing.T) {

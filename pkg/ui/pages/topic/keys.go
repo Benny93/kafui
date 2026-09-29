@@ -94,6 +94,16 @@ func (k *Keys) HandleKey(model *Model, msg tea.KeyMsg) tea.Cmd {
 	case keys.ActionMetadata:
 		return k.handleMetadata(model)
 
+	case keys.ActionExpand:
+		model.toggleExpand()
+		return nil
+	case keys.ActionScrollDetailUp:
+		model.scrollExpanded(-1)
+		return nil
+	case keys.ActionScrollDetailDown:
+		model.scrollExpanded(1)
+		return nil
+
 	case keys.ActionUp:
 		return k.handleNavigation(model, "up")
 	case keys.ActionDown:
@@ -162,32 +172,8 @@ func (k *Keys) handleSearchMode(model *Model, msg tea.KeyMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// Key handling functions
-
-func (k *Keys) handleBack(model *Model) tea.Cmd {
-	if model.searchMode {
-		model.searchMode = false
-		model.searchInput.Blur()
-		model.FilterMessages()
-		return nil
-	}
-
-	// Cancel consumption first
-	if model.cancelConsumption != nil {
-		model.cancelConsumption()
-	}
-
-	return func() tea.Msg {
-		return core.BackMsg{}
-	}
-}
-
-func (k *Keys) handleQuit(model *Model) tea.Cmd {
-	if model.cancelConsumption != nil {
-		model.cancelConsumption()
-	}
-	return tea.Quit
-}
+// Key handling functions. Esc and q are handled by the shell (Unwind, then
+// back); leaving the page stops live consumption in OnBlur.
 
 func (k *Keys) handleSearch(model *Model) tea.Cmd {
 	model.searchMode = true
@@ -201,14 +187,7 @@ func (k *Keys) handlePauseResume(model *Model) tea.Cmd {
 }
 
 func (k *Keys) handleSwitchMode(model *Model) tea.Cmd {
-	// Stop any active live consumption before switching.
-	if model.consuming {
-		if model.cancelConsumption != nil {
-			model.cancelConsumption()
-			model.cancelConsumption = nil
-		}
-		model.consuming = false
-	}
+	// startForMode stops any active live consumption before switching.
 	model.consumeMode = model.consumeMode.Next()
 	model.statusMessage = fmt.Sprintf("Mode: %s", model.consumeMode)
 	return model.startForMode()
@@ -235,8 +214,7 @@ func (k *Keys) handleSelect(model *Model) tea.Cmd {
 	// Navigate to message detail page
 	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil {
 		model.selectedMessage = selectedMsg
-		// Load schema info here (once, on explicit open) — not in the render path.
-		model.loadSchemaInfoForMessage(selectedMsg)
+		// Schema info is loaded asynchronously by the message detail page.
 		return func() tea.Msg {
 			pageID := fmt.Sprintf("detail:%s:%d:%d", model.topicName, selectedMsg.Partition, selectedMsg.Offset)
 			return core.PageChangeMsg{PageID: pageID, Data: *selectedMsg}
@@ -264,75 +242,6 @@ func (k *Keys) handleMetadata(model *Model) tea.Cmd {
 	return nil
 }
 
-func (k *Keys) handleCopyKey(model *Model) tea.Cmd {
-	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil && selectedMsg.Key != "" {
-		model.statusMessage = "Message key copied to clipboard"
-		// TODO: Implement actual clipboard copy
-	}
-	return nil
-}
-
-func (k *Keys) handleCopyValue(model *Model) tea.Cmd {
-	if selectedMsg := model.GetSelectedMessage(); selectedMsg != nil && selectedMsg.Value != "" {
-		model.statusMessage = "Message value copied to clipboard"
-		// TODO: Implement actual clipboard copy
-	}
-	return nil
-}
-
-func (k *Keys) handleNavigation(model *Model, direction string) tea.Cmd {
-	switch direction {
-	case "up":
-		if model.cursorRow > 0 {
-			model.cursorRow--
-		}
-		model.markRenderDirty()
-		return nil
-	case "down":
-		visibleCount := len(model.pagination.GetVisibleMessages(model.filteredMessages))
-		if visibleCount == 0 {
-			visibleCount = model.messageTable.PageSize()
-		}
-		if model.cursorRow < visibleCount-1 {
-			model.cursorRow++
-		}
-		model.markRenderDirty()
-		return nil
-	case "pagedown":
-		if model.pagination.NextPage() {
-			model.pendingReset = true
-			model.updateMessageTable()
-			model.markRenderDirty()
-		} else if !model.loading {
-			// Already on the last page and not currently fetching — load more.
-			if flags := model.nextBatchFlags(); flags != nil {
-				return model.consumption.FetchNextBatch(*flags)
-			}
-		}
-		return nil
-	case "pageup":
-		if model.pagination.PrevPage() {
-			model.pendingReset = true
-			model.updateMessageTable()
-			model.markRenderDirty()
-		}
-		return nil
-	case "home":
-		model.pagination.FirstPage()
-		model.pendingReset = true
-		model.updateMessageTable()
-		model.markRenderDirty()
-		return nil
-	case "end":
-		model.pagination.LastPage()
-		model.pendingReset = true
-		model.updateMessageTable()
-		model.markRenderDirty()
-		return nil
-	}
-	return nil
-}
-
 // GetKeyBindings returns this screen's bindings for the help overlay, read
 // from the registry so help cannot list a key the screen does not handle — the
 // previous list advertised twelve keys the help overlay never rendered.
@@ -342,39 +251,4 @@ func (k *Keys) GetKeyBindings() []key.Binding {
 		out = append(out, b.KeyBinding())
 	}
 	return out
-}
-
-// GetCentralizedKeyMap returns the hint key map for the footer.
-func GetCentralizedKeyMap() keys.HintKeyMap {
-	return keys.Hints(keys.ScopeTopic)
-}
-
-// GetShortcuts returns formatted shortcut descriptions
-func (k *Keys) GetShortcuts() []string {
-	return []string{
-		"↑/↓   Select row",
-		"Enter View details",
-		"Space Pause/resume",
-		"R     Refresh messages",
-		"g/G   First/Last page",
-		"/     Search messages",
-		"r     Retry connection",
-		"c     Copy key",
-		"v     Copy value",
-		"f     Toggle format",
-		"h     Toggle headers",
-		"m     Toggle metadata",
-		"o     Overview + partitions",
-		"s     Settings",
-		"E     Edit settings",
-		"C     Consumer groups",
-		"t     Statistics",
-		"+     Add partitions",
-		"F     Replication factor",
-		"^p    Clear messages",
-		"^r    Recreate topic",
-		"^d    Delete topic",
-		"Esc   Exit search",
-		"q/Esc Back to topics",
-	}
 }

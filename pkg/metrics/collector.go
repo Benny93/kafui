@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
@@ -42,6 +43,9 @@ type Collector struct {
 	// settingsFor resolves a cluster's full metrics settings, enabling the JMX
 	// (Jolokia bridge) scrape path (MM-17). Optional; nil ⇒ Prometheus-only.
 	settingsFor func(cluster string) appconfig.MetricsSettings
+
+	// collecting is set while a CollectCmd cycle runs (see tea.go).
+	collecting atomic.Bool
 
 	mu        sync.RWMutex
 	cache     map[string]api.ClusterMetrics
@@ -141,6 +145,9 @@ func (c *Collector) collectActive(ctx context.Context) {
 	if name == "" {
 		return
 	}
+	// Taken before the fetches, so a slow cycle does not look like a pause:
+	// the gap to the previous sample is then the pause between cycles.
+	start := c.now()
 
 	topics, err := c.ds.GetTopics()
 	if err != nil {
@@ -165,6 +172,11 @@ func (c *Collector) collectActive(ctx context.Context) {
 	c.ensureLocked(name)
 
 	prev, hasPrev := c.prev[name]
+	if hasPrev && isStale(prev.at, start, c.interval) {
+		// Collection was paused (the metrics page was closed). A rate over
+		// the whole pause is an average, not the current rate; start over.
+		hasPrev = false
+	}
 
 	var total, partitions int64
 	topicMetrics := make([]api.TopicMetrics, 0, len(topics))
@@ -228,6 +240,13 @@ func (c *Collector) collectActive(ctx context.Context) {
 	if bytesOut >= 0 {
 		h.bytesOut.append(at, bytesOut)
 	}
+}
+
+// isStale reports whether a sample taken at prevAt is too old to derive a
+// current rate from at cycleStart. Cycles run one interval apart while
+// collection is on, so a gap beyond two intervals means it was paused.
+func isStale(prevAt, cycleStart time.Time, interval time.Duration) bool {
+	return cycleStart.Sub(prevAt) > 2*interval
 }
 
 func (c *Collector) endpoint(cluster string) string {

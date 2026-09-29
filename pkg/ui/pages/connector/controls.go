@@ -11,6 +11,11 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/keys"
 )
 
+// IsInputMode implements core.InputModeReporter: while the JSON config editor
+// is focused the shell stops intercepting hotkeys, so typing q, a or : goes to
+// the editor.
+func (m *Model) IsInputMode() bool { return m.editing }
+
 // KeyScope implements core.KeyScoper.
 func (m *Model) KeyScope() keys.Scope { return keys.ScopeConnector }
 

@@ -5,6 +5,7 @@ import (
 	"github.com/Benny93/kafui/pkg/ui/keys"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/Benny93/kafui/pkg/ui/shared"
@@ -23,17 +24,62 @@ type TopicDetailsLoadedMsg struct {
 }
 
 // fetchTopicOverview fetches partition detail and on-disk size for a topic.
+// The two calls are independent round trips, so they run concurrently.
 func fetchTopicOverview(ds api.KafkaDataSource, topic string) tea.Cmd {
 	return func() tea.Msg {
+		var (
+			wg    sync.WaitGroup
+			sizes map[string]int64
+			serr  error
+		)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sizes, serr = ds.GetTopicSizes([]string{topic})
+		}()
 		details, err := ds.GetTopicDetails(topic)
+		wg.Wait()
+
 		var size int64
-		if err == nil {
-			if sizes, serr := ds.GetTopicSizes([]string{topic}); serr == nil {
-				size = sizes[topic]
-			}
+		if err == nil && serr == nil {
+			size = sizes[topic]
 		}
 		return TopicDetailsLoadedMsg{Topic: topic, Details: details, Size: size, Err: err}
 	}
+}
+
+// topicMetaLoadedMsg carries the topic metadata fetched when the page was
+// opened without it (from a consumer group, connector, schema or deep link).
+type topicMetaLoadedMsg struct {
+	Topic   string
+	Details api.TopicDetails
+	Err     error
+}
+
+// fetchTopicMeta fetches partition metadata to fill in the page's topicDetails.
+func fetchTopicMeta(ds api.KafkaDataSource, topic string) tea.Cmd {
+	return func() tea.Msg {
+		details, err := ds.GetTopicDetails(topic)
+		return topicMetaLoadedMsg{Topic: topic, Details: details, Err: err}
+	}
+}
+
+// handleTopicMetaLoaded fills in the partition count, replication factor and
+// message count the navigation did not supply. A failure only leaves them
+// unknown; the message fetch reports its own errors.
+func (h *Handlers) handleTopicMetaLoaded(model *Model, msg topicMetaLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.Topic != model.topicName {
+		return model, nil
+	}
+	if msg.Err != nil {
+		shared.Log.Warn("topic metadata unavailable", "topic", model.topicName, "err", msg.Err)
+		return model, nil
+	}
+	model.topicDetails.NumPartitions = int32(len(msg.Details.Partitions))
+	model.topicDetails.ReplicationFactor = msg.Details.ReplicationFactor
+	model.topicDetails.MessageCount = msg.Details.MessageCount()
+	model.markRenderDirty()
+	return model, nil
 }
 
 // handleShowOverview opens the overview overlay and fetches partition detail.

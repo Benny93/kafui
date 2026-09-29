@@ -2,7 +2,9 @@ package kafds
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Benny93/kafui/pkg/api"
 	"github.com/IBM/sarama"
@@ -27,21 +29,44 @@ var newOffsetResetter = func(groupID string) (offsetResetter, error) {
 	if err != nil {
 		return nil, err
 	}
+	configureOffsetReset(cfg)
 	client, err := getClientFromConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
+	return newSaramaOffsetResetter(groupID, client)
+}
+
+// configureOffsetReset makes the OffsetManager commit only when asked (no
+// background ticker racing Commit) and report commit failures on each
+// partition's Errors channel instead of just logging them.
+func configureOffsetReset(cfg *sarama.Config) {
+	cfg.Consumer.Offsets.AutoCommit.Enable = false
+	cfg.Consumer.Return.Errors = true
+}
+
+// newSaramaOffsetResetter takes ownership of client, which must have been
+// built from a config passed through configureOffsetReset.
+func newSaramaOffsetResetter(groupID string, client sarama.Client) (*saramaOffsetResetter, error) {
 	om, err := sarama.NewOffsetManagerFromClient(groupID, client)
 	if err != nil {
 		client.Close()
 		return nil, fmt.Errorf("creating offset manager for group %q: %w", groupID, err)
 	}
-	return &saramaOffsetResetter{client: client, om: om}, nil
+	cfg := client.Config()
+	return &saramaOffsetResetter{
+		client:  client,
+		om:      om,
+		retries: cfg.Consumer.Offsets.Retry.Max,
+		backoff: cfg.Metadata.Retry.Backoff,
+	}, nil
 }
 
 type saramaOffsetResetter struct {
-	client sarama.Client
-	om     sarama.OffsetManager
+	client  sarama.Client
+	om      sarama.OffsetManager
+	retries int           // extra commit attempts for partitions not yet acknowledged
+	backoff time.Duration // pause between commit attempts
 }
 
 func (r *saramaOffsetResetter) GetOffset(topic string, partition int32, t int64) (int64, error) {
@@ -53,16 +78,71 @@ func (r *saramaOffsetResetter) Partitions(topic string) ([]int32, error) {
 }
 
 func (r *saramaOffsetResetter) Commit(groupID, topic string, offsets map[int32]int64) error {
+	pending := make(map[int32]sarama.PartitionOffsetManager, len(offsets))
 	for p, off := range offsets {
 		pom, err := r.om.ManagePartition(topic, p)
 		if err != nil {
+			// Poms already managed are force-released by om.Close in Close.
 			return fmt.Errorf("managing partition %s/%d: %w", topic, p, err)
 		}
+		// MarkOffset only moves the offset forward and ResetOffset only moves
+		// it back (or keeps it), so apply both to land on off whatever the
+		// currently committed offset is, including "none committed" (-1).
+		pom.MarkOffset(off, "")
 		pom.ResetOffset(off, "")
-		pom.Close()
+		// Mark it closed now: the OffsetManager releases a closed pom (closing
+		// its Errors channel) only once its offset is committed.
+		pom.AsyncClose()
+		pending[p] = pom
 	}
-	r.om.Commit()
-	return nil
+
+	lastErr := make(map[int32]error)
+	for attempt := 0; attempt <= r.retries && len(pending) > 0; attempt++ {
+		if attempt > 0 {
+			time.Sleep(r.backoff)
+		}
+		r.om.Commit()
+		for p, pom := range pending {
+			released, err := drainPOMErrors(pom)
+			if err != nil {
+				lastErr[p] = err
+			}
+			if released {
+				delete(pending, p)
+				delete(lastErr, p)
+			}
+		}
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+
+	errs := make([]error, 0, len(pending))
+	for p := range pending {
+		err := lastErr[p]
+		if err == nil {
+			err = errors.New("commit not acknowledged by the group coordinator")
+		}
+		errs = append(errs, fmt.Errorf("partition %s/%d: %w", topic, p, err))
+	}
+	return errors.Join(errs...)
+}
+
+// drainPOMErrors reads the errors already queued on pom without blocking. It
+// reports whether the pom was released (its channel closed), which the
+// OffsetManager only does once the pom's offset has been committed.
+func drainPOMErrors(pom sarama.PartitionOffsetManager) (released bool, last error) {
+	for {
+		select {
+		case e, ok := <-pom.Errors():
+			if !ok {
+				return true, last
+			}
+			last = e
+		default:
+			return false, last
+		}
+	}
 }
 
 func (r *saramaOffsetResetter) Close() error {
@@ -81,17 +161,15 @@ func (kp KafkaDataSourceKaf) ResetConsumerGroupOffsets(ctx context.Context, req 
 	if err != nil {
 		return err
 	}
+	// The admin is datasource-owned and cached; don't close it.
 	names, err := admin.ListConsumerGroups()
 	if err != nil {
-		admin.Close()
 		return fmt.Errorf("listing consumer groups: %w", err)
 	}
 	if _, ok := names[req.GroupID]; !ok {
-		admin.Close()
 		return api.GroupNotFoundError{GroupID: req.GroupID}
 	}
 	descs, err := admin.DescribeConsumerGroups([]string{req.GroupID})
-	admin.Close()
 	if err != nil {
 		return fmt.Errorf("describing consumer group %q: %w", req.GroupID, err)
 	}

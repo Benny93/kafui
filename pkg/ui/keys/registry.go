@@ -74,6 +74,11 @@ const (
 // Screen-promoted actions.
 const (
 	ActionPause Action = "pause"
+	// ActionExpand shows the highlighted message's full content inline, and
+	// ActionScrollDetailUp/Down scroll that inline panel.
+	ActionExpand           Action = "expand"
+	ActionScrollDetailUp   Action = "scroll-detail-up"
+	ActionScrollDetailDown Action = "scroll-detail-down"
 )
 
 // Text-entry actions.
@@ -406,6 +411,9 @@ func defaultBindings() []Binding {
 
 		// ---- Screen-promoted ----
 		{ActionPause, CtxTopic, []string{"p"}, "pause", CatActions, false},
+		{ActionExpand, CtxTopic, []string{"x"}, "expand row", CatView, false},
+		{ActionScrollDetailUp, CtxTopic, []string{"shift+up"}, "scroll expanded", CatView, false},
+		{ActionScrollDetailDown, CtxTopic, []string{"shift+down"}, "scroll expanded", CatView, false},
 		{ActionPause, CtxConnector, []string{"p"}, "pause", CatActions, false},
 
 		// ---- Text entry ----

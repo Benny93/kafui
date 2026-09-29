@@ -188,7 +188,7 @@ func (kp KafkaDataSourceKaf) GetBrokerLogDirs(brokerIDs []int32) (map[int32][]ap
 		return map[int32][]api.BrokerLogDir{}, nil
 	}
 
-	raw, timedOut := describeLogDirsWithTimeout(admin, ids)
+	raw, timedOut := describeLogDirsWithTimeout(ids)
 	if timedOut {
 		// Timeout is not an error for the UI — return empty so it renders "N/A".
 		return map[int32][]api.BrokerLogDir{}, nil
@@ -196,9 +196,27 @@ func (kp KafkaDataSourceKaf) GetBrokerLogDirs(brokerIDs []int32) (map[int32][]ap
 	return logDirsToAPI(raw), nil
 }
 
-// describeLogDirsWithTimeout runs DescribeLogDirs under a timeout. On timeout it
-// returns (nil, true); on any admin error it returns (nil, false) with empty data.
-func describeLogDirsWithTimeout(admin ClusterAdminInterface, ids []int32) (map[int32][]sarama.DescribeLogDirsResponseDirMetadata, bool) {
+// describeLogDirsWithTimeout runs DescribeLogDirs under a timeout. On timeout
+// or on any error it returns (nil, true): the sizes are unknown.
+//
+// It runs on a dedicated, short-lived admin whose read and dial timeouts are
+// logDirTimeout, never on the shared one. sarama holds a broker's lock until
+// the response arrives or Net.ReadTimeout (30s by default) expires, so a
+// broker that never answers DescribeLogDirs would otherwise stall every other
+// request the shared admin sends to that broker long after this call gave up.
+func describeLogDirsWithTimeout(ids []int32) (map[int32][]sarama.DescribeLogDirsResponseDirMetadata, bool) {
+	if currentCluster == nil {
+		return nil, true
+	}
+	cfg, err := getConfig()
+	if err != nil {
+		return nil, true
+	}
+	cfg.Net.DialTimeout = logDirTimeout
+	cfg.Net.ReadTimeout = logDirTimeout
+	cfg.Net.WriteTimeout = logDirTimeout
+	factory, brokers := kafkaClientFactory, currentCluster.Brokers
+
 	ctx, cancel := context.WithTimeout(context.Background(), logDirTimeout)
 	defer cancel()
 
@@ -208,6 +226,12 @@ func describeLogDirsWithTimeout(admin ClusterAdminInterface, ids []int32) (map[i
 	}
 	ch := make(chan result, 1)
 	go func() {
+		admin, err := factory.CreateClusterAdmin(brokers, cfg)
+		if err != nil {
+			ch <- result{err: err}
+			return
+		}
+		defer func() { _ = admin.Close() }()
 		dirs, err := admin.DescribeLogDirs(ids)
 		ch <- result{dirs: dirs, err: err}
 	}()
@@ -217,7 +241,12 @@ func describeLogDirsWithTimeout(admin ClusterAdminInterface, ids []int32) (map[i
 		return nil, true
 	case r := <-ch:
 		if r.err != nil {
-			return nil, false
+			// An error is "size unknown", exactly like a timeout. Reporting it
+			// as merely "no dirs" let the caller seed every topic with 0, so a
+			// broker that refuses DescribeLogDirs — no permission, or a managed
+			// offering that does not implement it — showed a confident 0 B for
+			// every topic in the list.
+			return nil, true
 		}
 		return r.dirs, false
 	}

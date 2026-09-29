@@ -80,6 +80,12 @@ type MainPageModel struct {
 	reusableApp      *templateui.ReusableApp
 	contentProvider  *KafuiContentProvider
 	resourcesSection *ResourcesSection
+
+	// initLoaded is set by Init, whose content Init already issues the first
+	// load; the first OnFocus (which the router runs right after Init) consumes
+	// it instead of loading a second time. Later OnFocus calls — returning to
+	// the page — reload so the list reflects changes made elsewhere.
+	initLoaded bool
 }
 
 // GetCommon returns the shared context
@@ -89,6 +95,7 @@ func (m *MainPageModel) GetCommon() *core.Common {
 
 // Init implements the Page interface
 func (m *MainPageModel) Init() tea.Cmd {
+	m.initLoaded = true
 	return m.reusableApp.Init()
 }
 
@@ -118,9 +125,12 @@ func (m *MainPageModel) GetID() string {
 	return "main"
 }
 
-// GetTitle implements the Page interface
+// GetTitle implements the Page interface: the resource list being shown.
 func (m *MainPageModel) GetTitle() string {
-	return "Kafui - Kafka TUI"
+	if m.contentProvider == nil {
+		return "Topics"
+	}
+	return m.contentProvider.resourceLabel()
 }
 
 // IsInputMode reports whether the page is capturing raw text (resource picker,
@@ -237,7 +247,12 @@ func (m *MainPageModel) createPageChangeCommand(msg NavigateToResourceDetailMsg)
 
 // OnFocus implements the Page interface
 func (m *MainPageModel) OnFocus() tea.Cmd {
-	// Handle focus gain - reload data when page becomes active
+	// The first activation follows Init, which already loaded the content.
+	if m.initLoaded {
+		m.initLoaded = false
+		return nil
+	}
+	// Returning to the page: reload so the list reflects changes made elsewhere.
 	return m.contentProvider.InitContent()
 }
 
