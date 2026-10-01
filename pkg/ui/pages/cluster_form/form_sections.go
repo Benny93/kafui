@@ -139,7 +139,7 @@ func candidateFromValues(v map[string]string) (string, appconfig.ClusterExtensio
 			s.TokenURL = v[fSaslTokenURL]
 		case "AWS_MSK_IAM":
 			// Mechanism-only: credentials and region come from the AWS chain.
-	default: // PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
+		default: // PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
 			s.Username = v[fSaslUsername]
 			s.Password = v[fSaslPassword]
 		}
