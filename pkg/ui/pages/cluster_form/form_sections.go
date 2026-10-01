@@ -39,8 +39,9 @@ const noneOption = "(none)"
 
 var securityProtocolOptions = []string{"PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"}
 
-// saslMechanismOptions is limited to what kafds supports.
-var saslMechanismOptions = []string{noneOption, "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512", "OAUTHBEARER"}
+// saslMechanismOptions is limited to what kafds supports. AWS_MSK_IAM needs no
+// form fields: it signs from the default AWS credential chain.
+var saslMechanismOptions = []string{noneOption, "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512", "OAUTHBEARER", "AWS_MSK_IAM"}
 
 // fileExistsValidator rejects a non-empty path that does not point at a readable file.
 func fileExistsValidator(v string) error {
@@ -136,7 +137,9 @@ func candidateFromValues(v map[string]string) (string, appconfig.ClusterExtensio
 			s.ClientID = v[fSaslClientID]
 			s.ClientSecret = v[fSaslClientSecret]
 			s.TokenURL = v[fSaslTokenURL]
-		default: // PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
+		case "AWS_MSK_IAM":
+			// Mechanism-only: credentials and region come from the AWS chain.
+	default: // PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
 			s.Username = v[fSaslUsername]
 			s.Password = v[fSaslPassword]
 		}

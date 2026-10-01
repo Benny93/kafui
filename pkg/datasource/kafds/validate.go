@@ -179,6 +179,15 @@ func applyProbeSASL(sc *sarama.Config, s *appconfig.SASLConfig) error {
 			ClientSecret: s.ClientSecret,
 			TokenURL:     s.TokenURL,
 		}}
+	case "AWS_MSK_IAM":
+		// MSK IAM signs its token from the AWS credential chain, not the
+		// kafui SASL fields — the probe uses the same provider as production.
+		sc.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeOAuth)
+		provider, err := newMSKTokenProvider()
+		if err != nil {
+			return err
+		}
+		sc.Net.SASL.TokenProvider = provider
 	default: // PLAIN
 		sc.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypePlaintext)
 		sc.Net.SASL.User = s.Username

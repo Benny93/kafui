@@ -377,7 +377,8 @@ func getConfig() (saramaConfig *sarama.Config, e error) {
 	}
 	if cluster.SASL != nil {
 		saramaConfig.Net.SASL.Enable = true
-		if cluster.SASL.Mechanism != "OAUTHBEARER" {
+		// Token-based mechanisms carry no username/password pair.
+		if cluster.SASL.Mechanism != "OAUTHBEARER" && cluster.SASL.Mechanism != "AWS_MSK_IAM" {
 			saramaConfig.Net.SASL.User = cluster.SASL.Username
 			saramaConfig.Net.SASL.Password = cluster.SASL.Password
 		}
@@ -458,6 +459,15 @@ func getConfig() (saramaConfig *sarama.Config, e error) {
 			saramaConfig.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeOAuth)
 			saramaConfig.Net.SASL.TokenProvider = newTokenProvider()
 
+		} else if cluster.SASL.Mechanism == "AWS_MSK_IAM" {
+			// MSK IAM is an OAUTHBEARER-flavored mechanism: the SigV4-signed
+			// presigned URL travels in the token field (issue #3).
+			saramaConfig.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeOAuth)
+			provider, err := newMSKTokenProvider()
+			if err != nil {
+				return nil, err
+			}
+			saramaConfig.Net.SASL.TokenProvider = provider
 		}
 	}
 	return saramaConfig, nil

@@ -133,7 +133,10 @@ type RedactionSettings struct {
 }
 
 // SASLConfig is the broker SASL authentication for a fully-kafui-defined cluster.
-// Mechanism is one of PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER.
+// Mechanism is one of PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER,
+// AWS_MSK_IAM. AWS_MSK_IAM (managed Apache Kafka IAM auth) takes no fields of
+// its own: it signs tokens through the default AWS credential chain and reads
+// the region from AWS_REGION/AWS_DEFAULT_REGION or ~/.aws/config.
 type SASLConfig struct {
 	Mechanism    string `yaml:"mechanism"`
 	Username     string `yaml:"username"`

@@ -193,3 +193,25 @@ func TestReload_KafConfigUntouched(t *testing.T) {
 	assert.Equal(t, original, after, "~/.kaf/config must be untouched across an apply")
 	assert.Equal(t, 0, mockCM.ReadConfigCallCount, "Reload must not read config from disk")
 }
+
+func TestApplyProbeSASL_AWSMSKIAM(t *testing.T) {
+	cfgFile := t.TempDir() + "/aws-config"
+	require.NoError(t, os.WriteFile(cfgFile, []byte("[default]\nregion = us-east-2\n"), 0o600))
+	t.Setenv("AWS_CONFIG_FILE", cfgFile)
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+
+	sc := sarama.NewConfig()
+	require.NoError(t, applyProbeSASL(sc, &appconfig.SASLConfig{Mechanism: "AWS_MSK_IAM"}))
+	assert.True(t, sc.Net.SASL.Enable)
+	assert.Equal(t, sarama.SASLMechanism(sarama.SASLTypeOAuth), sc.Net.SASL.Mechanism)
+	_, ok := sc.Net.SASL.TokenProvider.(*mskTokenProvider)
+	assert.True(t, ok)
+
+	// Without a resolvable region the probe fails before any connection.
+	require.NoError(t, os.WriteFile(cfgFile, []byte("[default]\n"), 0o600))
+	sc = sarama.NewConfig()
+	err := applyProbeSASL(sc, &appconfig.SASLConfig{Mechanism: "AWS_MSK_IAM"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires an AWS region")
+}

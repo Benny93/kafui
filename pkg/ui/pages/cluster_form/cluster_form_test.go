@@ -54,6 +54,19 @@ func TestCandidateFromValues_SASLMappings(t *testing.T) {
 		})
 	}
 
+	t.Run("AWS_MSK_IAM carries only the mechanism", func(t *testing.T) {
+		_, ext, err := candidateFromValues(base(map[string]string{
+			fSaslMechanism: "AWS_MSK_IAM", fSaslUsername: "ignored", fSaslPassword: "ignored",
+			fSaslClientID: "ignored",
+		}))
+		require.NoError(t, err)
+		require.NotNil(t, ext.SASL)
+		assert.Equal(t, "AWS_MSK_IAM", ext.SASL.Mechanism)
+		assert.Empty(t, ext.SASL.Username)
+		assert.Empty(t, ext.SASL.Password)
+		assert.Empty(t, ext.SASL.ClientID)
+	})
+
 	t.Run("OAUTHBEARER uses client credentials", func(t *testing.T) {
 		_, ext, err := candidateFromValues(base(map[string]string{
 			fSaslMechanism: "OAUTHBEARER", fSaslClientID: "cid",

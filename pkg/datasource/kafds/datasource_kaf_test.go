@@ -992,3 +992,54 @@ func TestSharedAdmin_RecoversAfterBrokerRestart(t *testing.T) {
 	restart()
 	assert.True(t, recovers(getGroups), "GetConsumerGroups recovers after a broker restart")
 }
+
+func TestGetConfig_AWSMSKIAM(t *testing.T) {
+	origCluster := currentCluster
+	t.Cleanup(func() { currentCluster = origCluster })
+
+	// Deterministic region resolution independent of the developer's ~/.aws.
+	cfgFile := t.TempDir() + "/aws-config"
+	require.NoError(t, os.WriteFile(cfgFile, []byte("[default]\nregion = us-east-1\n"), 0o600))
+	t.Setenv("AWS_CONFIG_FILE", cfgFile)
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+
+	currentCluster = &config.Cluster{
+		Name:             "msk",
+		SecurityProtocol: "SASL_SSL",
+		// Username/Password set by mistake: a token mechanism must not send them.
+		SASL: &config.SASL{Mechanism: "AWS_MSK_IAM", Username: "ignored", Password: "ignored"},
+	}
+
+	sc, err := getConfig()
+	require.NoError(t, err)
+	assert.True(t, sc.Net.SASL.Enable)
+	assert.Equal(t, sarama.SASLMechanism(sarama.SASLTypeOAuth), sc.Net.SASL.Mechanism,
+		"AWS_MSK_IAM travels over the OAUTHBEARER wire mechanism")
+	assert.Empty(t, sc.Net.SASL.User)
+	assert.Empty(t, sc.Net.SASL.Password)
+	require.NotNil(t, sc.Net.SASL.TokenProvider)
+	_, ok := sc.Net.SASL.TokenProvider.(*mskTokenProvider)
+	assert.True(t, ok, "token provider must be the MSK IAM signer")
+}
+
+func TestGetConfig_AWSMSKIAMMissingRegionReturnsError(t *testing.T) {
+	origCluster := currentCluster
+	t.Cleanup(func() { currentCluster = origCluster })
+
+	cfgFile := t.TempDir() + "/aws-config"
+	require.NoError(t, os.WriteFile(cfgFile, []byte("[default]\n"), 0o600))
+	t.Setenv("AWS_CONFIG_FILE", cfgFile)
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+
+	currentCluster = &config.Cluster{
+		Name:             "msk",
+		SecurityProtocol: "SASL_PLAINTEXT",
+		SASL:             &config.SASL{Mechanism: "AWS_MSK_IAM"},
+	}
+
+	_, err := getConfig()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires an AWS region")
+}
