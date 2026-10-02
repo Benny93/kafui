@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Benny93/kafui/pkg/appconfig"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func sampleFields() []Field {
@@ -196,4 +198,102 @@ func TestBoolToggle(t *testing.T) {
 	assert.Equal(t, "true", f.Values()["b"])
 	f.Update(key(" "))
 	assert.Equal(t, "false", f.Values()["b"])
+}
+
+// A Password field's Default is a stored credential, so it must never be painted
+// as plaintext; typed content renders masked but still submits in full.
+func TestPasswordRendersMasked(t *testing.T) {
+	f := New([]Field{{Name: "pw", Label: "Password", Type: Password, Default: "hunter2"}})
+	f.Focus()
+
+	out := f.View()
+	assert.NotContains(t, out, "hunter2", "the stored secret must not be rendered")
+	assert.Contains(t, out, appconfig.RedactPlaceholder(), "a stored secret is signalled by the mask marker")
+	assert.Empty(t, f.Values()["pw"], "an untouched Password field submits empty (= keep current)")
+
+	// Typing renders the mask rather than the text, while the submitted value
+	// stays the real credential.
+	typeInto(f, "abc")
+	assert.NotContains(t, f.View(), "abc", "typed secret must render masked")
+	assert.Contains(t, f.View(), "*")
+	assert.Equal(t, "abc", f.Values()["pw"])
+}
+
+// An externalized ${env:VAR} reference is a pointer, not secret material: like
+// appconfig.Redactor, it must display and round-trip verbatim.
+func TestPasswordProviderRefRoundTrips(t *testing.T) {
+	f := New([]Field{{Name: "pw", Label: "Password", Type: Password, Default: "${env:KAFUI_PW}"}})
+	f.Focus()
+
+	assert.Contains(t, f.View(), "${env:KAFUI_PW}", "a reference is safe to display")
+	assert.Equal(t, "${env:KAFUI_PW}", f.Values()["pw"], "editing must not drop the reference")
+	// It is not a stored secret, so there is nothing to preserve.
+	assert.False(t, f.fields[0].secretSet)
+}
+
+// Masking follows content: only a complete ${provider:...} reference is rendered
+// legibly, so a half-typed reference or raw secret material never leaks.
+func TestPasswordMaskFollowsContent(t *testing.T) {
+	f := New([]Field{{Name: "pw", Label: "Password", Type: Password}})
+	f.Focus()
+
+	typeInto(f, "${env:KAF")
+	assert.NotContains(t, f.View(), "${env:KAF", "an incomplete reference stays masked")
+
+	typeInto(f, "UI_PW}")
+	assert.Contains(t, f.View(), "${env:KAFUI_PW}", "a complete reference is legible")
+
+	// Clearing it and typing real secret material re-masks immediately.
+	for i := 0; i < len("${env:KAFUI_PW}"); i++ {
+		f.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	require.Empty(t, f.Values()["pw"])
+
+	typeInto(f, "hunter2")
+	assert.NotContains(t, f.View(), "hunter2", "raw secret material is masked")
+	assert.Equal(t, "hunter2", f.Values()["pw"])
+}
+
+// An untouched Password field preserving a stored secret submits empty, which
+// must not be rejected as missing input.
+func TestPasswordRequiredWithStoredSecretSubmits(t *testing.T) {
+	f := New([]Field{{Name: "pw", Label: "Password", Type: Password, Required: true, Default: "hunter2"}})
+	f.Focus()
+
+	f.focus = f.submitIndex()
+	cmd, consumed := f.Update(key("enter"))
+	require.True(t, consumed)
+	_, ok := msgOf(cmd).(FormSubmitMsg)
+	assert.True(t, ok, "a preserved stored secret satisfies 'required'")
+	assert.Empty(t, f.fields[0].err)
+}
+
+// A Password field with no stored secret is an ordinary empty required input.
+func TestPasswordRequiredWithoutStoredSecretBlocks(t *testing.T) {
+	f := New([]Field{{Name: "pw", Label: "Password", Type: Password, Required: true}})
+	f.Focus()
+
+	f.focus = f.submitIndex()
+	cmd, _ := f.Update(key("enter"))
+	assert.Nil(t, msgOf(cmd), "submit must be blocked with nothing stored")
+	assert.Equal(t, "required", f.fields[0].err)
+}
+
+// Password must be treated as textual everywhere Text and Numeric are: focus
+// traversal and typing both have to reach the input.
+func TestPasswordIsTextualForTraversal(t *testing.T) {
+	f := New([]Field{
+		{Name: "a", Label: "A", Type: Text},
+		{Name: "pw", Label: "Password", Type: Password},
+	})
+	f.Focus()
+	f.SetDimensions(60, 20)
+
+	f.Update(key("tab"))
+	assert.Equal(t, 1, f.focus)
+	assert.True(t, f.fields[1].input.Focused(), "the Password input must take focus")
+	assert.Equal(t, f.fields[0].input.Width, f.fields[1].input.Width, "sized like a text field")
+
+	typeInto(f, "x")
+	assert.Equal(t, "x", f.Values()["pw"])
 }

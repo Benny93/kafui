@@ -84,3 +84,28 @@ func TestRedact(t *testing.T) {
 		assert.Equal(t, "v", r.Redact("password", "v")) // default no longer applies
 	})
 }
+
+// IsProviderRef and RedactPlaceholder are exposed for display surfaces outside
+// the config view (a masked form field). They must agree with what Redact
+// actually passes through, so a reference round-trips instead of being treated
+// as secret material.
+func TestProviderRefAndPlaceholder(t *testing.T) {
+	assert.Equal(t, redactPlaceholder, RedactPlaceholder())
+
+	r := NewRedactor(RedactionSettings{Enabled: true})
+	for _, ref := range []string{"${env:MY_SECRET}", "${file:/p/k:key}", "  ${env:X}  "} {
+		assert.True(t, IsProviderRef(ref), ref)
+		assert.Equal(t, ref, r.Redact("password", ref),
+			"whatever Redact passes through, IsProviderRef must report as a reference")
+	}
+	for _, secret := range []string{
+		"hunter2", "", // plain secret material
+		"${env:NO_CLOSE",  // unterminated
+		"MY_SECRET",       // the variable name alone
+		"prefix ${env:X}", // anchored: must be the whole value
+		"${envno-colon}",  // no provider separator
+		"$(echo hi)",      // not the ${...} form
+	} {
+		assert.False(t, IsProviderRef(secret), secret)
+	}
+}

@@ -149,10 +149,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// originalExt returns the extension currently stored for the cluster being
+// edited, or the zero value in add mode. Credentials the form deliberately
+// leaves blank are merged back from it (see candidateFromValues).
+func (m *Model) originalExt() appconfig.ClusterExtension {
+	if m.originalName == "" || m.common.AppConfig == nil {
+		return appconfig.ClusterExtension{}
+	}
+	return m.common.AppConfig.Clusters[m.originalName]
+}
+
 // runValidate builds a candidate from the current field values and probes it via
 // the AC-11 service, storing the per-service report for rendering (no save).
 func (m *Model) runValidate() tea.Cmd {
-	name, ext, err := candidateFromValues(m.form.Values())
+	name, ext, err := candidateFromValues(m.form.Values(), m.originalExt())
 	if err != nil {
 		m.notice = "cannot validate: " + err.Error()
 		return nil
@@ -167,7 +177,7 @@ func (m *Model) runValidate() tea.Cmd {
 // apply maps the submitted form to a candidate, merges + validates + persists it
 // to the kafui file only, reloads the datasource in place, and navigates back.
 func (m *Model) apply(values map[string]string) tea.Cmd {
-	name, ext, err := candidateFromValues(values)
+	name, ext, err := candidateFromValues(values, m.originalExt())
 	if err != nil {
 		return core.NotifyError("Invalid cluster", err)
 	}

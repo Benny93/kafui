@@ -55,6 +55,10 @@ func fileExistsValidator(v string) error {
 }
 
 // buildFields returns the wizard field set, prefilled from ext when editing.
+//
+// Credential fields are masked Password inputs: ext's stored secret is passed as
+// their Default so the form knows one exists, but it is never rendered. Every
+// other value round-trips literally.
 func buildFields(name string, ext appconfig.ClusterExtension) []formpkg.Field {
 	sasl := ext.SASL
 	if sasl == nil {
@@ -96,14 +100,14 @@ func buildFields(name string, ext appconfig.ClusterExtension) []formpkg.Field {
 		{Name: fSecurityProtocol, Label: "Security Protocol", Type: formpkg.Select, Options: securityProtocolOptions, Default: secProto},
 		{Name: fSaslMechanism, Label: "SASL Mechanism", Type: formpkg.Select, Options: saslMechanismOptions, Default: mech},
 		{Name: fSaslUsername, Label: "SASL Username", Type: formpkg.Text, Default: sasl.Username},
-		{Name: fSaslPassword, Label: "SASL Password", Type: formpkg.Text, Default: sasl.Password},
+		{Name: fSaslPassword, Label: "SASL Password", Type: formpkg.Password, Default: sasl.Password},
 		{Name: fSaslClientID, Label: "SASL Client ID (OAUTHBEARER)", Type: formpkg.Text, Default: sasl.ClientID},
-		{Name: fSaslClientSecret, Label: "SASL Client Secret (OAUTHBEARER)", Type: formpkg.Text, Default: sasl.ClientSecret},
+		{Name: fSaslClientSecret, Label: "SASL Client Secret (OAUTHBEARER)", Type: formpkg.Password, Default: sasl.ClientSecret},
 		{Name: fSaslTokenURL, Label: "SASL Token URL (OAUTHBEARER)", Type: formpkg.Text, Default: sasl.TokenURL},
 		// --- Schema registry ---
 		{Name: fSchemaURL, Label: "Schema Registry URL", Type: formpkg.Text, Default: ext.SchemaRegistryURL},
 		{Name: fSchemaUser, Label: "Schema Registry Username", Type: formpkg.Text, Default: ext.SchemaRegistryUsername},
-		{Name: fSchemaPassword, Label: "Schema Registry Password", Type: formpkg.Text, Default: ext.SchemaRegistryPassword},
+		{Name: fSchemaPassword, Label: "Schema Registry Password", Type: formpkg.Password, Default: ext.SchemaRegistryPassword},
 		// --- Extension stubs ---
 		{Name: fConnectName, Label: "Connect Name (optional)", Type: formpkg.Text, Default: connName},
 		{Name: fConnectAddress, Label: "Connect URL (optional)", Type: formpkg.Text, Default: connAddr},
@@ -115,7 +119,12 @@ func buildFields(name string, ext appconfig.ClusterExtension) []formpkg.Field {
 // candidateFromValues maps submitted form values to a cluster name and a
 // fully-kafui-defined ClusterExtension. The selected SASL mechanism decides
 // which auth fields are carried into the generated SASLConfig.
-func candidateFromValues(v map[string]string) (string, appconfig.ClusterExtension, error) {
+//
+// original is the extension currently stored for the cluster being edited (the
+// zero value in add mode). A blank credential submission keeps original's value
+// instead of clearing it, because a Password field deliberately never prefills
+// the stored secret.
+func candidateFromValues(v map[string]string, original appconfig.ClusterExtension) (string, appconfig.ClusterExtension, error) {
 	name := strings.TrimSpace(v[fName])
 	ext := appconfig.ClusterExtension{ReadOnly: v[fReadOnly] == "true"}
 
@@ -130,19 +139,27 @@ func candidateFromValues(v map[string]string) (string, appconfig.ClusterExtensio
 		ext.SecurityProtocol = proto
 	}
 
+	var stored appconfig.SASLConfig
+	if original.SASL != nil {
+		stored = *original.SASL
+	}
+
 	if mech := v[fSaslMechanism]; mech != "" && mech != noneOption {
 		s := &appconfig.SASLConfig{Mechanism: mech}
 		switch mech {
 		case "OAUTHBEARER":
 			s.ClientID = v[fSaslClientID]
-			s.ClientSecret = v[fSaslClientSecret]
+			s.ClientSecret = keepSecret(v[fSaslClientSecret], stored.ClientSecret)
 			s.TokenURL = v[fSaslTokenURL]
 		case "AWS_MSK_IAM":
 			// Mechanism-only: credentials and region come from the AWS chain.
 		default: // PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
 			s.Username = v[fSaslUsername]
-			s.Password = v[fSaslPassword]
+			s.Password = keepSecret(v[fSaslPassword], stored.Password)
 		}
+		// DeviceAuthURL has no form field; carrying it over keeps the AA-13
+		// device-code flow intact, since ApplyCluster replaces the whole entry.
+		s.DeviceAuthURL = stored.DeviceAuthURL
 		ext.SASL = s
 	}
 
@@ -157,7 +174,7 @@ func candidateFromValues(v map[string]string) (string, appconfig.ClusterExtensio
 
 	ext.SchemaRegistryURL = strings.TrimSpace(v[fSchemaURL])
 	ext.SchemaRegistryUsername = v[fSchemaUser]
-	ext.SchemaRegistryPassword = v[fSchemaPassword]
+	ext.SchemaRegistryPassword = keepSecret(v[fSchemaPassword], original.SchemaRegistryPassword)
 
 	if addr := strings.TrimSpace(v[fConnectAddress]); addr != "" {
 		cn := strings.TrimSpace(v[fConnectName])
@@ -177,6 +194,18 @@ func candidateFromValues(v map[string]string) (string, appconfig.ClusterExtensio
 		return "", ext, fmt.Errorf("cluster name is required")
 	}
 	return name, ext, nil
+}
+
+// keepSecret returns the submitted credential, falling back to the stored one
+// when the submission is empty. An untouched Password field submits "" and that
+// means "keep current", not "clear" — so editing a cluster cannot silently drop
+// a live password. To replace a secret, type over the field; to remove
+// authentication entirely, switch the SASL mechanism to "(none)".
+func keepSecret(submitted, stored string) string {
+	if submitted == "" {
+		return stored
+	}
+	return submitted
 }
 
 func boolStr(b bool) string {

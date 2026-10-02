@@ -1,7 +1,8 @@
 // Package form provides a reusable, typed form model for create/edit flows.
 //
-// A Form is composed of typed fields (text, select/enum, bool toggle, numeric)
-// with vertical focus traversal, per-field validation and Submit/Cancel actions.
+// A Form is composed of typed fields (text, select/enum, bool toggle, numeric,
+// password) with vertical focus traversal, per-field validation and
+// Submit/Cancel actions.
 // It renders as a plain string for a hosting page's content area (not a modal),
 // and emits FormSubmitMsg / FormCancelMsg on the respective actions.
 package form
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/Benny93/kafui/pkg/appconfig"
 	"github.com/Benny93/kafui/pkg/ui/core"
 	"github.com/Benny93/kafui/pkg/ui/styles"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -29,7 +31,28 @@ const (
 	Bool
 	// Numeric is a text input constrained to numeric values.
 	Numeric
+	// Password is a text input that renders its content masked (EchoCharacter
+	// '*') and is meant for credentials.
+	//
+	// Its Default is treated as a secret ALREADY STORED in the configuration:
+	// it is never written into the input or rendered, so editing an existing
+	// record does not paint the live credential on screen. Submitting the field
+	// empty therefore means "keep the stored value", not "clear it"; the host
+	// merges that with what it already has (see Form.Values, which reports ""
+	// for an untouched Password field).
+	//
+	// A Default that is an externalized reference (${env:MY_VAR}, ${file:…}) is
+	// a pointer rather than secret material, so it displays and round-trips
+	// literally, exactly as appconfig.Redactor passes it through. Masking
+	// follows the content: only a complete reference renders legible, anything
+	// else is masked.
+	Password
 )
+
+// isTextual reports whether the field kind is backed by a textinput.Model.
+// Every textual kind must be added to the focus/typing/width paths, so those
+// branches test this instead of enumerating types.
+func (t FieldType) isTextual() bool { return t == Text || t == Numeric || t == Password }
 
 // Validator validates a raw field value, returning a non-nil error to reject it.
 type Validator func(value string) error
@@ -42,7 +65,7 @@ type Field struct {
 	Required  bool      // whether an empty value is rejected
 	Options   []string  // choices for Select fields
 	Validator Validator // optional custom validation
-	Default   string    // initial value (text/numeric) or default option
+	Default   string    // initial value (text/numeric) or default option; for Password, the stored secret it must never render
 }
 
 // FormSubmitMsg is emitted when the form is submitted with all fields valid.
@@ -55,10 +78,36 @@ type FormCancelMsg struct{}
 
 type fieldState struct {
 	def      Field
-	input    textinput.Model // used for Text and Numeric
+	input    textinput.Model // used for Text, Numeric and Password
 	selected int             // used for Select (index into Options)
 	boolVal  bool            // used for Bool
 	err      string          // current inline validation error
+
+	// secretSet records that a Password field has a credential already stored
+	// while its input is deliberately blank (so it must not read as "cleared").
+	secretSet bool
+}
+
+// preservingSecret reports whether a Password field holds no new input while a
+// secret is already stored — the host must keep the stored value.
+func (fs *fieldState) preservingSecret() bool {
+	return fs.def.Type == Password && fs.secretSet && fs.input.Value() == ""
+}
+
+// refreshMask keeps a Password input's echo mode in step with its content: an
+// externalized ${provider:...} reference is a pointer and stays legible so the
+// operator can see and correct which variable is named, while anything else
+// (including a half-typed reference) is masked. Secure by default: only a
+// complete reference earns plaintext rendering.
+func (fs *fieldState) refreshMask() {
+	if fs.def.Type != Password {
+		return
+	}
+	if appconfig.IsProviderRef(fs.input.Value()) {
+		fs.input.EchoMode = textinput.EchoNormal
+		return
+	}
+	fs.input.EchoMode = textinput.EchoPassword
 }
 
 func (fs *fieldState) value() string {
@@ -94,6 +143,25 @@ func New(fields []Field) *Form {
 			ti.SetValue(def.Default)
 			ti.Width = 40
 			fs.input = ti
+		case Password:
+			ti := textinput.New()
+			ti.Width = 40
+			ti.EchoMode = textinput.EchoPassword
+			ti.EchoCharacter = '*'
+			switch {
+			case appconfig.IsProviderRef(def.Default):
+				// A ${env:VAR}-style reference is a pointer, not the secret; show
+				// it so it round-trips back into the config unchanged.
+				ti.SetValue(def.Default)
+				ti.EchoMode = textinput.EchoNormal
+			case def.Default != "":
+				// A real stored credential: leave the input blank and record that
+				// something is there, so it is never painted as plaintext.
+				fs.secretSet = true
+			default:
+				ti.Placeholder = "not set"
+			}
+			fs.input = ti
 		case Select:
 			for i, o := range def.Options {
 				if o == def.Default {
@@ -127,7 +195,7 @@ func (f *Form) SetDimensions(width, height int) {
 		w = 10
 	}
 	for _, fs := range f.fields {
-		if fs.def.Type == Text || fs.def.Type == Numeric {
+		if fs.def.Type.isTextual() {
 			fs.input.Width = w
 		}
 	}
@@ -142,7 +210,7 @@ func (f *Form) cancelIndex() int { return len(f.fields) + 1 }
 func (f *Form) syncFocus() tea.Cmd {
 	var cmd tea.Cmd
 	for i, fs := range f.fields {
-		if fs.def.Type != Text && fs.def.Type != Numeric {
+		if !fs.def.Type.isTextual() {
 			continue
 		}
 		if i == f.focus {
@@ -190,9 +258,10 @@ func (f *Form) Update(msg tea.Msg) (tea.Cmd, bool) {
 				fs.boolVal = !fs.boolVal
 				return nil, true
 			}
-		case Text, Numeric:
+		case Text, Numeric, Password:
 			var cmd tea.Cmd
 			fs.input, cmd = fs.input.Update(msg)
+			fs.refreshMask()
 			return cmd, true
 		}
 	}
@@ -226,9 +295,10 @@ func (f *Form) handleEnter() tea.Cmd {
 func (f *Form) updateFocusedInput(msg tea.Msg) tea.Cmd {
 	if f.focus < len(f.fields) {
 		fs := f.fields[f.focus]
-		if fs.def.Type == Text || fs.def.Type == Numeric {
+		if fs.def.Type.isTextual() {
 			var cmd tea.Cmd
 			fs.input, cmd = fs.input.Update(msg)
+			fs.refreshMask()
 			return cmd
 		}
 	}
@@ -262,7 +332,9 @@ func (f *Form) Validate() bool {
 
 func validateField(fs *fieldState) error {
 	v := fs.value()
-	if fs.def.Required && v == "" {
+	// An untouched Password field that is preserving a stored secret submits
+	// empty, which must not be rejected as missing input.
+	if fs.def.Required && v == "" && !fs.preservingSecret() {
 		return fmt.Errorf("required")
 	}
 	if fs.def.Type == Numeric && v != "" {
@@ -279,6 +351,10 @@ func validateField(fs *fieldState) error {
 }
 
 // Values returns the current field values keyed by field name.
+//
+// A Password field reports the literal text typed into it (never the mask), so
+// the host can persist the real credential; an untouched Password field reports
+// "", which the host must read as "keep what is already stored".
 func (f *Form) Values() map[string]string {
 	out := make(map[string]string, len(f.fields))
 	for _, fs := range f.fields {
@@ -338,6 +414,12 @@ func (f *Form) renderFieldValue(fs *fieldState, focused bool, valueStyle, mutedS
 		s := valueStyle.Render(box)
 		if focused {
 			s += mutedStyle.Render("  (space to toggle)")
+		}
+		return s
+	case Password:
+		s := fs.input.View()
+		if fs.preservingSecret() {
+			s += mutedStyle.Render("  " + appconfig.RedactPlaceholder() + " stored — type to replace")
 		}
 		return s
 	default:

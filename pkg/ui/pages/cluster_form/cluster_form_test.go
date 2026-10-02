@@ -32,7 +32,7 @@ func TestCandidateFromValues_SASLMappings(t *testing.T) {
 		_, ext, err := candidateFromValues(base(map[string]string{
 			fSaslMechanism: "PLAIN", fSaslUsername: "u", fSaslPassword: "p",
 			fSaslClientID: "ignored",
-		}))
+		}), appconfig.ClusterExtension{})
 		require.NoError(t, err)
 		require.NotNil(t, ext.SASL)
 		assert.Equal(t, "PLAIN", ext.SASL.Mechanism)
@@ -40,13 +40,14 @@ func TestCandidateFromValues_SASLMappings(t *testing.T) {
 		assert.Equal(t, "p", ext.SASL.Password)
 		assert.Empty(t, ext.SASL.ClientID)
 		assert.Equal(t, []string{"b1:9092", "b2:9092"}, ext.Brokers)
+		assert.Empty(t, ext.SASL.DeviceAuthURL, "nothing stored, so nothing carried over")
 	})
 
 	for _, mech := range []string{"SCRAM-SHA-256", "SCRAM-SHA-512"} {
 		t.Run(mech+" uses username/password", func(t *testing.T) {
 			_, ext, err := candidateFromValues(base(map[string]string{
 				fSaslMechanism: mech, fSaslUsername: "u", fSaslPassword: "p",
-			}))
+			}), appconfig.ClusterExtension{})
 			require.NoError(t, err)
 			require.NotNil(t, ext.SASL)
 			assert.Equal(t, mech, ext.SASL.Mechanism)
@@ -58,7 +59,7 @@ func TestCandidateFromValues_SASLMappings(t *testing.T) {
 		_, ext, err := candidateFromValues(base(map[string]string{
 			fSaslMechanism: "AWS_MSK_IAM", fSaslUsername: "ignored", fSaslPassword: "ignored",
 			fSaslClientID: "ignored",
-		}))
+		}), appconfig.ClusterExtension{})
 		require.NoError(t, err)
 		require.NotNil(t, ext.SASL)
 		assert.Equal(t, "AWS_MSK_IAM", ext.SASL.Mechanism)
@@ -72,7 +73,7 @@ func TestCandidateFromValues_SASLMappings(t *testing.T) {
 			fSaslMechanism: "OAUTHBEARER", fSaslClientID: "cid",
 			fSaslClientSecret: "sec", fSaslTokenURL: "http://token",
 			fSaslUsername: "ignored",
-		}))
+		}), appconfig.ClusterExtension{})
 		require.NoError(t, err)
 		require.NotNil(t, ext.SASL)
 		assert.Equal(t, "OAUTHBEARER", ext.SASL.Mechanism)
@@ -83,7 +84,7 @@ func TestCandidateFromValues_SASLMappings(t *testing.T) {
 	})
 
 	t.Run("none omits SASL", func(t *testing.T) {
-		_, ext, err := candidateFromValues(base(map[string]string{fSaslMechanism: noneOption}))
+		_, ext, err := candidateFromValues(base(map[string]string{fSaslMechanism: noneOption}), appconfig.ClusterExtension{})
 		require.NoError(t, err)
 		assert.Nil(t, ext.SASL)
 	})
@@ -91,7 +92,7 @@ func TestCandidateFromValues_SASLMappings(t *testing.T) {
 	t.Run("PLAINTEXT maps to empty security protocol", func(t *testing.T) {
 		_, ext, err := candidateFromValues(map[string]string{
 			fName: "c", fBrokers: "b:9092", fSecurityProtocol: "PLAINTEXT",
-		})
+		}, appconfig.ClusterExtension{})
 		require.NoError(t, err)
 		assert.Empty(t, ext.SecurityProtocol)
 	})
@@ -102,7 +103,7 @@ func TestCandidateFromValues_SASLMappings(t *testing.T) {
 			fTLSCa: "/ca.pem", fTLSInsecure: "true",
 			fSchemaURL: "http://sr", fConnectName: "kc", fConnectAddress: "http://connect",
 			fKsqlURL: "http://ksql", fMetricsURL: "http://metrics", fReadOnly: "true",
-		})
+		}, appconfig.ClusterExtension{})
 		require.NoError(t, err)
 		assert.True(t, ext.ReadOnly)
 		require.NotNil(t, ext.TLS)
@@ -117,8 +118,71 @@ func TestCandidateFromValues_SASLMappings(t *testing.T) {
 	})
 
 	t.Run("empty name is an error", func(t *testing.T) {
-		_, _, err := candidateFromValues(map[string]string{fBrokers: "b:9092"})
+		_, _, err := candidateFromValues(map[string]string{fBrokers: "b:9092"}, appconfig.ClusterExtension{})
 		assert.Error(t, err)
+	})
+}
+
+// Editing a cluster must not silently drop a credential the masked form leaves
+// blank: ApplyCluster replaces the whole entry, so an empty submission has to
+// mean "keep current".
+func TestCandidateFromValues_BlankCredentialKeepsStored(t *testing.T) {
+	stored := appconfig.ClusterExtension{
+		SASL: &appconfig.SASLConfig{
+			Mechanism:     "SCRAM-SHA-512",
+			Username:      "svc",
+			Password:      "stored-secret",
+			ClientSecret:  "stored-client-secret",
+			DeviceAuthURL: "https://device.example",
+		},
+		SchemaRegistryPassword: "stored-sr-secret",
+	}
+
+	t.Run("blank submissions keep every stored credential", func(t *testing.T) {
+		_, ext, err := candidateFromValues(map[string]string{
+			fName: "prod", fBrokers: "b:9092",
+			fSecurityProtocol: "SASL_SSL", fSaslMechanism: "SCRAM-SHA-512",
+			fSaslUsername: "svc", fSaslPassword: "", fSaslClientSecret: "",
+			fSchemaPassword: "",
+		}, stored)
+		require.NoError(t, err)
+		require.NotNil(t, ext.SASL)
+		assert.Equal(t, "stored-secret", ext.SASL.Password)
+		assert.Equal(t, "stored-sr-secret", ext.SchemaRegistryPassword)
+		// deviceAuthURL has no form field; it must survive an edit regardless.
+		assert.Equal(t, "https://device.example", ext.SASL.DeviceAuthURL)
+	})
+
+	t.Run("typed submissions replace", func(t *testing.T) {
+		_, ext, err := candidateFromValues(map[string]string{
+			fName: "prod", fBrokers: "b:9092",
+			fSaslMechanism: "PLAIN", fSaslPassword: "new-secret",
+			fSchemaPassword: "new-sr-secret",
+		}, stored)
+		require.NoError(t, err)
+		require.NotNil(t, ext.SASL)
+		assert.Equal(t, "new-secret", ext.SASL.Password)
+		assert.Equal(t, "new-sr-secret", ext.SchemaRegistryPassword)
+	})
+
+	t.Run("OAUTHBEARER keeps the stored client secret", func(t *testing.T) {
+		_, ext, err := candidateFromValues(map[string]string{
+			fName: "prod", fBrokers: "b:9092",
+			fSaslMechanism: "OAUTHBEARER", fSaslClientID: "cid",
+			fSaslClientSecret: "", fSaslTokenURL: "https://token",
+		}, stored)
+		require.NoError(t, err)
+		require.NotNil(t, ext.SASL)
+		assert.Equal(t, "stored-client-secret", ext.SASL.ClientSecret)
+	})
+
+	t.Run("add mode has nothing to keep", func(t *testing.T) {
+		_, ext, err := candidateFromValues(map[string]string{
+			fName: "fresh", fBrokers: "b:9092", fSaslMechanism: "PLAIN", fSaslPassword: "",
+		}, appconfig.ClusterExtension{})
+		require.NoError(t, err)
+		require.NotNil(t, ext.SASL)
+		assert.Empty(t, ext.SASL.Password)
 	})
 }
 
@@ -126,6 +190,80 @@ func enabledCommon() *core.Common {
 	c := core.NewCommon(nil)
 	c.AppConfig.DynamicConfigEnabled = true
 	return c
+}
+
+// secretCluster is an editable cluster carrying one credential per masked field.
+func secretCluster() appconfig.ClusterExtension {
+	return appconfig.ClusterExtension{
+		Brokers:          []string{"b:9092"},
+		SecurityProtocol: "SASL_SSL",
+		SASL: &appconfig.SASLConfig{
+			Mechanism:    "SCRAM-SHA-512",
+			Username:     "svc-account",
+			Password:     "hunter2-sasl-password",
+			ClientSecret: "oauth-client-secret-value",
+		},
+		SchemaRegistryURL:      "http://sr:8081",
+		SchemaRegistryUsername: "sr-user",
+		SchemaRegistryPassword: "schema-registry-password-value",
+	}
+}
+
+// The wizard must never paint a live credential on screen. Editing a cluster
+// prefills every field, so each stored secret has to stay out of the rendered
+// output while the non-secret basics remain visible.
+func TestView_PrefilledSecretsAreNeverRendered(t *testing.T) {
+	c := enabledCommon()
+	c.AppConfig.Clusters["prod"] = secretCluster()
+
+	m := NewModelWithCommon(c, "prod")
+	require.False(t, m.disabled)
+	m.SetDimensions(120, 40)
+
+	out := m.View()
+	for _, secret := range []string{
+		"hunter2-sasl-password",
+		"oauth-client-secret-value",
+		"schema-registry-password-value",
+	} {
+		assert.NotContains(t, out, secret, "stored credential must not be rendered")
+	}
+
+	// Non-secret values still round-trip visibly, and a stored secret is
+	// signalled by the mask marker rather than by its content.
+	assert.Contains(t, out, "b:9092")
+	assert.Contains(t, out, "svc-account")
+	assert.Contains(t, out, "http://sr:8081")
+	assert.Contains(t, out, appconfig.RedactPlaceholder())
+
+	// Submitting the untouched form must not blank the credentials: ApplyCluster
+	// replaces the whole entry, so the blank fields are filled from what is
+	// already stored.
+	m.savePath = filepath.Join(t.TempDir(), "kafui.yaml")
+	require.NotNil(t, m.apply(m.form.Values()))
+
+	saved, err := appconfig.Load(m.savePath)
+	require.NoError(t, err)
+	require.Contains(t, saved.Clusters, "prod")
+	require.NotNil(t, saved.Clusters["prod"].SASL)
+	assert.Equal(t, "hunter2-sasl-password", saved.Clusters["prod"].SASL.Password)
+	assert.Equal(t, "schema-registry-password-value", saved.Clusters["prod"].SchemaRegistryPassword)
+}
+
+// An externalized ${env:VAR} reference is a pointer, not secret material, so the
+// field displays it and an edit writes it back unchanged.
+func TestView_ProviderRefReferenceRoundTrips(t *testing.T) {
+	c := enabledCommon()
+	ext := secretCluster()
+	ext.SASL.Password = "${env:PROD_KAFKA_PASSWORD}"
+	c.AppConfig.Clusters["prod"] = ext
+
+	m := NewModelWithCommon(c, "prod")
+	require.False(t, m.disabled)
+
+	out := m.View()
+	assert.Contains(t, out, "${env:PROD_KAFKA_PASSWORD}", "a reference is safe to show")
+	assert.Equal(t, "${env:PROD_KAFKA_PASSWORD}", m.form.Values()[fSaslPassword])
 }
 
 func TestNewModel_DisabledToggleRejects(t *testing.T) {
