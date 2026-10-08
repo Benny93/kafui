@@ -137,6 +137,10 @@ type RedactionSettings struct {
 // AWS_MSK_IAM. AWS_MSK_IAM (managed Apache Kafka IAM auth) takes no fields of
 // its own: it signs tokens through the default AWS credential chain and reads
 // the region from AWS_REGION/AWS_DEFAULT_REGION or ~/.aws/config.
+// GCP_OAUTHBEARER (Google Cloud Managed Service for Apache Kafka, used with
+// SASL_SSL) also takes no fields: it builds GCP's GOOG_OAUTH2_TOKEN from
+// Application Default Credentials, like Java's GcpLoginCallbackHandler. The
+// principal needs roles/managedkafka.client.
 type SASLConfig struct {
 	Mechanism    string `yaml:"mechanism"`
 	Username     string `yaml:"username"`

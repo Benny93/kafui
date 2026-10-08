@@ -1043,3 +1043,43 @@ func TestGetConfig_AWSMSKIAMMissingRegionReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires an AWS region")
 }
+
+func TestGetConfig_GCPOAuthBearer(t *testing.T) {
+	origCluster := currentCluster
+	t.Cleanup(func() { currentCluster = origCluster })
+	writeFakeADC(t)
+
+	currentCluster = &config.Cluster{
+		Name:             "gcp",
+		SecurityProtocol: "SASL_SSL",
+		// Username/Password set by mistake: a token mechanism must not send them.
+		SASL: &config.SASL{Mechanism: "GCP_OAUTHBEARER", Username: "ignored", Password: "ignored"},
+	}
+
+	sc, err := getConfig()
+	require.NoError(t, err)
+	assert.True(t, sc.Net.TLS.Enable, "GCP Managed Kafka requires SASL_SSL")
+	assert.True(t, sc.Net.SASL.Enable)
+	assert.Equal(t, sarama.SASLMechanism(sarama.SASLTypeOAuth), sc.Net.SASL.Mechanism,
+		"GCP_OAUTHBEARER travels over the OAUTHBEARER wire mechanism")
+	assert.Empty(t, sc.Net.SASL.User)
+	assert.Empty(t, sc.Net.SASL.Password)
+	_, ok := sc.Net.SASL.TokenProvider.(*gcpTokenProvider)
+	assert.True(t, ok, "token provider must be the GCP ADC provider")
+}
+
+func TestGetConfig_GCPOAuthBearerMissingADCReturnsError(t *testing.T) {
+	origCluster := currentCluster
+	t.Cleanup(func() { currentCluster = origCluster })
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", t.TempDir()+"/missing.json")
+
+	currentCluster = &config.Cluster{
+		Name:             "gcp",
+		SecurityProtocol: "SASL_SSL",
+		SASL:             &config.SASL{Mechanism: "GCP_OAUTHBEARER"},
+	}
+
+	_, err := getConfig()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Application Default Credentials")
+}

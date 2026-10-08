@@ -54,6 +54,13 @@ authz:
 clusters:
   prod:
     readOnly: true
+  # Fully-kafui-defined GCP Managed Kafka cluster: GCP_OAUTHBEARER takes no
+  # credential fields; tokens come from Google Application Default Credentials.
+  gcp:
+    brokers: [bootstrap.CLUSTER_ID.REGION.managedkafka.PROJECT_ID.cloud.goog:9092]
+    securityProtocol: SASL_SSL
+    sasl:
+      mechanism: GCP_OAUTHBEARER
 
 # --- Audit log (AA-5/AA-6) ---------------------------------------------------
 #

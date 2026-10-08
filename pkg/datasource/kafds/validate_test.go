@@ -215,3 +215,19 @@ func TestApplyProbeSASL_AWSMSKIAM(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires an AWS region")
 }
+
+func TestApplyProbeSASL_GCPOAuthBearer(t *testing.T) {
+	writeFakeADC(t)
+	sc := sarama.NewConfig()
+	require.NoError(t, applyProbeSASL(sc, &appconfig.SASLConfig{Mechanism: "GCP_OAUTHBEARER"}))
+	assert.True(t, sc.Net.SASL.Enable)
+	assert.Equal(t, sarama.SASLMechanism(sarama.SASLTypeOAuth), sc.Net.SASL.Mechanism)
+	_, ok := sc.Net.SASL.TokenProvider.(*gcpTokenProvider)
+	assert.True(t, ok)
+
+	// Without ADC the probe fails before any connection.
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", t.TempDir()+"/missing.json")
+	err := applyProbeSASL(sarama.NewConfig(), &appconfig.SASLConfig{Mechanism: "GCP_OAUTHBEARER"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Application Default Credentials")
+}

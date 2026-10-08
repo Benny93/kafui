@@ -39,9 +39,10 @@ const noneOption = "(none)"
 
 var securityProtocolOptions = []string{"PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"}
 
-// saslMechanismOptions is limited to what kafds supports. AWS_MSK_IAM needs no
-// form fields: it signs from the default AWS credential chain.
-var saslMechanismOptions = []string{noneOption, "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512", "OAUTHBEARER", "AWS_MSK_IAM"}
+// saslMechanismOptions is limited to what kafds supports. AWS_MSK_IAM and
+// GCP_OAUTHBEARER need no form fields: they draw on the default AWS credential
+// chain and Google Application Default Credentials respectively.
+var saslMechanismOptions = []string{noneOption, "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512", "OAUTHBEARER", "AWS_MSK_IAM", "GCP_OAUTHBEARER"}
 
 // fileExistsValidator rejects a non-empty path that does not point at a readable file.
 func fileExistsValidator(v string) error {
@@ -151,8 +152,8 @@ func candidateFromValues(v map[string]string, original appconfig.ClusterExtensio
 			s.ClientID = v[fSaslClientID]
 			s.ClientSecret = keepSecret(v[fSaslClientSecret], stored.ClientSecret)
 			s.TokenURL = v[fSaslTokenURL]
-		case "AWS_MSK_IAM":
-			// Mechanism-only: credentials and region come from the AWS chain.
+		case "AWS_MSK_IAM", "GCP_OAUTHBEARER":
+			// Mechanism-only: credentials come from the AWS chain / Google ADC.
 		default: // PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
 			s.Username = v[fSaslUsername]
 			s.Password = keepSecret(v[fSaslPassword], stored.Password)

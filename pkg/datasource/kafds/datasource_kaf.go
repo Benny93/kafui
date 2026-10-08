@@ -378,7 +378,8 @@ func getConfig() (saramaConfig *sarama.Config, e error) {
 	if cluster.SASL != nil {
 		saramaConfig.Net.SASL.Enable = true
 		// Token-based mechanisms carry no username/password pair.
-		if cluster.SASL.Mechanism != "OAUTHBEARER" && cluster.SASL.Mechanism != "AWS_MSK_IAM" {
+		if cluster.SASL.Mechanism != "OAUTHBEARER" && cluster.SASL.Mechanism != "AWS_MSK_IAM" &&
+			cluster.SASL.Mechanism != "GCP_OAUTHBEARER" {
 			saramaConfig.Net.SASL.User = cluster.SASL.Username
 			saramaConfig.Net.SASL.Password = cluster.SASL.Password
 		}
@@ -464,6 +465,15 @@ func getConfig() (saramaConfig *sarama.Config, e error) {
 			// presigned URL travels in the token field (issue #3).
 			saramaConfig.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeOAuth)
 			provider, err := newMSKTokenProvider()
+			if err != nil {
+				return nil, err
+			}
+			saramaConfig.Net.SASL.TokenProvider = provider
+		} else if cluster.SASL.Mechanism == "GCP_OAUTHBEARER" {
+			// GCP Managed Kafka: OAUTHBEARER carrying a GOOG_OAUTH2_TOKEN JWT
+			// built from Application Default Credentials.
+			saramaConfig.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeOAuth)
+			provider, err := newGCPTokenProvider()
 			if err != nil {
 				return nil, err
 			}
