@@ -166,7 +166,13 @@ func resolveGCPPrincipal(ctx context.Context, known string, tok *oauth2.Token) (
 			return email, nil
 		}
 	}
-	return tokenInfoEmail(ctx, http.DefaultClient, gcpTokenInfoURL, tok.AccessToken)
+	// sarama calls the provider synchronously during the SASL handshake while
+	// the refresh mutex is held, so bound the request the same way oauth.go does
+	// for its token fetch to avoid blocking a (re)connection on a stalled reply.
+	cctx, cancel := context.WithTimeout(ctx, tokenFetchTimeout)
+	defer cancel()
+	client := &http.Client{Timeout: tokenFetchTimeout}
+	return tokenInfoEmail(cctx, client, gcpTokenInfoURL, tok.AccessToken)
 }
 
 // tokenInfoEmail asks Google's tokeninfo endpoint which account owns the
