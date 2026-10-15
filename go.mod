@@ -3,6 +3,7 @@ module github.com/Benny93/kafui
 go 1.23.0
 
 require (
+	cloud.google.com/go/compute/metadata v0.3.0
 	github.com/IBM/sarama v1.45.1
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.4

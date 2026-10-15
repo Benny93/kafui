@@ -295,6 +295,29 @@ clusters:
   schema-registry-credentials: null
 ```
 
+### Google Cloud Managed Service for Apache Kafka
+
+GCP Managed Kafka requires `SASL_SSL` with OAUTHBEARER tokens issued for your
+Google identity (what Java clients get from
+`com.google.cloud.hosted.kafka.auth.GcpLoginCallbackHandler`). kafui builds the
+same token from [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials)
+when the SASL mechanism is `GCP_OAUTHBEARER` — no secrets go into the config:
+
+```yaml
+clusters:
+- name: gcp
+  brokers:
+  - bootstrap.CLUSTER_ID.REGION.managedkafka.PROJECT_ID.cloud.goog:9092
+  SASL:
+    mechanism: GCP_OAUTHBEARER
+  security-protocol: SASL_SSL
+```
+
+Credentials are resolved in the usual ADC order: `GOOGLE_APPLICATION_CREDENTIALS`
+(service-account key or impersonation config), `gcloud auth application-default login`,
+or the GCE/GKE metadata server (Workload Identity). The principal needs
+`roles/managedkafka.client` on the cluster's project.
+
 ## Test coverage
 
 ![Coverage treemap](./coverage.svg)

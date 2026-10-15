@@ -188,6 +188,14 @@ func applyProbeSASL(sc *sarama.Config, s *appconfig.SASLConfig) error {
 			return err
 		}
 		sc.Net.SASL.TokenProvider = provider
+	case "GCP_OAUTHBEARER":
+		// Same ADC-backed provider as production; no kafui SASL fields used.
+		sc.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeOAuth)
+		provider, err := newGCPTokenProvider()
+		if err != nil {
+			return err
+		}
+		sc.Net.SASL.TokenProvider = provider
 	default: // PLAIN
 		sc.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypePlaintext)
 		sc.Net.SASL.User = s.Username
